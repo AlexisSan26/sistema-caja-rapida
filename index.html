@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caja Rápida - Tienda</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .tabla-scroll { max-height: 250px; overflow-y: auto; }
+        .texto-lista { font-size: 1.1rem; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container mt-4" style="max-width: 600px;">
+    <h2 class="text-center mb-1">Caja Rápida</h2>
+    <p id="fecha-actual" class="text-center text-secondary mb-2 text-capitalize"></p>
+
+    <div class="text-center mb-4">
+        <button class="btn btn-sm btn-outline-secondary" onclick="abrirHistorial()">Ver Historial de Cortes 📅</button>
+    </div>
+
+    <div id="panel-historial" class="card shadow-sm mb-4 border-secondary" style="display: none;">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Historial de Turnos</h5>
+            <button class="btn btn-sm btn-light" onclick="cerrarHistorial()">Cerrar</button>
+        </div>
+        <div class="card-body">
+            <div id="lista-historial" class="list-group mb-3" style="max-height: 200px; overflow-y: auto;"></div>
+            <div id="detalle-historial"></div>
+        </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm" id="panel-apertura">
+        <div class="card-body text-center">
+            <h5 id="texto-turno" class="text-muted">No hay turno abierto</h5>
+            <button id="btn-abrir" class="btn btn-primary btn-lg mt-2" onclick="abrirTurno()" style="display: none;">Abrir Caja (Nuevo Turno)</button>
+        </div>
+    </div>
+
+    <div id="panel-ventas" class="card mb-4 shadow-sm" style="display: none;">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Registrar Movimiento</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="fw-bold">Tipo de movimiento:</label>
+                <select id="tipo" class="form-select form-select-lg" onchange="ajustarCampos()">
+                    <option value="VENTA">Venta Normal</option>
+                    <option value="RETIRO">Retiro de Dinero</option>
+                    <option value="FONDO_CAJA">Fondo de Caja (Inicio)</option>
+                </select>
+            </div>
+
+            <div class="mb-3" id="div-producto">
+                <label id="label-producto" class="fw-bold">Producto:</label>
+                <input type="text" id="producto" class="form-control form-control-lg" list="lista-productos" oninput="manejarInputProducto()" autocomplete="off" placeholder="Ej. Sabritas, Coca-Cola...">
+                <datalist id="lista-productos"></datalist>
+            </div>
+
+            <div class="row">
+                <div class="col-6 mb-3" id="div-cantidad">
+                    <label class="fw-bold">Cantidad:</label>
+                    <input type="number" id="cantidad" class="form-control form-control-lg" value="1">
+                </div>
+
+                <div class="col-6 mb-3" id="div-precio">
+                    <label id="label-monto" class="fw-bold">Monto ($):</label>
+                    <div class="input-group">
+                        <input type="number" id="precio" class="form-control form-control-lg" placeholder="0.00">
+                        <button class="btn btn-warning fw-bold" type="button" id="btn-actualizar-precio" onclick="actualizarPrecioMaestro()" title="Guardar como nuevo precio fijo">🔄</button>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">Guardar Registro</button>
+        </div>
+    </div>
+
+    <div id="panel-lista" class="card mb-4 shadow-sm" style="display: none;">
+        <div class="card-header bg-dark text-white text-center p-2">
+            <h6 class="mb-0 text-white">Movimientos del Turno</h6>
+        </div>
+        <div class="card-body p-0 tabla-scroll">
+            <table class="table table-striped mb-0 texto-lista">
+                <thead class="table-light">
+                    <tr>
+                        <th>Cant</th>
+                        <th>Producto</th>
+                        <th>Total</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-cuerpo"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="panel-corte" class="card shadow-sm border-danger mb-3" style="display: none;">
+        <div class="card-body text-center">
+            <button class="btn btn-danger btn-lg w-100" onclick="hacerCorte()">Hacer Corte de Caja</button>
+        </div>
+    </div>
+
+    <div id="resultado-corte"></div>
+</div>
+
+<script>
+    let idTurnoActual = null;
+    let productosMemoria = [];
+    let intervaloActualizacion = null;
+    const API_URL = `http://${window.location.hostname}:8000`;
+
+    function mostrarFechaDelDia() {
+        const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const fecha = new Date().toLocaleDateString('es-MX', opciones);
+        document.getElementById("fecha-actual").innerText = fecha;
+    }
+
+    // --- NUEVAS FUNCIONES DE HISTORIAL ---
+    async function abrirHistorial() {
+        document.getElementById("panel-historial").style.display = "block";
+        document.getElementById("detalle-historial").innerHTML = "";
+        document.getElementById("lista-historial").innerHTML = "<p class='text-center mt-3'>Cargando...</p>";
+
+        try {
+            const res = await fetch(`${API_URL}/historial_turnos`);
+            const turnos = await res.json();
+
+            let html = "";
+            if (turnos.length === 0) {
+                html = "<p class='text-center text-muted mt-3'>No hay cortes registrados aún.</p>";
+            } else {
+                turnos.forEach(t => {
+                    // Calculamos qué día se abrió la caja para mostrarlo en el botón
+                    const fechaTxt = t.fecha_apertura ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', {day: '2-digit', month: 'short', year: 'numeric'}) : "Fecha Desconocida";
+
+                    html += `
+                    <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="verDetalleHistorial(${t.id_turno})">
+                        <strong>Turno #${t.id_turno}</strong>
+                        <span class="badge bg-secondary rounded-pill">${fechaTxt}</span>
+                    </button>`;
+                });
+            }
+            document.getElementById("lista-historial").innerHTML = html;
+        } catch(e) {
+            document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
+        }
+    }
+
+    function cerrarHistorial() {
+        document.getElementById("panel-historial").style.display = "none";
+    }
+
+    async function verDetalleHistorial(idTurno) {
+        document.getElementById("detalle-historial").innerHTML = "<p class='text-center mt-3'>Cargando ticket...</p>";
+        try {
+            const res = await fetch(`${API_URL}/resumen_turno/${idTurno}`);
+            const datos = await res.json();
+
+            let diaOperativo = "Día desconocido";
+            if (datos.fecha_apertura) {
+                const fechaApertura = new Date(datos.fecha_apertura);
+                if (!isNaN(fechaApertura.getTime())) {
+                    diaOperativo = fechaApertura.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+                }
+            }
+
+            const mensaje = `
+                <div class="card bg-light p-3 border-dark text-start shadow-sm mt-3">
+                    <div class="text-center mb-3 border-bottom pb-2">
+                        <h6 class="mb-0 text-uppercase fw-bold text-primary">Resumen del Turno #${idTurno}</h6>
+                        <small class="text-muted">Día operativo: ${diaOperativo}</small>
+                    </div>
+                    <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
+                    <p class="text-muted mb-1">Cigarros y Time</p>
+                    <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
+                    <hr>
+                    <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
+                    <small class="text-muted">(Descontando Cigarros y Time)</small>
+                </div>
+            `;
+            document.getElementById("detalle-historial").innerHTML = mensaje;
+        } catch(e) {
+            document.getElementById("detalle-historial").innerHTML = "<p class='text-danger'>Error al cargar el resumen.</p>";
+        }
+    }
+    // ------------------------------------
+
+    async function verificarEstadoInicial() {
+        try {
+            const res = await fetch(`${API_URL}/turno_actual`);
+            const datos = await res.json();
+            if (datos.estado === "ABIERTO") {
+                idTurnoActual = datos.id_turno;
+                configurarInterfazAbierta(idTurnoActual);
+            } else {
+                document.getElementById("panel-apertura").style.display = "block";
+                document.getElementById("btn-abrir").style.display = "inline-block";
+                document.getElementById("texto-turno").innerText = "No hay turno abierto";
+                document.getElementById("texto-turno").className = "text-muted";
+            }
+        } catch (e) {
+            document.getElementById("btn-abrir").style.display = "inline-block";
+        }
+    }
+
+    function configurarInterfazAbierta(id) {
+        document.getElementById("panel-apertura").style.display = "none";
+        document.getElementById("panel-ventas").style.display = "block";
+        document.getElementById("panel-lista").style.display = "block";
+        document.getElementById("panel-corte").style.display = "block";
+        document.getElementById("btn-abrir").style.display = "none";
+        document.getElementById("resultado-corte").innerHTML = "";
+
+        actualizarLista();
+        if (intervaloActualizacion) clearInterval(intervaloActualizacion);
+        intervaloActualizacion = setInterval(sincronizarTodo, 3000);
+    }
+
+    function mostrarTicket(datos) {
+        let diaOperativo = "Hoy";
+
+        if (datos.fecha_apertura) {
+            const fechaApertura = new Date(datos.fecha_apertura);
+            if (!isNaN(fechaApertura.getTime())) {
+                const opcionesDia = { weekday: 'long', day: 'numeric', month: 'long' };
+                diaOperativo = fechaApertura.toLocaleDateString('es-MX', opcionesDia);
+            }
+        }
+
+        const momentoCierre = new Date().toLocaleString('es-MX', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit'
+        });
+
+        const mensaje = `
+            <div class="card bg-light p-3 border-dark text-start shadow-sm mb-3">
+                <div class="text-center mb-3 border-bottom pb-2">
+                    <h6 class="mb-0 text-uppercase fw-bold text-primary">Turno del ${diaOperativo}</h6>
+                    <small class="text-muted">Cierre realizado: ${momentoCierre}</small>
+                </div>
+                <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
+                <p class="text-muted mb-1">Cigarros y Time</p>
+                <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
+                <hr>
+                <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
+                <small class="text-muted">(Descontando Cigarros y Time)</small>
+            </div>
+        `;
+        document.getElementById("resultado-corte").innerHTML = mensaje;
+    }
+
+    async function sincronizarTodo() {
+        if (!idTurnoActual) return;
+        try {
+            const resTurno = await fetch(`${API_URL}/turno_actual`);
+            const datosTurno = await resTurno.json();
+
+            if (datosTurno.estado !== "ABIERTO") {
+                try {
+                    const resResumen = await fetch(`${API_URL}/resumen_turno/${idTurnoActual}`);
+                    const datosResumen = await resResumen.json();
+                    mostrarTicket(datosResumen);
+                } catch (err) { console.log("No se pudo obtener el resumen"); }
+
+                alert("El turno ha sido cerrado desde otro dispositivo.");
+                resetearInterfazCerrada();
+                return;
+            }
+            actualizarLista();
+        } catch (e) { console.error("Error en sincronización", e); }
+    }
+
+    function resetearInterfazCerrada() {
+        if (intervaloActualizacion) clearInterval(intervaloActualizacion);
+        idTurnoActual = null;
+        document.getElementById("panel-apertura").style.display = "block";
+        document.getElementById("btn-abrir").style.display = "inline-block";
+        document.getElementById("btn-abrir").innerText = "Abrir Caja (Nuevo Turno)";
+        document.getElementById("panel-ventas").style.display = "none";
+        document.getElementById("panel-lista").style.display = "none";
+        document.getElementById("panel-corte").style.display = "none";
+        document.getElementById("texto-turno").innerText = "No hay turno abierto";
+        document.getElementById("texto-turno").className = "text-muted";
+    }
+
+    async function manejarInputProducto() {
+        if (document.getElementById("tipo").value !== "VENTA") return;
+        const texto = document.getElementById("producto").value;
+        if (!texto) return;
+
+        try {
+            const res = await fetch(`${API_URL}/buscar_productos?q=${texto}`);
+            productosMemoria = await res.json();
+            const datalist = document.getElementById("lista-productos");
+            datalist.innerHTML = "";
+            productosMemoria.forEach(p => {
+                const opcion = document.createElement("option");
+                opcion.value = p.nombre_producto;
+                datalist.appendChild(opcion);
+            });
+            const coincidencia = productosMemoria.find(p => p.nombre_producto === texto);
+            if (coincidencia) {
+                document.getElementById("precio").value = coincidencia.precio_sugerido;
+            }
+        } catch (e) { console.error("Error al buscar", e); }
+    }
+
+    function ajustarCampos() {
+        const tipo = document.getElementById("tipo").value;
+        const divProducto = document.getElementById("div-producto");
+        const divCantidad = document.getElementById("div-cantidad");
+        const labelMonto = document.getElementById("label-monto");
+        const labelProducto = document.getElementById("label-producto");
+        const btnActualizarPrecio = document.getElementById("btn-actualizar-precio");
+
+        if (tipo === "VENTA") {
+            divProducto.style.display = "block";
+            divCantidad.style.display = "block";
+            labelProducto.innerText = "Producto:";
+            labelMonto.innerText = "Precio Unitario ($):";
+            btnActualizarPrecio.style.display = "block";
+            document.getElementById("producto").value = "";
+            document.getElementById("precio").value = "";
+        } else if (tipo === "RETIRO") {
+            divProducto.style.display = "block";
+            divCantidad.style.display = "none";
+            labelProducto.innerText = "Concepto de retiro:";
+            labelMonto.innerText = "Monto a retirar ($):";
+            btnActualizarPrecio.style.display = "none";
+            document.getElementById("producto").value = "Retiro de efectivo";
+            document.getElementById("precio").value = "";
+        } else if (tipo === "FONDO_CAJA") {
+            divProducto.style.display = "none";
+            divCantidad.style.display = "none";
+            labelMonto.innerText = "Monto inicial ($):";
+            btnActualizarPrecio.style.display = "none";
+            document.getElementById("producto").value = "Fondo inicial";
+            document.getElementById("precio").value = "";
+        }
+    }
+
+    async function actualizarPrecioMaestro() {
+        const nombreProducto = document.getElementById("producto").value.trim();
+        const nuevoPrecio = parseFloat(document.getElementById("precio").value);
+
+        if (nombreProducto === "" || isNaN(nuevoPrecio) || nuevoPrecio < 0) {
+            alert("⚠️ Selecciona un producto y escribe el nuevo precio antes de presionar el botón amarillo.");
+            return;
+        }
+
+        const seguro = confirm(`¿Estás seguro de actualizar el precio base de "${nombreProducto}" a $${nuevoPrecio} para futuras ventas?`);
+        if (!seguro) return;
+
+        try {
+            const res = await fetch(`${API_URL}/actualizar_precio`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    nombre_producto: nombreProducto,
+                    nuevo_precio: nuevoPrecio
+                })
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+        } catch (error) {
+            alert("Error de conexión al actualizar el precio.");
+        }
+    }
+
+    async function actualizarLista() {
+        if (!idTurnoActual) return;
+        try {
+            const res = await fetch(`${API_URL}/movimientos_turno/${idTurnoActual}`);
+            const movimientos = await res.json();
+            const cuerpo = document.getElementById("tabla-cuerpo");
+            cuerpo.innerHTML = "";
+            movimientos.forEach(m => {
+                const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
+                cuerpo.innerHTML += `
+                <tr class="${color}">
+                    <td>${m.cantidad}</td>
+                    <td>${m.producto}</td>
+                    <td>$${m.total_movimiento.toFixed(2)}</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
+                    </td>
+                </tr>`;
+            });
+        } catch (e) { console.log(e); }
+    }
+
+    async function borrarMovimiento(idMovimiento) {
+        const seguro = confirm("⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.");
+        if (!seguro) return;
+
+        try {
+            const res = await fetch(`${API_URL}/borrar_movimiento/${idMovimiento}`, {
+                method: "DELETE"
+            });
+
+            if (res.ok) {
+                actualizarLista();
+            } else {
+                alert("Error al intentar cancelar el movimiento.");
+            }
+        } catch (error) { console.error("Error:", error); }
+    }
+
+    async function abrirTurno() {
+        try {
+            const respuesta = await fetch(`${API_URL}/abrir_turno`, { method: "POST" });
+            const datos = await respuesta.json();
+            idTurnoActual = datos.id_turno;
+            configurarInterfazAbierta(idTurnoActual);
+        } catch (error) { alert("Error al conectar."); }
+    }
+
+    async function registrar() {
+        const tipo = document.getElementById("tipo").value;
+        const montoVal = parseFloat(document.getElementById("precio").value);
+        let cantidadVal = parseFloat(document.getElementById("cantidad").value);
+
+        let nombreProducto = document.getElementById("producto").value.trim();
+
+        if (isNaN(montoVal) || montoVal < 0) {
+            alert("Por favor ingresa un monto válido.");
+            return;
+        }
+
+        if (tipo === "VENTA" && (isNaN(cantidadVal) || cantidadVal <= 0)) {
+            alert("¡Error! La cantidad debe ser mayor a 0.");
+            return;
+        }
+
+        if (tipo === "VENTA" && nombreProducto === "") {
+            alert("¡Cuidado! Olvidaste escribir el nombre del producto.");
+            return;
+        }
+
+        if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
+        if (tipo === "RETIRO" && nombreProducto === "") nombreProducto = "Retiro de efectivo";
+        if (tipo !== "VENTA") cantidadVal = 1;
+
+        const movimiento = {
+            id_turno: idTurnoActual,
+            tipo_movimiento: tipo,
+            producto: nombreProducto,
+            cantidad: cantidadVal,
+            precio_unitario: montoVal
+        };
+
+        try {
+            const res = await fetch(`${API_URL}/registrar_movimiento`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(movimiento)
+            });
+            if (res.ok) {
+                document.getElementById("producto").value = "";
+                document.getElementById("precio").value = "";
+                actualizarLista();
+                ajustarCampos();
+            }
+        } catch (error) { alert("Error al guardar."); }
+    }
+
+    async function hacerCorte() {
+        if (!idTurnoActual) return;
+
+        const seguro = confirm("⚠️ ¿Estás seguro de que deseas CERRAR LA CAJA y hacer el corte?\n\nYa no podrás agregar más ventas a este turno.");
+
+        if (!seguro) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`);
+            const datos = await res.json();
+
+            mostrarTicket(datos);
+
+            alert("Turno Cerrado Correctamente");
+            resetearInterfazCerrada();
+        } catch (e) { alert("Error al cerrar"); }
+    }
+
+    window.onload = function() {
+        mostrarFechaDelDia();
+        verificarEstadoInicial();
+    };
+</script>
+</body>
+</html>
