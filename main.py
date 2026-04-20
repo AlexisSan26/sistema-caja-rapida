@@ -14,10 +14,11 @@ app.add_middleware(
 )
 
 db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'rugby262821',
-    'database': 'tienda_bd'
+    'host': 'mysql-345b06e4-proyectotiendarapida26.d.aivencloud.com',
+    'port': 28257,
+    'user': 'avnadmin',
+    'password': 'AVNS_IsjSis7w5uOuzNZlkDC',
+    'database': 'defaultdb'
 }
 
 
