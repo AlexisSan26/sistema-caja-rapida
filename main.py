@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
 
+
 app = FastAPI()
 
+# Configuración de CORS para que tu GitHub Pages pueda conectarse
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -12,6 +14,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ruta para el despertador automático de las 8:50 AM
+@app.get("/despertar")
+async def despertar():
+    return {"estado": "despierto", "mensaje": "Servidor listo para el turno"}
+
+# --- AQUÍ EMPIEZA TU CÓDIGO ACTUAL ---
+# Asegúrate de NO borrar tus rutas de @app.post("/abrir-caja") o @app.get("/ventas")
+
 
 db_config = {
     'host': 'mysql-345b06e4-proyectotiendarapida26.d.aivencloud.com',
