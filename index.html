@@ -306,7 +306,7 @@
         // --- INICIO DE LA LÓGICA DE PRODUCTOS A GRANEL ---
         const textoMin = texto.toLowerCase();
         // Aquí está tu lista maestra de palabras clave. Si en el futuro necesitas otra, la agregas aquí.
-        const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'hebra', 'añejo', 'granel'];
+        const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
         const esGranel = palabrasGranel.some(palabra => textoMin.includes(palabra));
 
         if (esGranel) {
