@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
 
-
 app = FastAPI()
 
 # Configuración de CORS para que tu GitHub Pages pueda conectarse
@@ -15,13 +14,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Ruta para el despertador automático de las 8:50 AM
 @app.get("/despertar")
 async def despertar():
     return {"estado": "despierto", "mensaje": "Servidor listo para el turno"}
-
-# --- AQUÍ EMPIEZA TU CÓDIGO ACTUAL ---
-# Asegúrate de NO borrar tus rutas de @app.post("/abrir-caja") o @app.get("/ventas")
 
 
 db_config = {
@@ -173,36 +170,49 @@ def hacer_corte(id_turno: int):
     res_total = cursor.fetchone()
     total_en_caja = float(res_total['total_en_caja']) if res_total and res_total['total_en_caja'] is not None else 0.0
 
-    sql_especificos = """
-        SELECT SUM(total_movimiento) AS total_especial
+    # 1. Consulta para Cigarros y Time
+    sql_cigarros = """
+        SELECT SUM(total_movimiento) AS total_c
         FROM movimientos 
         WHERE id_turno = %s 
         AND tipo_movimiento = 'VENTA'
         AND (producto LIKE '%cigarro%' OR producto LIKE '%time%')
     """
-    cursor.execute(sql_especificos, (id_turno,))
-    res_especial = cursor.fetchone()
-    total_especial = float(res_especial['total_especial']) if res_especial and res_especial[
-        'total_especial'] is not None else 0.0
+    cursor.execute(sql_cigarros, (id_turno,))
+    res_cigarros = cursor.fetchone()
+    total_cigarros = float(res_cigarros['total_c']) if res_cigarros and res_cigarros['total_c'] is not None else 0.0
 
-    total_neto = total_en_caja - total_especial
+    # 2. Consulta para Helados
+    sql_helados = """
+        SELECT SUM(total_movimiento) AS total_h
+        FROM movimientos 
+        WHERE id_turno = %s 
+        AND tipo_movimiento = 'VENTA'
+        AND producto LIKE '%helado%'
+    """
+    cursor.execute(sql_helados, (id_turno,))
+    res_helados = cursor.fetchone()
+    total_helados = float(res_helados['total_h']) if res_helados and res_helados['total_h'] is not None else 0.0
+
+    # 3. Cálculo del efectivo neto
+    total_neto = total_en_caja - total_cigarros - total_helados
+
     cursor.close()
     conexion.close()
 
     return {
         "total_en_caja": total_en_caja,
-        "total_cigarros_time": total_especial,
+        "total_cigarros_time": total_cigarros,
+        "total_helados": total_helados,
         "total_neto": total_neto,
         "fecha_apertura": fecha_apertura
     }
 
 
-# --- NUEVA RUTA: Consulta la lista de todos los turnos que ya se cerraron ---
 @app.get("/historial_turnos")
 def historial_turnos():
     conexion = conectar_bd()
     cursor = conexion.cursor(dictionary=True)
-    # Trae los últimos 30 cortes, ordenados del más reciente al más antiguo
     sql = "SELECT id_turno, fecha_apertura, fecha_cierre FROM turnos WHERE estado = 'CERRADO' ORDER BY id_turno DESC LIMIT 30"
     cursor.execute(sql)
     turnos = cursor.fetchall()
@@ -230,25 +240,40 @@ def resumen_turno(id_turno: int):
     res_total = cursor.fetchone()
     total_en_caja = float(res_total['total_en_caja']) if res_total and res_total['total_en_caja'] is not None else 0.0
 
-    sql_especificos = """
-        SELECT SUM(total_movimiento) AS total_especial
+    # 1. Consulta para Cigarros y Time
+    sql_cigarros = """
+        SELECT SUM(total_movimiento) AS total_c
         FROM movimientos 
         WHERE id_turno = %s 
         AND tipo_movimiento = 'VENTA'
         AND (producto LIKE '%cigarro%' OR producto LIKE '%time%')
     """
-    cursor.execute(sql_especificos, (id_turno,))
-    res_especial = cursor.fetchone()
-    total_especial = float(res_especial['total_especial']) if res_especial and res_especial[
-        'total_especial'] is not None else 0.0
+    cursor.execute(sql_cigarros, (id_turno,))
+    res_cigarros = cursor.fetchone()
+    total_cigarros = float(res_cigarros['total_c']) if res_cigarros and res_cigarros['total_c'] is not None else 0.0
 
-    total_neto = total_en_caja - total_especial
+    # 2. Consulta para Helados
+    sql_helados = """
+        SELECT SUM(total_movimiento) AS total_h
+        FROM movimientos 
+        WHERE id_turno = %s 
+        AND tipo_movimiento = 'VENTA'
+        AND producto LIKE '%helado%'
+    """
+    cursor.execute(sql_helados, (id_turno,))
+    res_helados = cursor.fetchone()
+    total_helados = float(res_helados['total_h']) if res_helados and res_helados['total_h'] is not None else 0.0
+
+    # 3. Cálculo del efectivo neto
+    total_neto = total_en_caja - total_cigarros - total_helados
+
     cursor.close()
     conexion.close()
 
     return {
         "total_en_caja": total_en_caja,
-        "total_cigarros_time": total_especial,
+        "total_cigarros_time": total_cigarros,
+        "total_helados": total_helados,
         "total_neto": total_neto,
         "fecha_apertura": fecha_apertura
     }

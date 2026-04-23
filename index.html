@@ -116,7 +116,6 @@
         document.getElementById("fecha-actual").innerText = fecha;
     }
 
-    // --- NUEVAS FUNCIONES DE HISTORIAL ---
     async function abrirHistorial() {
         document.getElementById("panel-historial").style.display = "block";
         document.getElementById("detalle-historial").innerHTML = "";
@@ -131,7 +130,6 @@
                 html = "<p class='text-center text-muted mt-3'>No hay cortes registrados aún.</p>";
             } else {
                 turnos.forEach(t => {
-                    // Calculamos qué día se abrió la caja para mostrarlo en el botón
                     const fechaTxt = t.fecha_apertura ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', {day: '2-digit', month: 'short', year: 'numeric'}) : "Fecha Desconocida";
 
                     html += `
@@ -172,11 +170,16 @@
                         <small class="text-muted">Día operativo: ${diaOperativo}</small>
                     </div>
                     <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-                    <p class="text-muted mb-1">Cigarros y Time</p>
+
+                    <p class="text-muted mb-1 mt-3">Cigarros y Time</p>
                     <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
+
+                    <p class="text-muted mb-1 mt-2">Helados</p>
+                    <p class="h5">Total: <strong>$${(datos.total_helados || 0).toFixed(2)}</strong></p>
+
                     <hr>
                     <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
-                    <small class="text-muted">(Descontando Cigarros y Time)</small>
+                    <small class="text-muted">(Descontando Cigarros, Time y Helados)</small>
                 </div>
             `;
             document.getElementById("detalle-historial").innerHTML = mensaje;
@@ -184,7 +187,6 @@
             document.getElementById("detalle-historial").innerHTML = "<p class='text-danger'>Error al cargar el resumen.</p>";
         }
     }
-    // ------------------------------------
 
     async function verificarEstadoInicial() {
         try {
@@ -242,11 +244,16 @@
                     <small class="text-muted">Cierre realizado: ${momentoCierre}</small>
                 </div>
                 <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-                <p class="text-muted mb-1">Cigarros y Time</p>
+
+                <p class="text-muted mb-1 mt-3">Cigarros y Time</p>
                 <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
+
+                <p class="text-muted mb-1 mt-2">Helados</p>
+                <p class="h5">Total: <strong>$${(datos.total_helados || 0).toFixed(2)}</strong></p>
+
                 <hr>
                 <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
-                <small class="text-muted">(Descontando Cigarros y Time)</small>
+                <small class="text-muted">(Descontando Cigarros, Time y Helados)</small>
             </div>
         `;
         document.getElementById("resultado-corte").innerHTML = mensaje;
@@ -330,7 +337,7 @@
             labelProducto.innerText = "Concepto de retiro:";
             labelMonto.innerText = "Monto a retirar ($):";
             btnActualizarPrecio.style.display = "none";
-            document.getElementById("producto").value = "Retiro de efectivo";
+            document.getElementById("producto").value = "";
             document.getElementById("precio").value = "";
         } else if (tipo === "FONDO_CAJA") {
             divProducto.style.display = "none";
@@ -440,8 +447,12 @@
             return;
         }
 
+        if (tipo === "RETIRO" && nombreProducto === "") {
+            alert("Favor de poner el concepto o motivo del retiro.");
+            return;
+        }
+
         if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
-        if (tipo === "RETIRO" && nombreProducto === "") nombreProducto = "Retiro de efectivo";
         if (tipo !== "VENTA") cantidadVal = 1;
 
         const movimiento = {
@@ -461,6 +472,7 @@
             if (res.ok) {
                 document.getElementById("producto").value = "";
                 document.getElementById("precio").value = "";
+                document.getElementById("cantidad").value = "1"; // <-- CANTIDAD VUELVE A 1
                 actualizarLista();
                 ajustarCampos();
             }
@@ -472,9 +484,7 @@
 
         const seguro = confirm("⚠️ ¿Estás seguro de que deseas CERRAR LA CAJA y hacer el corte?\n\nYa no podrás agregar más ventas a este turno.");
 
-        if (!seguro) {
-            return;
-        }
+        if (!seguro) return;
 
         try {
             const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`);
