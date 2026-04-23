@@ -83,11 +83,11 @@
         <div class="card-body p-0 tabla-scroll">
             <table class="table table-striped mb-0 texto-lista">
                 <thead class="table-light">
-                    <tr>
-                        <th>Hora</th> <th>Cant</th>
+                    <tr >
+                        <th class="text-center">Hora</th> <th class="text-center">Cant</th>
                         <th>Producto</th>
-                        <th>Total</th>
-                        <th></th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center"></th>
                     </tr>
                 </thead>
                 <tbody id="tabla-cuerpo"></tbody>
@@ -310,10 +310,10 @@
         const esGranel = palabrasGranel.some(palabra => textoMin.includes(palabra));
 
         if (esGranel) {
-            divCantidad.style.display = "none";
+            divCantidad.style.visibility = "hidden"; // Cambiamos display por visibility
             document.getElementById("cantidad").value = "1";
         } else {
-            divCantidad.style.display = "block";
+            divCantidad.style.visibility = "visible"; // Cambiamos block por visible
         }
         // --- FIN DE LA LÓGICA DE GRANEL ---
 
@@ -346,10 +346,11 @@
         const labelMonto = document.getElementById("label-monto");
         const labelProducto = document.getElementById("label-producto");
         const btnActualizarPrecio = document.getElementById("btn-actualizar-precio");
+        const inputProducto = document.getElementById("producto");
 
         if (tipo === "VENTA") {
             divProducto.style.display = "block";
-            divCantidad.style.display = "block";
+            divCantidad.style.visibility = "visible";
             labelProducto.innerText = "Producto:";
             labelMonto.innerText = "Precio Unitario ($):";
             btnActualizarPrecio.style.display = "block";
@@ -357,15 +358,15 @@
             document.getElementById("precio").value = "";
         } else if (tipo === "RETIRO") {
             divProducto.style.display = "block";
-            divCantidad.style.display = "none";
+            divCantidad.style.visibility = "hidden";
             labelProducto.innerText = "Concepto de retiro:";
-            labelMonto.innerText = "Monto a retirar ($):";
+            inputProducto.placeholder = "Ej. Pago a proveedores, pasajes...";
             btnActualizarPrecio.style.display = "none";
             document.getElementById("producto").value = "";
             document.getElementById("precio").value = "";
         } else if (tipo === "FONDO_CAJA") {
             divProducto.style.display = "none";
-            divCantidad.style.display = "none";
+            divCantidad.style.visibility = "hidden";
             labelMonto.innerText = "Monto inicial ($):";
             btnActualizarPrecio.style.display = "none";
             document.getElementById("producto").value = "Fondo inicial";
@@ -412,10 +413,10 @@
                 const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
                 cuerpo.innerHTML += `
                 <tr class="${color}">
-                    <td><small class="text-secondary">${m.hora || '--:--'}</small></td> <td>${m.cantidad}</td>
+                    <td class="text-center">${m.hora || '--:--'}</td> <td class="text-center">${m.cantidad}</td>
                     <td>${m.producto}</td>
-                    <td>$${m.total_movimiento.toFixed(2)}</td>
-                    <td class="text-end">
+                    <td class="text-center">$${m.total_movimiento.toFixed(2)}</td>
+                    <td class="text-center" class="text-end">
                         <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
                     </td>
                 </tr>`;
