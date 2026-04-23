@@ -296,7 +296,26 @@
     async function manejarInputProducto() {
         if (document.getElementById("tipo").value !== "VENTA") return;
         const texto = document.getElementById("producto").value;
-        if (!texto) return;
+        const divCantidad = document.getElementById("div-cantidad");
+
+        if (!texto) {
+            divCantidad.style.display = "block";
+            return;
+        }
+
+        // --- INICIO DE LA LÓGICA DE PRODUCTOS A GRANEL ---
+        const textoMin = texto.toLowerCase();
+        // Aquí está tu lista maestra de palabras clave. Si en el futuro necesitas otra, la agregas aquí.
+        const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'hebra', 'añejo', 'granel'];
+        const esGranel = palabrasGranel.some(palabra => textoMin.includes(palabra));
+
+        if (esGranel) {
+            divCantidad.style.display = "none";
+            document.getElementById("cantidad").value = "1";
+        } else {
+            divCantidad.style.display = "block";
+        }
+        // --- FIN DE LA LÓGICA DE GRANEL ---
 
         try {
             const res = await fetch(`${API_URL}/buscar_productos?q=${texto}`);
@@ -310,7 +329,12 @@
             });
             const coincidencia = productosMemoria.find(p => p.nombre_producto === texto);
             if (coincidencia) {
-                document.getElementById("precio").value = coincidencia.precio_sugerido;
+                // Si el producto es a granel, no auto-completamos el precio para que lo teclees manual.
+                if (esGranel) {
+                    document.getElementById("precio").value = "";
+                } else {
+                    document.getElementById("precio").value = coincidencia.precio_sugerido;
+                }
             }
         } catch (e) { console.error("Error al buscar", e); }
     }
