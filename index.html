@@ -84,7 +84,7 @@
             <table class="table table-striped mb-0 texto-lista">
                 <thead class="table-light">
                     <tr>
-                        <th>Cant</th>
+                        <th>Hora</th> <th>Cant</th>
                         <th>Producto</th>
                         <th>Total</th>
                         <th></th>
@@ -412,7 +412,7 @@
                 const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
                 cuerpo.innerHTML += `
                 <tr class="${color}">
-                    <td>${m.cantidad}</td>
+                    <td><small class="text-secondary">${m.hora || '--:--'}</small></td> <td>${m.cantidad}</td>
                     <td>${m.producto}</td>
                     <td>$${m.total_movimiento.toFixed(2)}</td>
                     <td class="text-end">

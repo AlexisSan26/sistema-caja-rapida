@@ -44,8 +44,14 @@ class ActualizacionPrecio(BaseModel):
 
 
 def conectar_bd():
-    return mysql.connector.connect(**db_config)
+    conexion = mysql.connector.connect(**db_config)
 
+    # Agregamos esto para que la base de datos use la hora de México (-6)
+    cursor = conexion.cursor()
+    cursor.execute("SET time_zone = '-06:00';")
+    cursor.close()
+
+    return conexion
 
 @app.get("/")
 def inicio():
@@ -283,7 +289,15 @@ def resumen_turno(id_turno: int):
 def obtener_movimientos(id_turno: int):
     conexion = conectar_bd()
     cursor = conexion.cursor(dictionary=True)
-    sql = "SELECT id_movimiento, cantidad, producto, total_movimiento, tipo_movimiento FROM movimientos WHERE id_turno = %s ORDER BY id_movimiento DESC"
+
+    # Agregamos "TIME_FORMAT(fecha_hora, '%H:%i') as hora" a la consulta
+    sql = """
+        SELECT id_movimiento, cantidad, producto, total_movimiento, tipo_movimiento, 
+               TIME_FORMAT(fecha_hora, '%H:%i') as hora 
+        FROM movimientos 
+        WHERE id_turno = %s 
+        ORDER BY id_movimiento DESC
+    """
     cursor.execute(sql, (id_turno,))
     movimientos = cursor.fetchall()
     cursor.close()
