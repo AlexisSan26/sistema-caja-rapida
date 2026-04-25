@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Caja Rápida</title>
 
-<link rel="icon" type="image/png" sizes="192x192" href="icono.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icono.png">
     <link rel="apple-touch-icon" href="icono.png">
     <link rel="manifest" href="data:application/manifest+json,{%22icons%22:[{%22src%22:%22icono.png%22,%22sizes%22:%22512x512%22,%22type%22:%22image/png%22,%22purpose%22:%22any%20maskable%22}]}">
 
@@ -13,9 +13,27 @@
     <style>
         .tabla-scroll { max-height: 250px; overflow-y: auto; }
         .texto-lista { font-size: 1.1rem; }
+
+        /* Aviso de error de red visible para el usuario */
+        #aviso-error {
+            display: none;
+            position: fixed;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #dc3545;
+            color: white;
+            padding: .6rem 1.2rem;
+            border-radius: 8px;
+            font-size: .95rem;
+            z-index: 9999;
+            box-shadow: 0 2px 8px rgba(0,0,0,.25);
+        }
     </style>
 </head>
 <body class="bg-light">
+
+<div id="aviso-error">⚠️ Sin conexión — reintentando...</div>
 
 <div class="container mt-4" style="max-width: 600px;">
     <h2 class="text-center mb-1">Caja Rápida</h2>
@@ -88,8 +106,9 @@
         <div class="card-body p-0 tabla-scroll">
             <table class="table table-striped mb-0 texto-lista">
                 <thead class="table-light">
-                    <tr >
-                        <th class="text-center">Hora</th> <th class="text-center">Cant</th>
+                    <tr>
+                        <th class="text-center">Hora</th>
+                        <th class="text-center">Cant</th>
                         <th>Producto</th>
                         <th class="text-center">Total</th>
                         <th class="text-center"></th>
@@ -113,14 +132,30 @@
     let idTurnoActual = null;
     let productosMemoria = [];
     let intervaloActualizacion = null;
-    const API_URL ="https://sistema-caja-rapida.onrender.com";
 
-    function mostrarFechaDelDia() {
-        const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        const fecha = new Date().toLocaleDateString('es-MX', opciones);
-        document.getElementById("fecha-actual").innerText = fecha;
+    // IDs conocidos en la tabla para evitar reconstruir filas que no cambiaron
+    let idsEnTabla = new Set();
+
+    const API_URL = "https://sistema-caja-rapida.onrender.com";
+
+    // ─── Aviso de error visible ───────────────────────────────────────────────
+    let timeoutError = null;
+    function mostrarError(msg) {
+        const el = document.getElementById("aviso-error");
+        el.textContent = msg || "⚠️ Sin conexión — reintentando...";
+        el.style.display = "block";
+        clearTimeout(timeoutError);
+        timeoutError = setTimeout(() => { el.style.display = "none"; }, 4000);
     }
 
+    // ─── Fecha ────────────────────────────────────────────────────────────────
+    function mostrarFechaDelDia() {
+        const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById("fecha-actual").innerText =
+            new Date().toLocaleDateString('es-MX', opciones);
+    }
+
+    // ─── Historial ────────────────────────────────────────────────────────────
     async function abrirHistorial() {
         document.getElementById("panel-historial").style.display = "block";
         document.getElementById("detalle-historial").innerHTML = "";
@@ -129,14 +164,14 @@
         try {
             const res = await fetch(`${API_URL}/historial_turnos`);
             const turnos = await res.json();
-
             let html = "";
             if (turnos.length === 0) {
                 html = "<p class='text-center text-muted mt-3'>No hay cortes registrados aún.</p>";
             } else {
                 turnos.forEach(t => {
-                    const fechaTxt = t.fecha_apertura ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', {day: '2-digit', month: 'short', year: 'numeric'}) : "Fecha Desconocida";
-
+                    const fechaTxt = t.fecha_apertura
+                        ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : "Fecha Desconocida";
                     html += `
                     <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="verDetalleHistorial(${t.id_turno})">
                         <strong>Turno #${t.id_turno}</strong>
@@ -145,7 +180,7 @@
                 });
             }
             document.getElementById("lista-historial").innerHTML = html;
-        } catch(e) {
+        } catch (e) {
             document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
         }
     }
@@ -159,47 +194,54 @@
         try {
             const res = await fetch(`${API_URL}/resumen_turno/${idTurno}`);
             const datos = await res.json();
-
-            let diaOperativo = "Día desconocido";
-            if (datos.fecha_apertura) {
-                const fechaApertura = new Date(datos.fecha_apertura);
-                if (!isNaN(fechaApertura.getTime())) {
-                    diaOperativo = fechaApertura.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
-                }
-            }
-
-            const mensaje = `
-                <div class="card bg-light p-3 border-dark text-start shadow-sm mt-3">
-                    <div class="text-center mb-3 border-bottom pb-2">
-                        <h6 class="mb-0 text-uppercase fw-bold text-primary">Resumen del Turno #${idTurno}</h6>
-                        <small class="text-muted">Día operativo: ${diaOperativo}</small>
-                    </div>
-                    <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-
-                    <p class="text-muted mb-1 mt-3">Cigarros y Time</p>
-                    <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
-
-                    <p class="text-muted mb-1 mt-2">Helados</p>
-                    <p class="h5">Total: <strong>$${(datos.total_helados || 0).toFixed(2)}</strong></p>
-
-                    <hr>
-                    <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
-                    <small class="text-muted">(Descontando Cigarros, Time y Helados)</small>
-                </div>
-            `;
-            document.getElementById("detalle-historial").innerHTML = mensaje;
-        } catch(e) {
+            document.getElementById("detalle-historial").innerHTML = construirTicketHTML(datos, idTurno);
+        } catch (e) {
             document.getElementById("detalle-historial").innerHTML = "<p class='text-danger'>Error al cargar el resumen.</p>";
         }
     }
 
+    // ─── Ticket (reutilizable) ────────────────────────────────────────────────
+    function construirTicketHTML(datos, idTurno, momentoCierre = null) {
+        let diaOperativo = "Día desconocido";
+        if (datos.fecha_apertura) {
+            const f = new Date(datos.fecha_apertura);
+            if (!isNaN(f.getTime()))
+                diaOperativo = f.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+
+        const subtitulo = momentoCierre
+            ? `Cierre realizado: ${momentoCierre}`
+            : `Día operativo: ${diaOperativo}`;
+
+        const encabezado = idTurno
+            ? `Turno #${idTurno} — ${diaOperativo}`
+            : `Turno del ${diaOperativo}`;
+
+        return `
+            <div class="card bg-light p-3 border-dark text-start shadow-sm mt-3">
+                <div class="text-center mb-3 border-bottom pb-2">
+                    <h6 class="mb-0 text-uppercase fw-bold text-primary">${encabezado}</h6>
+                    <small class="text-muted">${subtitulo}</small>
+                </div>
+                <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
+                <p class="text-muted mb-1 mt-3">Cigarros y Time</p>
+                <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
+                <p class="text-muted mb-1 mt-2">Helados</p>
+                <p class="h5">Total: <strong>$${(datos.total_helados || 0).toFixed(2)}</strong></p>
+                <hr>
+                <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
+                <small class="text-muted">(Descontando Cigarros, Time y Helados)</small>
+            </div>`;
+    }
+
+    // ─── Estado inicial ───────────────────────────────────────────────────────
     async function verificarEstadoInicial() {
         try {
             const res = await fetch(`${API_URL}/turno_actual`);
             const datos = await res.json();
             if (datos.estado === "ABIERTO") {
                 idTurnoActual = datos.id_turno;
-                configurarInterfazAbierta(idTurnoActual);
+                configurarInterfazAbierta();
             } else {
                 document.getElementById("panel-apertura").style.display = "block";
                 document.getElementById("btn-abrir").style.display = "inline-block";
@@ -207,11 +249,12 @@
                 document.getElementById("texto-turno").className = "text-muted";
             }
         } catch (e) {
+            mostrarError("⚠️ No se pudo conectar al servidor.");
             document.getElementById("btn-abrir").style.display = "inline-block";
         }
     }
 
-    function configurarInterfazAbierta(id) {
+    function configurarInterfazAbierta() {
         document.getElementById("panel-apertura").style.display = "none";
         document.getElementById("panel-ventas").style.display = "block";
         document.getElementById("panel-lista").style.display = "block";
@@ -220,74 +263,42 @@
         document.getElementById("resultado-corte").innerHTML = "";
 
         actualizarLista();
+
+        // Limpia cualquier intervalo anterior antes de crear uno nuevo
+        // Esto evita que se acumulen múltiples setInterval corriendo al mismo tiempo
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
         intervaloActualizacion = setInterval(sincronizarTodo, 3000);
     }
 
-    function mostrarTicket(datos) {
-        let diaOperativo = "Hoy";
-
-        if (datos.fecha_apertura) {
-            const fechaApertura = new Date(datos.fecha_apertura);
-            if (!isNaN(fechaApertura.getTime())) {
-                const opcionesDia = { weekday: 'long', day: 'numeric', month: 'long' };
-                diaOperativo = fechaApertura.toLocaleDateString('es-MX', opcionesDia);
-            }
-        }
-
-        const momentoCierre = new Date().toLocaleString('es-MX', {
-            hour: '2-digit',
-            minute: '2-digit',
-            day: '2-digit',
-            month: '2-digit'
-        });
-
-        const mensaje = `
-            <div class="card bg-light p-3 border-dark text-start shadow-sm mb-3">
-                <div class="text-center mb-3 border-bottom pb-2">
-                    <h6 class="mb-0 text-uppercase fw-bold text-primary">Turno del ${diaOperativo}</h6>
-                    <small class="text-muted">Cierre realizado: ${momentoCierre}</small>
-                </div>
-                <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-
-                <p class="text-muted mb-1 mt-3">Cigarros y Time</p>
-                <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
-
-                <p class="text-muted mb-1 mt-2">Helados</p>
-                <p class="h5">Total: <strong>$${(datos.total_helados || 0).toFixed(2)}</strong></p>
-
-                <hr>
-                <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
-                <small class="text-muted">(Descontando Cigarros, Time y Helados)</small>
-            </div>
-        `;
-        document.getElementById("resultado-corte").innerHTML = mensaje;
-    }
-
+    // ─── Sincronización ───────────────────────────────────────────────────────
     async function sincronizarTodo() {
         if (!idTurnoActual) return;
         try {
-            const resTurno = await fetch(`${API_URL}/turno_actual`);
-            const datosTurno = await resTurno.json();
+            const res = await fetch(`${API_URL}/turno_actual`);
+            const datos = await res.json();
 
-            if (datosTurno.estado !== "ABIERTO") {
+            if (datos.estado !== "ABIERTO") {
                 try {
                     const resResumen = await fetch(`${API_URL}/resumen_turno/${idTurnoActual}`);
                     const datosResumen = await resResumen.json();
                     mostrarTicket(datosResumen);
-                } catch (err) { console.log("No se pudo obtener el resumen"); }
+                } catch (_) {}
 
                 alert("El turno ha sido cerrado desde otro dispositivo.");
                 resetearInterfazCerrada();
                 return;
             }
             actualizarLista();
-        } catch (e) { console.error("Error en sincronización", e); }
+        } catch (e) {
+            mostrarError();
+        }
     }
 
     function resetearInterfazCerrada() {
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
+        intervaloActualizacion = null;
         idTurnoActual = null;
+        idsEnTabla.clear();
         document.getElementById("panel-apertura").style.display = "block";
         document.getElementById("btn-abrir").style.display = "inline-block";
         document.getElementById("btn-abrir").innerText = "Abrir Caja (Nuevo Turno)";
@@ -298,32 +309,60 @@
         document.getElementById("texto-turno").className = "text-muted";
     }
 
+    // ─── Tabla de movimientos (sin parpadeo) ──────────────────────────────────
+    async function actualizarLista() {
+        if (!idTurnoActual) return;
+        try {
+            const res = await fetch(`${API_URL}/movimientos_turno/${idTurnoActual}`);
+            const movimientos = await res.json();
+            const cuerpo = document.getElementById("tabla-cuerpo");
+
+            // Solo reconstruye si cambió algo (IDs distintos al set anterior)
+            const nuevosIds = new Set(movimientos.map(m => m.id_movimiento));
+            const cambio = nuevosIds.size !== idsEnTabla.size ||
+                [...nuevosIds].some(id => !idsEnTabla.has(id));
+
+            if (!cambio) return; // nada nuevo, no toques el DOM
+            idsEnTabla = nuevosIds;
+
+            cuerpo.innerHTML = movimientos.map(m => {
+                const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
+                return `
+                <tr class="${color}">
+                    <td class="text-center">${m.hora || '--:--'}</td>
+                    <td class="text-center">${m.cantidad}</td>
+                    <td>${m.producto}</td>
+                    <td class="text-center">$${m.total_movimiento.toFixed(2)}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
+                    </td>
+                </tr>`;
+            }).join("");
+        } catch (e) {
+            mostrarError();
+        }
+    }
+
+    // ─── Productos ────────────────────────────────────────────────────────────
     async function manejarInputProducto() {
         if (document.getElementById("tipo").value !== "VENTA") return;
         const texto = document.getElementById("producto").value;
         const divCantidad = document.getElementById("div-cantidad");
 
         if (!texto) {
-            divCantidad.style.display = "block";
+            divCantidad.style.visibility = "visible";
             return;
         }
 
-        // --- INICIO DE LA LÓGICA DE PRODUCTOS A GRANEL ---
         const textoMin = texto.toLowerCase();
-        // Aquí está tu lista maestra de palabras clave. Si en el futuro necesitas otra, la agregas aquí.
         const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
-        const esGranel = palabrasGranel.some(palabra => textoMin.includes(palabra));
+        const esGranel = palabrasGranel.some(p => textoMin.includes(p));
 
-        if (esGranel) {
-            divCantidad.style.visibility = "hidden"; // Cambiamos display por visibility
-            document.getElementById("cantidad").value = "1";
-        } else {
-            divCantidad.style.visibility = "visible"; // Cambiamos block por visible
-        }
-        // --- FIN DE LA LÓGICA DE GRANEL ---
+        divCantidad.style.visibility = esGranel ? "hidden" : "visible";
+        if (esGranel) document.getElementById("cantidad").value = "1";
 
         try {
-            const res = await fetch(`${API_URL}/buscar_productos?q=${texto}`);
+            const res = await fetch(`${API_URL}/buscar_productos?q=${encodeURIComponent(texto)}`);
             productosMemoria = await res.json();
             const datalist = document.getElementById("lista-productos");
             datalist.innerHTML = "";
@@ -333,15 +372,12 @@
                 datalist.appendChild(opcion);
             });
             const coincidencia = productosMemoria.find(p => p.nombre_producto === texto);
-            if (coincidencia) {
-                // Si el producto es a granel, no auto-completamos el precio para que lo teclees manual.
-                if (esGranel) {
-                    document.getElementById("precio").value = "";
-                } else {
-                    document.getElementById("precio").value = coincidencia.precio_sugerido;
-                }
+            if (coincidencia && !esGranel) {
+                document.getElementById("precio").value = coincidencia.precio_sugerido;
             }
-        } catch (e) { console.error("Error al buscar", e); }
+        } catch (e) {
+            mostrarError("No se pudo buscar productos.");
+        }
     }
 
     function ajustarCampos() {
@@ -353,29 +389,29 @@
         const btnActualizarPrecio = document.getElementById("btn-actualizar-precio");
         const inputProducto = document.getElementById("producto");
 
+        document.getElementById("producto").value = "";
+        document.getElementById("precio").value = "";
+
         if (tipo === "VENTA") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "visible";
             labelProducto.innerText = "Producto:";
             labelMonto.innerText = "Precio Unitario ($):";
+            inputProducto.placeholder = "Ej. Sabritas, Coca-Cola...";
             btnActualizarPrecio.style.display = "block";
-            document.getElementById("producto").value = "";
-            document.getElementById("precio").value = "";
         } else if (tipo === "RETIRO") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "hidden";
             labelProducto.innerText = "Concepto de retiro:";
             inputProducto.placeholder = "Ej. Pago a proveedores, pasajes...";
+            labelMonto.innerText = "Monto ($):";
             btnActualizarPrecio.style.display = "none";
-            document.getElementById("producto").value = "";
-            document.getElementById("precio").value = "";
         } else if (tipo === "FONDO_CAJA") {
             divProducto.style.display = "none";
             divCantidad.style.visibility = "hidden";
             labelMonto.innerText = "Monto inicial ($):";
             btnActualizarPrecio.style.display = "none";
             document.getElementById("producto").value = "Fondo inicial";
-            document.getElementById("precio").value = "";
         }
     }
 
@@ -383,151 +419,118 @@
         const nombreProducto = document.getElementById("producto").value.trim();
         const nuevoPrecio = parseFloat(document.getElementById("precio").value);
 
-        if (nombreProducto === "" || isNaN(nuevoPrecio) || nuevoPrecio < 0) {
+        if (!nombreProducto || isNaN(nuevoPrecio) || nuevoPrecio < 0) {
             alert("⚠️ Selecciona un producto y escribe el nuevo precio antes de presionar el botón amarillo.");
             return;
         }
-
-        const seguro = confirm(`¿Estás seguro de actualizar el precio base de "${nombreProducto}" a $${nuevoPrecio} para futuras ventas?`);
-        if (!seguro) return;
+        if (!confirm(`¿Actualizar el precio de "${nombreProducto}" a $${nuevoPrecio}?`)) return;
 
         try {
             const res = await fetch(`${API_URL}/actualizar_precio`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    nombre_producto: nombreProducto,
-                    nuevo_precio: nuevoPrecio
-                })
+                body: JSON.stringify({ nombre_producto: nombreProducto, nuevo_precio: nuevoPrecio })
             });
             const data = await res.json();
             alert(data.mensaje);
-        } catch (error) {
-            alert("Error de conexión al actualizar el precio.");
+        } catch (e) {
+            mostrarError("Error al actualizar el precio.");
         }
     }
 
-    async function actualizarLista() {
-        if (!idTurnoActual) return;
-        try {
-            const res = await fetch(`${API_URL}/movimientos_turno/${idTurnoActual}`);
-            const movimientos = await res.json();
-            const cuerpo = document.getElementById("tabla-cuerpo");
-            cuerpo.innerHTML = "";
-            movimientos.forEach(m => {
-                const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
-                cuerpo.innerHTML += `
-                <tr class="${color}">
-                    <td class="text-center">${m.hora || '--:--'}</td> <td class="text-center">${m.cantidad}</td>
-                    <td>${m.producto}</td>
-                    <td class="text-center">$${m.total_movimiento.toFixed(2)}</td>
-                    <td class="text-center" class="text-end">
-                        <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
-                    </td>
-                </tr>`;
-            });
-        } catch (e) { console.log(e); }
-    }
-
-    async function borrarMovimiento(idMovimiento) {
-        const seguro = confirm("⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.");
-        if (!seguro) return;
-
-        try {
-            const res = await fetch(`${API_URL}/borrar_movimiento/${idMovimiento}`, {
-                method: "DELETE"
-            });
-
-            if (res.ok) {
-                actualizarLista();
-            } else {
-                alert("Error al intentar cancelar el movimiento.");
-            }
-        } catch (error) { console.error("Error:", error); }
-    }
-
+    // ─── Acciones ─────────────────────────────────────────────────────────────
     async function abrirTurno() {
         try {
-            const respuesta = await fetch(`${API_URL}/abrir_turno`, { method: "POST" });
-            const datos = await respuesta.json();
+            const res = await fetch(`${API_URL}/abrir_turno`, { method: "POST" });
+            const datos = await res.json();
             idTurnoActual = datos.id_turno;
-            configurarInterfazAbierta(idTurnoActual);
-        } catch (error) { alert("Error al conectar."); }
+            configurarInterfazAbierta();
+        } catch (e) {
+            mostrarError("Error al conectar con el servidor.");
+        }
     }
 
     async function registrar() {
         const tipo = document.getElementById("tipo").value;
         const montoVal = parseFloat(document.getElementById("precio").value);
         let cantidadVal = parseFloat(document.getElementById("cantidad").value);
-
         let nombreProducto = document.getElementById("producto").value.trim();
 
-        if (isNaN(montoVal) || montoVal < 0) {
-            alert("Por favor ingresa un monto válido.");
-            return;
-        }
-
-        if (tipo === "VENTA" && (isNaN(cantidadVal) || cantidadVal <= 0)) {
-            alert("¡Error! La cantidad debe ser mayor a 0.");
-            return;
-        }
-
-        if (tipo === "VENTA" && nombreProducto === "") {
-            alert("¡Cuidado! Olvidaste escribir el nombre del producto.");
-            return;
-        }
-
-        if (tipo === "RETIRO" && nombreProducto === "") {
-            alert("Favor de poner el concepto o motivo del retiro.");
-            return;
-        }
+        if (isNaN(montoVal) || montoVal < 0) { alert("Por favor ingresa un monto válido."); return; }
+        if (tipo === "VENTA" && (isNaN(cantidadVal) || cantidadVal <= 0)) { alert("¡Error! La cantidad debe ser mayor a 0."); return; }
+        if (tipo === "VENTA" && !nombreProducto) { alert("¡Cuidado! Olvidaste escribir el nombre del producto."); return; }
+        if (tipo === "RETIRO" && !nombreProducto) { alert("Favor de poner el concepto o motivo del retiro."); return; }
 
         if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
         if (tipo !== "VENTA") cantidadVal = 1;
-
-        const movimiento = {
-            id_turno: idTurnoActual,
-            tipo_movimiento: tipo,
-            producto: nombreProducto,
-            cantidad: cantidadVal,
-            precio_unitario: montoVal
-        };
 
         try {
             const res = await fetch(`${API_URL}/registrar_movimiento`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(movimiento)
+                body: JSON.stringify({
+                    id_turno: idTurnoActual,
+                    tipo_movimiento: tipo,
+                    producto: nombreProducto,
+                    cantidad: cantidadVal,
+                    precio_unitario: montoVal
+                })
             });
             if (res.ok) {
                 document.getElementById("producto").value = "";
                 document.getElementById("precio").value = "";
-                document.getElementById("cantidad").value = "1"; // <-- CANTIDAD VUELVE A 1
-                actualizarLista();
+                document.getElementById("cantidad").value = "1";
                 ajustarCampos();
+                actualizarLista();
+            } else {
+                mostrarError("El servidor rechazó el registro.");
             }
-        } catch (error) { alert("Error al guardar."); }
+        } catch (e) {
+            mostrarError("Error al guardar. Verifica tu conexión.");
+        }
     }
 
+    async function borrarMovimiento(idMovimiento) {
+        if (!confirm("⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.")) return;
+        try {
+            const res = await fetch(`${API_URL}/borrar_movimiento/${idMovimiento}`, { method: "DELETE" });
+            if (res.ok) {
+                actualizarLista();
+            } else {
+                mostrarError("Error al cancelar el movimiento.");
+            }
+        } catch (e) {
+            mostrarError("Error de conexión al cancelar.");
+        }
+    }
+
+    function mostrarTicket(datos) {
+        const cierre = new Date().toLocaleString('es-MX', {
+            hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
+        });
+        document.getElementById("resultado-corte").innerHTML =
+            construirTicketHTML(datos, null, cierre);
+    }
+
+    // ─── Corte de caja (ahora POST) ───────────────────────────────────────────
     async function hacerCorte() {
         if (!idTurnoActual) return;
-
-        const seguro = confirm("⚠️ ¿Estás seguro de que deseas CERRAR LA CAJA y hacer el corte?\n\nYa no podrás agregar más ventas a este turno.");
-
-        if (!seguro) return;
+        if (!confirm("⚠️ ¿Estás seguro de que deseas CERRAR LA CAJA y hacer el corte?\n\nYa no podrás agregar más ventas a este turno.")) return;
 
         try {
-            const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`);
+            // POST en lugar de GET — el corte es una acción, no una consulta
+            const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`, { method: "POST" });
             const datos = await res.json();
-
             mostrarTicket(datos);
-
             alert("Turno Cerrado Correctamente");
             resetearInterfazCerrada();
-        } catch (e) { alert("Error al cerrar"); }
+        } catch (e) {
+            mostrarError("Error al cerrar la caja.");
+        }
     }
 
-    window.onload = function() {
+    // ─── Init ─────────────────────────────────────────────────────────────────
+    window.onload = function () {
         mostrarFechaDelDia();
         verificarEstadoInicial();
     };
