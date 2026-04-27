@@ -4,142 +4,100 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Caja Rápida</title>
-
     <link rel="icon" type="image/png" sizes="192x192" href="icono.png">
     <link rel="apple-touch-icon" href="icono.png">
     <link rel="manifest" href="data:application/manifest+json,{%22icons%22:[{%22src%22:%22icono.png%22,%22sizes%22:%22512x512%22,%22type%22:%22image/png%22,%22purpose%22:%22any%20maskable%22}]}">
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
     <style>
         .tabla-scroll { max-height: 250px; overflow-y: auto; }
         .texto-lista { font-size: 1.1rem; }
 
-        /* Aviso de error */
         #aviso-error {
             display: none;
             position: fixed;
-            bottom: 5rem;
-            left: 50%;
+            bottom: 5rem; left: 50%;
             transform: translateX(-50%);
-            background: #dc3545;
-            color: white;
-            padding: .6rem 1.2rem;
-            border-radius: 8px;
-            font-size: .95rem;
-            z-index: 9999;
+            background: #dc3545; color: white;
+            padding: .6rem 1.2rem; border-radius: 8px;
+            font-size: .95rem; z-index: 9999;
             box-shadow: 0 2px 8px rgba(0,0,0,.25);
             white-space: nowrap;
         }
 
-        /* Menú hamburguesa */
-        #menu-lateral {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: 8000;
-        }
-        #menu-fondo {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,.45);
-        }
+        #menu-lateral { display: none; position: fixed; top:0; left:0; width:100%; height:100%; z-index:8000; }
+        #menu-fondo { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.45); }
         #menu-panel {
-            position: absolute;
-            top: 0; left: 0;
-            width: 260px; height: 100%;
-            background: white;
-            padding: 1.5rem 1rem;
-            box-shadow: 4px 0 16px rgba(0,0,0,.2);
-            display: flex;
-            flex-direction: column;
-            gap: .5rem;
+            position:absolute; top:0; left:0; width:260px; height:100%;
+            background:white; padding:1.5rem 1rem;
+            box-shadow:4px 0 16px rgba(0,0,0,.2);
+            display:flex; flex-direction:column; gap:.5rem;
         }
         #menu-panel .menu-item {
-            display: flex;
-            align-items: center;
-            gap: .75rem;
-            padding: .75rem 1rem;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            border: none;
-            background: none;
-            text-align: left;
-            color: #333;
+            display:flex; align-items:center; gap:.75rem;
+            padding:.75rem 1rem; border-radius:8px;
+            font-size:1rem; font-weight:500; cursor:pointer;
+            border:none; background:none; text-align:left; color:#333;
         }
-        #menu-panel .menu-item:hover { background: #f0f0f0; }
-        #menu-panel .menu-item.activo { background: #e8f5e9; color: #2e7d32; }
+        #menu-panel .menu-item:hover { background:#f0f0f0; }
+        #menu-panel .menu-item.activo { background:#e8f5e9; color:#2e7d32; }
 
-        /* Botón hamburguesa fijo arriba */
         #btn-menu {
-            position: fixed;
-            top: .75rem;
-            left: .75rem;
-            z-index: 7000;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: .4rem .6rem;
-            font-size: 1.3rem;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(0,0,0,.15);
+            position:fixed; top:.75rem; left:.75rem; z-index:7000;
+            background:white; border:1px solid #ddd; border-radius:8px;
+            padding:.4rem .6rem; font-size:1.3rem; cursor:pointer;
+            box-shadow:0 2px 6px rgba(0,0,0,.15);
         }
 
-        /* Botón flotante ➕ */
         #btn-flotante {
-            display: none;
-            position: fixed;
-            bottom: 1.5rem;
-            right: 1.5rem;
-            width: 58px; height: 58px;
-            border-radius: 50%;
-            background: #198754;
-            color: white;
-            font-size: 1.8rem;
-            border: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,.3);
-            z-index: 6000;
-            cursor: pointer;
-            display: none;
-            align-items: center;
-            justify-content: center;
+            position:fixed; bottom:1.5rem; right:1.5rem;
+            width:58px; height:58px; border-radius:50%;
+            background:#198754; color:white; font-size:1.8rem;
+            border:none; box-shadow:0 4px 12px rgba(0,0,0,.3);
+            z-index:6000; cursor:pointer; display:none;
+            align-items:center; justify-content:center;
         }
 
-        /* Pantallas */
-        .pantalla { display: none; }
-        .pantalla.activa { display: block; }
+        .pantalla { display:none; }
+        .pantalla.activa { display:block; }
 
-        /* Escáner */
-        #lector-qr { width: 100%; border-radius: 8px; overflow: hidden; }
-        #lector-qr video { border-radius: 8px; }
-
-        /* Badge alertas */
         #badge-alertas {
-            background: #dc3545;
-            color: white;
-            border-radius: 50%;
-            font-size: .7rem;
-            padding: .15rem .4rem;
-            margin-left: .3rem;
-            display: none;
+            background:#dc3545; color:white; border-radius:50%;
+            font-size:.7rem; padding:.15rem .4rem; margin-left:.3rem; display:none;
         }
+
+        /* ── Bottom sheet de detalle/edición ── */
+        #bottom-sheet-overlay {
+            display:none; position:fixed; top:0; left:0;
+            width:100%; height:100%; background:rgba(0,0,0,.45); z-index:9500;
+        }
+        #bottom-sheet {
+            position:fixed; bottom:0; left:0; right:0;
+            background:white; border-radius:16px 16px 0 0;
+            padding:1.25rem 1.25rem 2rem;
+            max-height:90vh; overflow-y:auto;
+            z-index:9600;
+            transform:translateY(100%);
+            transition:transform .3s ease;
+        }
+        #bottom-sheet.visible { transform:translateY(0); }
+        .sheet-handle {
+            width:40px; height:4px; background:#ddd;
+            border-radius:2px; margin:0 auto 1rem;
+        }
+        .campo-lectura { background:#f8f9fa; border-radius:8px; padding:.6rem .9rem; margin-bottom:.75rem; }
+        .campo-lectura .etiqueta { font-size:.75rem; color:#6c757d; margin-bottom:.1rem; }
+        .campo-lectura .valor { font-size:1rem; font-weight:500; color:#212529; }
     </style>
 </head>
 <body class="bg-light">
 
-<!-- Botón hamburguesa -->
 <button id="btn-menu" onclick="toggleMenu()">☰</button>
 
-<!-- Menú lateral -->
 <div id="menu-lateral">
     <div id="menu-fondo" onclick="cerrarMenu()"></div>
     <div id="menu-panel">
-        <div style="font-weight:700; font-size:1.1rem; padding:.5rem 1rem .75rem; border-bottom:1px solid #eee; margin-bottom:.5rem;">
+        <div style="font-weight:700;font-size:1.1rem;padding:.5rem 1rem .75rem;border-bottom:1px solid #eee;margin-bottom:.5rem;">
             📦 Caja Rápida
         </div>
         <button class="menu-item activo" id="menu-caja" onclick="irA('caja')">🏪 Caja</button>
@@ -150,20 +108,14 @@
     </div>
 </div>
 
-<!-- Aviso error -->
 <div id="aviso-error">⚠️ Sin conexión — reintentando...</div>
-
-<!-- Botón flotante agregar mercancía -->
 <button id="btn-flotante" onclick="abrirFlujoResurtido()" title="Agregar mercancía">➕</button>
 
-<!-- ══════════════════════════════════════════════════════
-     PANTALLA: CAJA (todo lo que ya existía)
-══════════════════════════════════════════════════════ -->
+<!-- ══ PANTALLA: CAJA ══ -->
 <div id="pantalla-caja" class="pantalla activa">
 <div class="container mt-4" style="max-width:600px;">
     <h2 class="text-center mb-1" style="margin-top:2.5rem;">Caja Rápida</h2>
     <p id="fecha-actual" class="text-center text-secondary mb-2 text-capitalize"></p>
-
     <div class="text-center mb-4">
         <button class="btn btn-sm btn-outline-secondary" onclick="abrirHistorial()">Ver Historial de Cortes 📅</button>
     </div>
@@ -203,7 +155,7 @@
                 <label id="label-producto" class="fw-bold">Producto:</label>
                 <div class="input-group">
                     <input type="text" id="producto" class="form-control form-control-lg" list="lista-productos" oninput="manejarInputProducto()" autocomplete="off" placeholder="Ej. Sabritas, Coca-Cola...">
-                    <button class="btn btn-outline-secondary" type="button" onclick="abrirEscanerCaja()" title="Escanear código de barras">📷</button>
+                    <button class="btn btn-outline-secondary" type="button" onclick="abrirEscanerCaja()" title="Escanear">📷</button>
                 </div>
                 <datalist id="lista-productos"></datalist>
             </div>
@@ -216,11 +168,10 @@
                     <label id="label-monto" class="fw-bold">Monto ($):</label>
                     <div class="input-group">
                         <input type="number" id="precio" class="form-control form-control-lg" placeholder="0.00">
-                        <button class="btn btn-warning fw-bold" type="button" id="btn-actualizar-precio" onclick="actualizarPrecioMaestro()" title="Guardar como nuevo precio fijo">🔄</button>
+                        <button class="btn btn-warning fw-bold" type="button" id="btn-actualizar-precio" onclick="actualizarPrecioMaestro()" title="Guardar precio">🔄</button>
                     </div>
                 </div>
             </div>
-            <!-- Escáner en caja -->
             <div id="escaner-caja-container" style="display:none;" class="mb-3">
                 <div id="lector-qr-caja"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerCaja()">Cerrar cámara</button>
@@ -254,65 +205,42 @@
             <button class="btn btn-danger btn-lg w-100" onclick="hacerCorte()">Hacer Corte de Caja</button>
         </div>
     </div>
-
     <div id="resultado-corte"></div>
 </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════
-     PANTALLA: INVENTARIO
-══════════════════════════════════════════════════════ -->
+<!-- ══ PANTALLA: INVENTARIO ══ -->
 <div id="pantalla-inventario" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">📋 Inventario</h4>
-
-    <!-- Buscador + escáner -->
     <div class="input-group mb-2">
-        <input type="text" id="buscador-inventario" class="form-control form-control-lg"
-               placeholder="Buscar producto..." oninput="filtrarInventario()">
+        <input type="text" id="buscador-inventario" class="form-control form-control-lg" placeholder="Buscar producto..." oninput="filtrarInventario()">
         <button class="btn btn-outline-secondary" onclick="abrirEscanerInventario()" title="Escanear">📷</button>
     </div>
-
-    <!-- Escáner inventario -->
     <div id="escaner-inv-container" style="display:none;" class="mb-2">
         <div id="lector-qr-inv"></div>
         <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerInventario()">Cerrar cámara</button>
     </div>
-
-    <!-- Filtros por proveedor -->
     <div id="filtros-proveedor" class="d-flex gap-2 flex-wrap mb-3"></div>
-
-    <!-- Lista de productos -->
-    <div id="lista-inventario">
-        <p class="text-center text-muted mt-4">Cargando inventario...</p>
-    </div>
+    <div id="lista-inventario"><p class="text-center text-muted mt-4">Cargando inventario...</p></div>
 </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════
-     PANTALLA: ALERTAS
-══════════════════════════════════════════════════════ -->
+<!-- ══ PANTALLA: ALERTAS ══ -->
 <div id="pantalla-alertas" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">🔔 Alertas</h4>
-    <div id="lista-alertas">
-        <p class="text-center text-muted mt-4">Cargando alertas...</p>
-    </div>
+    <div id="lista-alertas"><p class="text-center text-muted mt-4">Cargando alertas...</p></div>
 </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════
-     MODAL: FLUJO DE RESURTIDO (botón ➕)
-══════════════════════════════════════════════════════ -->
-<div id="modal-resurtido" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.5); z-index:9000; overflow-y:auto;">
-    <div style="background:white; margin:2rem auto; max-width:500px; border-radius:12px; padding:1.5rem;">
-
-        <!-- Paso 1: escanear o buscar -->
+<!-- ══ MODAL: RESURTIDO ══ -->
+<div id="modal-resurtido" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9000;overflow-y:auto;">
+    <div style="background:white;margin:2rem auto;max-width:500px;border-radius:12px;padding:1.5rem;">
         <div id="paso-1">
             <h5 class="mb-3">¿Qué llegó? 📦</h5>
             <div class="input-group mb-3">
-                <input type="text" id="buscar-resurtido" class="form-control form-control-lg"
-                       placeholder="Nombre o escanea..." oninput="buscarParaResurtir()" autocomplete="off">
+                <input type="text" id="buscar-resurtido" class="form-control form-control-lg" placeholder="Nombre o escanea..." oninput="buscarParaResurtir()" autocomplete="off">
                 <button class="btn btn-outline-secondary" onclick="abrirEscanerResurtido()">📷</button>
             </div>
             <div id="escaner-resurtido-container" style="display:none;" class="mb-3">
@@ -323,8 +251,6 @@
             <button class="btn btn-outline-primary w-100 mb-2" onclick="irAltaNueva()">+ Registrar producto nuevo</button>
             <button class="btn btn-outline-secondary w-100" onclick="cerrarModalResurtido()">Cancelar</button>
         </div>
-
-        <!-- Paso 2: cuántas piezas llegaron (resurtido de producto existente) -->
         <div id="paso-2" style="display:none;">
             <h5 class="mb-1">Resurtido</h5>
             <p id="nombre-resurtido" class="text-muted mb-3"></p>
@@ -339,8 +265,6 @@
             <button class="btn btn-success w-100 btn-lg mb-2" onclick="confirmarResurtido()">Confirmar entrada ✓</button>
             <button class="btn btn-outline-secondary w-100" onclick="volverPaso1()">← Volver</button>
         </div>
-
-        <!-- Paso 3: alta de producto nuevo -->
         <div id="paso-3" style="display:none;">
             <h5 class="mb-3">Nuevo producto</h5>
             <div class="mb-2">
@@ -382,23 +306,114 @@
     </div>
 </div>
 
+<!-- ══ BOTTOM SHEET: detalle y edición de producto ══ -->
+<div id="bottom-sheet-overlay" onclick="cerrarBottomSheet()"></div>
+<div id="bottom-sheet">
+    <div class="sheet-handle"></div>
+
+    <!-- Modo lectura -->
+    <div id="sheet-lectura">
+        <h5 id="sheet-nombre" class="fw-bold mb-3"></h5>
+        <div class="row">
+            <div class="col-6">
+                <div class="campo-lectura">
+                    <div class="etiqueta">Precio</div>
+                    <div class="valor" id="sheet-precio"></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="campo-lectura">
+                    <div class="etiqueta">Stock actual</div>
+                    <div class="valor" id="sheet-stock"></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="campo-lectura">
+                    <div class="etiqueta">Stock mínimo</div>
+                    <div class="valor" id="sheet-minimo"></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="campo-lectura">
+                    <div class="etiqueta">Proveedor</div>
+                    <div class="valor" id="sheet-proveedor"></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="campo-lectura">
+                    <div class="etiqueta">Código de barras</div>
+                    <div class="valor" id="sheet-codigo"></div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="campo-lectura">
+                    <div class="etiqueta">Caducidad</div>
+                    <div class="valor" id="sheet-caducidad"></div>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-primary w-100 btn-lg mt-2" onclick="activarModoEdicion()">✏️ Editar</button>
+        <button class="btn btn-outline-secondary w-100 mt-2" onclick="cerrarBottomSheet()">Cerrar</button>
+    </div>
+
+    <!-- Modo edición -->
+    <div id="sheet-edicion" style="display:none;">
+        <h5 class="fw-bold mb-3">✏️ Editar producto</h5>
+        <div class="mb-2">
+            <label class="fw-bold">Nombre</label>
+            <input type="text" id="edit-nombre" class="form-control">
+        </div>
+        <div class="row mb-2">
+            <div class="col-6">
+                <label class="fw-bold">Precio ($)</label>
+                <input type="number" id="edit-precio" class="form-control">
+            </div>
+            <div class="col-6">
+                <label class="fw-bold">Stock actual</label>
+                <input type="number" id="edit-stock" class="form-control">
+            </div>
+        </div>
+        <div class="row mb-2">
+            <div class="col-6">
+                <label class="fw-bold">Stock mínimo</label>
+                <input type="number" id="edit-minimo" class="form-control">
+            </div>
+            <div class="col-6">
+                <label class="fw-bold">Proveedor</label>
+                <input type="text" id="edit-proveedor" class="form-control" list="lista-proveedores-edit">
+                <datalist id="lista-proveedores-edit"></datalist>
+            </div>
+        </div>
+        <div class="mb-2">
+            <label class="fw-bold">Código de barras <span class="text-muted fw-normal">(opcional)</span></label>
+            <input type="text" id="edit-codigo" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label class="fw-bold">Fecha caducidad <span class="text-muted fw-normal">(opcional)</span></label>
+            <input type="date" id="edit-caducidad" class="form-control">
+        </div>
+        <button class="btn btn-success w-100 btn-lg mb-2" onclick="guardarEdicion()">Guardar cambios ✓</button>
+        <button class="btn btn-outline-secondary w-100" onclick="cancelarEdicion()">← Cancelar</button>
+    </div>
+</div>
+
 <script>
-    // ─── Variables globales (existentes) ─────────────────────────────────────
+    // ─── Variables globales ───────────────────────────────────────────────────
     let idTurnoActual = null;
     let productosMemoria = [];
     let intervaloActualizacion = null;
     let idsEnTabla = new Set();
     const API_URL = "https://sistema-caja-rapida.onrender.com";
 
-    // ─── Variables nuevas ─────────────────────────────────────────────────────
     let todosLosProductos = [];
     let proveedorFiltro = "";
     let productoResurtidoActual = null;
     let scannerCaja = null;
     let scannerInv = null;
     let scannerResurtido = null;
+    let productoEnEdicion = null; // guarda el producto que está abierto en el sheet
 
-    // ─── Aviso error (existente) ──────────────────────────────────────────────
+    // ─── Error ────────────────────────────────────────────────────────────────
     let timeoutError = null;
     function mostrarError(msg) {
         const el = document.getElementById("aviso-error");
@@ -408,18 +423,15 @@
         timeoutError = setTimeout(() => { el.style.display = "none"; }, 4000);
     }
 
-    // ─── Navegación entre pantallas ───────────────────────────────────────────
+    // ─── Navegación ───────────────────────────────────────────────────────────
     function irA(pantalla) {
         cerrarMenu();
         document.querySelectorAll('.pantalla').forEach(p => p.classList.remove('activa'));
         document.querySelectorAll('.menu-item').forEach(b => b.classList.remove('activo'));
         document.getElementById('pantalla-' + pantalla).classList.add('activa');
         document.getElementById('menu-' + pantalla).classList.add('activo');
-
-        // Mostrar/ocultar botón flotante solo en inventario
         const btnFlotante = document.getElementById('btn-flotante');
         btnFlotante.style.display = pantalla === 'inventario' ? 'flex' : 'none';
-
         if (pantalla === 'inventario') cargarInventario();
         if (pantalla === 'alertas') cargarAlertas();
     }
@@ -428,18 +440,15 @@
         const m = document.getElementById('menu-lateral');
         m.style.display = m.style.display === 'block' ? 'none' : 'block';
     }
-    function cerrarMenu() {
-        document.getElementById('menu-lateral').style.display = 'none';
-    }
+    function cerrarMenu() { document.getElementById('menu-lateral').style.display = 'none'; }
 
-    // ─── Fecha (existente) ────────────────────────────────────────────────────
+    // ─── Fecha ────────────────────────────────────────────────────────────────
     function mostrarFechaDelDia() {
         const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        document.getElementById("fecha-actual").innerText =
-            new Date().toLocaleDateString('es-MX', opciones);
+        document.getElementById("fecha-actual").innerText = new Date().toLocaleDateString('es-MX', opciones);
     }
 
-    // ─── Historial (existente) ────────────────────────────────────────────────
+    // ─── Historial ────────────────────────────────────────────────────────────
     async function abrirHistorial() {
         document.getElementById("panel-historial").style.display = "block";
         document.getElementById("detalle-historial").innerHTML = "";
@@ -467,9 +476,7 @@
         }
     }
 
-    function cerrarHistorial() {
-        document.getElementById("panel-historial").style.display = "none";
-    }
+    function cerrarHistorial() { document.getElementById("panel-historial").style.display = "none"; }
 
     async function verDetalleHistorial(idTurno) {
         document.getElementById("detalle-historial").innerHTML = "<p class='text-center mt-3'>Cargando ticket...</p>";
@@ -482,7 +489,7 @@
         }
     }
 
-    // ─── Ticket (existente) ───────────────────────────────────────────────────
+    // ─── Ticket ───────────────────────────────────────────────────────────────
     function construirTicketHTML(datos, idTurno, momentoCierre = null) {
         let diaOperativo = "Día desconocido";
         if (datos.fecha_apertura) {
@@ -508,7 +515,7 @@
         </div>`;
     }
 
-    // ─── Estado inicial (existente) ───────────────────────────────────────────
+    // ─── Estado inicial ───────────────────────────────────────────────────────
     async function verificarEstadoInicial() {
         try {
             const res = await fetch(`${API_URL}/turno_actual`);
@@ -556,9 +563,7 @@
                 return;
             }
             actualizarLista();
-        } catch (e) {
-            mostrarError();
-        }
+        } catch (e) { mostrarError(); }
     }
 
     function resetearInterfazCerrada() {
@@ -768,9 +773,7 @@
     function setProveedor(p) {
         proveedorFiltro = p;
         filtrarInventario();
-        // Actualiza estilos de botones
-        const provs = document.querySelectorAll("#filtros-proveedor button");
-        provs.forEach(b => {
+        document.querySelectorAll("#filtros-proveedor button").forEach(b => {
             const esteP = b.textContent.trim() === (p || 'Todos');
             b.className = esteP
                 ? (p === '' ? 'btn btn-sm btn-dark' : 'btn btn-sm btn-primary')
@@ -799,7 +802,8 @@
             const diasCad = cad ? Math.ceil((cad - hoy) / (1000*60*60*24)) : null;
             const alertaCad = diasCad !== null && diasCad <= 7
                 ? `<span class="badge bg-warning text-dark ms-1">Cad: ${diasCad}d</span>` : '';
-            return `<div class="card mb-2 shadow-sm">
+            // Al tocar la tarjeta abre el bottom sheet de detalle
+            return `<div class="card mb-2 shadow-sm" onclick="abrirDetalleProducto(${p.id_producto})" style="cursor:pointer;">
                 <div class="card-body py-2 px-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
@@ -816,6 +820,103 @@
         }).join("");
     }
 
+    // ─── BOTTOM SHEET ─────────────────────────────────────────────────────────
+    function abrirDetalleProducto(idProducto) {
+        const p = todosLosProductos.find(x => x.id_producto === idProducto);
+        if (!p) return;
+        productoEnEdicion = p;
+
+        // Llenar modo lectura
+        document.getElementById("sheet-nombre").textContent = p.nombre_producto;
+        document.getElementById("sheet-precio").textContent = `$${parseFloat(p.precio_sugerido).toFixed(2)}`;
+        document.getElementById("sheet-stock").textContent = p.stock_actual;
+        document.getElementById("sheet-minimo").textContent = p.stock_minimo;
+        document.getElementById("sheet-proveedor").textContent = p.proveedor || "—";
+        document.getElementById("sheet-codigo").textContent = p.codigo_barras || "—";
+        document.getElementById("sheet-caducidad").textContent = p.fecha_caducidad
+            ? new Date(p.fecha_caducidad).toLocaleDateString('es-MX') : "—";
+
+        // Mostrar modo lectura, ocultar edición
+        document.getElementById("sheet-lectura").style.display = "block";
+        document.getElementById("sheet-edicion").style.display = "none";
+
+        // Abrir sheet
+        document.getElementById("bottom-sheet-overlay").style.display = "block";
+        setTimeout(() => document.getElementById("bottom-sheet").classList.add("visible"), 10);
+    }
+
+    function cerrarBottomSheet() {
+        document.getElementById("bottom-sheet").classList.remove("visible");
+        setTimeout(() => {
+            document.getElementById("bottom-sheet-overlay").style.display = "none";
+        }, 300);
+        productoEnEdicion = null;
+    }
+
+    function activarModoEdicion() {
+        if (!productoEnEdicion) return;
+        const p = productoEnEdicion;
+
+        // Llenar campos de edición con los datos actuales
+        document.getElementById("edit-nombre").value = p.nombre_producto;
+        document.getElementById("edit-precio").value = p.precio_sugerido;
+        document.getElementById("edit-stock").value = p.stock_actual;
+        document.getElementById("edit-minimo").value = p.stock_minimo;
+        document.getElementById("edit-proveedor").value = p.proveedor || "";
+        document.getElementById("edit-codigo").value = p.codigo_barras || "";
+        document.getElementById("edit-caducidad").value = p.fecha_caducidad
+            ? p.fecha_caducidad.split('T')[0] : "";
+
+        // Cargar proveedores en el datalist de edición
+        fetch(`${API_URL}/proveedores`)
+            .then(r => r.json())
+            .then(provs => {
+                document.getElementById("lista-proveedores-edit").innerHTML =
+                    provs.map(pv => `<option value="${pv}">`).join("");
+            }).catch(() => {});
+
+        document.getElementById("sheet-lectura").style.display = "none";
+        document.getElementById("sheet-edicion").style.display = "block";
+    }
+
+    function cancelarEdicion() {
+        document.getElementById("sheet-lectura").style.display = "block";
+        document.getElementById("sheet-edicion").style.display = "none";
+    }
+
+    async function guardarEdicion() {
+        if (!productoEnEdicion) return;
+        const nombre = document.getElementById("edit-nombre").value.trim();
+        const precio = parseFloat(document.getElementById("edit-precio").value);
+        const stock = parseInt(document.getElementById("edit-stock").value);
+        const minimo = parseInt(document.getElementById("edit-minimo").value);
+
+        if (!nombre) { alert("El nombre no puede estar vacío."); return; }
+        if (isNaN(precio) || precio < 0) { alert("Escribe un precio válido."); return; }
+        if (isNaN(stock) || stock < 0) { alert("El stock no puede ser negativo."); return; }
+        if (isNaN(minimo) || minimo < 0) { alert("El stock mínimo no puede ser negativo."); return; }
+
+        try {
+            const res = await fetch(`${API_URL}/actualizar_producto/${productoEnEdicion.id_producto}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    nombre_producto: nombre,
+                    precio_sugerido: precio,
+                    stock_actual: stock,
+                    stock_minimo: minimo,
+                    proveedor: document.getElementById("edit-proveedor").value.trim() || null,
+                    codigo_barras: document.getElementById("edit-codigo").value.trim() || null,
+                    fecha_caducidad: document.getElementById("edit-caducidad").value || null
+                })
+            });
+            const data = await res.json();
+            alert("✅ " + data.mensaje);
+            cerrarBottomSheet();
+            cargarInventario(); // refresca la lista
+        } catch (e) { mostrarError("Error al guardar los cambios."); }
+    }
+
     // ─── ALERTAS ──────────────────────────────────────────────────────────────
     async function cargarAlertas() {
         document.getElementById("lista-alertas").innerHTML = "<p class='text-center text-muted mt-4'>Cargando...</p>";
@@ -823,12 +924,8 @@
             const res = await fetch(`${API_URL}/alertas`);
             const alertas = await res.json();
             const badge = document.getElementById("badge-alertas");
-            if (alertas.length > 0) {
-                badge.textContent = alertas.length;
-                badge.style.display = "inline";
-            } else {
-                badge.style.display = "none";
-            }
+            if (alertas.length > 0) { badge.textContent = alertas.length; badge.style.display = "inline"; }
+            else { badge.style.display = "none"; }
             if (alertas.length === 0) {
                 document.getElementById("lista-alertas").innerHTML = "<p class='text-center text-success mt-4'>✅ Todo en orden, no hay alertas.</p>";
                 return;
@@ -837,9 +934,7 @@
                 const esCad = a.alerta === 'POR_CADUCAR';
                 const color = esCad ? 'border-warning' : 'border-danger';
                 const icono = esCad ? '⚠️' : '📉';
-                const msg = esCad
-                    ? `Caduca: ${a.fecha_caducidad}`
-                    : `Stock: ${a.stock_actual} (mín. ${a.stock_minimo})`;
+                const msg = esCad ? `Caduca: ${a.fecha_caducidad}` : `Stock: ${a.stock_actual} (mín. ${a.stock_minimo})`;
                 return `<div class="card mb-2 shadow-sm ${color}" style="border-width:2px;">
                     <div class="card-body py-2 px-3">
                         <div class="d-flex justify-content-between">
@@ -879,10 +974,7 @@
     }
 
     function cerrarEscanerCaja() {
-        if (scannerCaja) {
-            scannerCaja.stop().catch(() => {});
-            scannerCaja = null;
-        }
+        if (scannerCaja) { scannerCaja.stop().catch(() => {}); scannerCaja = null; }
         document.getElementById("escaner-caja-container").style.display = "none";
     }
 
@@ -900,14 +992,11 @@
     }
 
     function cerrarEscanerInventario() {
-        if (scannerInv) {
-            scannerInv.stop().catch(() => {});
-            scannerInv = null;
-        }
+        if (scannerInv) { scannerInv.stop().catch(() => {}); scannerInv = null; }
         document.getElementById("escaner-inv-container").style.display = "none";
     }
 
-    // ─── FLUJO RESURTIDO (botón ➕) ────────────────────────────────────────────
+    // ─── FLUJO RESURTIDO ──────────────────────────────────────────────────────
     function abrirFlujoResurtido(codigoInicial = null) {
         document.getElementById("modal-resurtido").style.display = "block";
         mostrarPaso(1);
@@ -980,7 +1069,7 @@
     function irAltaNueva() {
         const busqueda = document.getElementById("buscar-resurtido").value.trim();
         document.getElementById("nuevo-nombre").value = isNaN(busqueda) ? busqueda : "";
-        document.getElementById("nuevo-codigo").value = !isNaN(busqueda) && busqueda ? busqueda : "";
+        document.getElementById("nuevo-codigo").value = (!isNaN(busqueda) && busqueda) ? busqueda : "";
         document.getElementById("nuevo-precio").value = "";
         document.getElementById("nuevo-stock").value = "0";
         document.getElementById("nuevo-minimo").value = "5";
@@ -1019,8 +1108,7 @@
         try {
             const res = await fetch(`${API_URL}/proveedores`);
             const provs = await res.json();
-            const dl = document.getElementById("lista-proveedores");
-            dl.innerHTML = provs.map(p => `<option value="${p}">`).join("");
+            document.getElementById("lista-proveedores").innerHTML = provs.map(p => `<option value="${p}">`).join("");
         } catch (_) {}
     }
 
@@ -1032,7 +1120,6 @@
             async (codigo) => {
                 cerrarEscanerResurtido();
                 document.getElementById("buscar-resurtido").value = codigo;
-                // Intenta encontrar el producto directo por código
                 const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
                 const data = await res.json();
                 if (data.encontrado) {
@@ -1046,10 +1133,7 @@
     }
 
     function cerrarEscanerResurtido() {
-        if (scannerResurtido) {
-            scannerResurtido.stop().catch(() => {});
-            scannerResurtido = null;
-        }
+        if (scannerResurtido) { scannerResurtido.stop().catch(() => {}); scannerResurtido = null; }
         document.getElementById("escaner-resurtido-container").style.display = "none";
     }
 
@@ -1057,7 +1141,6 @@
     window.onload = function () {
         mostrarFechaDelDia();
         verificarEstadoInicial();
-        // Carga alertas en segundo plano para mostrar el badge
         setTimeout(cargarAlertas, 2000);
     };
 </script>

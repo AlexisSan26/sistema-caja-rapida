@@ -17,7 +17,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Configuración desde variables de entorno ───────────────────────────────
 db_config = {
     'host': os.getenv('DB_HOST'),
     'port': int(os.getenv('DB_PORT', 28257)),
@@ -27,7 +26,7 @@ db_config = {
 }
 
 
-# ─── Modelos ─────────────────────────────────────────────────────────────────
+# ─── Modelos ──────────────────────────────────────────────────────────────────
 class Movimiento(BaseModel):
     id_turno: int
     tipo_movimiento: str
@@ -48,6 +47,15 @@ class ProductoNuevo(BaseModel):
     proveedor: str = None
     fecha_caducidad: str = None
 
+class ActualizacionProducto(BaseModel):
+    nombre_producto: str
+    precio_sugerido: float
+    stock_actual: int
+    stock_minimo: int
+    proveedor: str = None
+    codigo_barras: str = None
+    fecha_caducidad: str = None
+
 class EntradaMercancia(BaseModel):
     id_producto: int
     cantidad: int
@@ -60,7 +68,7 @@ class ResurtidoPorCodigo(BaseModel):
     fecha_caducidad: str = None
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 def conectar_bd():
     conexion = mysql.connector.connect(**db_config)
     cursor = conexion.cursor()
@@ -158,14 +166,11 @@ def registrar(mov: Movimiento):
         if mov.cantidad <= 0:
             mov.cantidad = 1.0
 
-        # ── Inserta el movimiento en su tabla correspondiente ──────────────
         cursor.execute("""
             INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario)
             VALUES (%s, %s, %s, %s, %s)
         """, (mov.id_turno, mov.tipo_movimiento, nombre_limpio, mov.cantidad, mov.precio_unitario))
 
-        # ── Solo agrega al catálogo si es VENTA y el producto NO existe aún ─
-        # No inserta si ya está en el catálogo — el catálogo se gestiona desde Inventario
         if mov.tipo_movimiento == 'VENTA' and nombre_limpio not in ("", "Venta sin nombre"):
             cursor.execute(
                 "SELECT COUNT(*) FROM productos WHERE nombre_producto = %s",
@@ -304,7 +309,7 @@ def producto_por_codigo(codigo: str):
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
             SELECT id_producto, nombre_producto, precio_sugerido,
-                   stock_actual, stock_minimo, proveedor, fecha_caducidad
+                   stock_actual, stock_minimo, proveedor, fecha_caducidad, codigo_barras
             FROM productos WHERE codigo_barras = %s AND activo = 1
         """, (codigo,))
         producto = cursor.fetchone()
@@ -330,6 +335,40 @@ def registrar_producto(p: ProductoNuevo):
               p.fecha_caducidad or None))
         conexion.commit()
         return {"mensaje": "Producto registrado", "id_producto": cursor.lastrowid}
+    finally:
+        cursor.close()
+        conexion.close()
+
+# ─── NUEVO: editar producto completo ─────────────────────────────────────────
+@app.put("/actualizar_producto/{id_producto}")
+def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("""
+            UPDATE productos SET
+                nombre_producto = %s,
+                precio_sugerido = %s,
+                stock_actual    = %s,
+                stock_minimo    = %s,
+                proveedor       = %s,
+                codigo_barras   = %s,
+                fecha_caducidad = %s
+            WHERE id_producto = %s AND activo = 1
+        """, (
+            datos.nombre_producto,
+            datos.precio_sugerido,
+            datos.stock_actual,
+            datos.stock_minimo,
+            datos.proveedor or None,
+            datos.codigo_barras or None,
+            datos.fecha_caducidad or None,
+            id_producto
+        ))
+        conexion.commit()
+        if cursor.rowcount > 0:
+            return {"mensaje": "Producto actualizado correctamente"}
+        return {"mensaje": "No se encontró el producto"}
     finally:
         cursor.close()
         conexion.close()
