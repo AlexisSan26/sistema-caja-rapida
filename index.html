@@ -959,7 +959,8 @@
     function abrirEscanerCaja() {
         document.getElementById("escaner-caja-container").style.display = "block";
         scannerCaja = new Html5Qrcode("lector-qr-caja");
-        scannerCaja.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
+        const _cfgCaja = { fps: 30, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
+        scannerCaja.start({ facingMode: "environment" }, _cfgCaja,
             async (codigo) => {
                 cerrarEscanerCaja();
                 const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
@@ -987,7 +988,8 @@
     function abrirEscanerInventario() {
         document.getElementById("escaner-inv-container").style.display = "block";
         scannerInv = new Html5Qrcode("lector-qr-inv");
-        scannerInv.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
+        const _cfgInv = { fps: 25, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
+        scannerInv.start({ facingMode: "environment" }, _cfgInv,
             (codigo) => {
                 cerrarEscanerInventario();
                 document.getElementById("buscador-inventario").value = codigo;
@@ -1121,7 +1123,8 @@
     function abrirEscanerResurtido() {
         document.getElementById("escaner-resurtido-container").style.display = "block";
         scannerResurtido = new Html5Qrcode("lector-qr-resurtido");
-        scannerResurtido.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 },
+        const _cfgRes = { fps: 25, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
+        scannerResurtido.start({ facingMode: "environment" }, _cfgRes,
             async (codigo) => {
                 cerrarEscanerResurtido();
                 document.getElementById("buscar-resurtido").value = codigo;
