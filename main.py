@@ -157,15 +157,27 @@ def registrar(mov: Movimiento):
         nombre_limpio = mov.producto.strip() if mov.producto else "Venta sin nombre"
         if mov.cantidad <= 0:
             mov.cantidad = 1.0
+
+        # ── Inserta el movimiento en su tabla correspondiente ──────────────
         cursor.execute("""
             INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario)
             VALUES (%s, %s, %s, %s, %s)
         """, (mov.id_turno, mov.tipo_movimiento, nombre_limpio, mov.cantidad, mov.precio_unitario))
+
+        # ── Solo agrega al catálogo si es VENTA y el producto NO existe aún ─
+        # No inserta si ya está en el catálogo — el catálogo se gestiona desde Inventario
         if mov.tipo_movimiento == 'VENTA' and nombre_limpio not in ("", "Venta sin nombre"):
             cursor.execute(
-                "INSERT IGNORE INTO productos (nombre_producto, precio_sugerido) VALUES (%s, %s)",
-                (nombre_limpio, mov.precio_unitario)
+                "SELECT COUNT(*) FROM productos WHERE nombre_producto = %s",
+                (nombre_limpio,)
             )
+            existe = cursor.fetchone()[0] > 0
+            if not existe:
+                cursor.execute(
+                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo) VALUES (%s, %s, 1)",
+                    (nombre_limpio, mov.precio_unitario)
+                )
+
         conexion.commit()
         return {"mensaje": "Registro guardado correctamente"}
     finally:
@@ -274,7 +286,7 @@ def buscar_productos(q: str = ""):
             """)
         else:
             cursor.execute(
-                "SELECT nombre_producto, precio_sugerido FROM productos WHERE nombre_producto LIKE %s LIMIT 10",
+                "SELECT nombre_producto, precio_sugerido FROM productos WHERE nombre_producto LIKE %s AND activo = 1 LIMIT 10",
                 (f"%{q}%",)
             )
         return cursor.fetchall()
@@ -283,7 +295,7 @@ def buscar_productos(q: str = ""):
         conexion.close()
 
 
-# ─── Endpoints de inventario (nuevos) ────────────────────────────────────────
+# ─── Endpoints de inventario ──────────────────────────────────────────────────
 
 @app.get("/producto_por_codigo/{codigo}")
 def producto_por_codigo(codigo: str):
