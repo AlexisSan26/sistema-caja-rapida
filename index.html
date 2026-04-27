@@ -911,6 +911,11 @@
                 })
             });
             const data = await res.json();
+            if (!res.ok) {
+                console.error("Error del servidor:", data);
+                alert("❌ Error: " + (data.detail ? JSON.stringify(data.detail) : data.mensaje));
+                return;
+            }
             alert("✅ " + data.mensaje);
             cerrarBottomSheet();
             cargarInventario(); // refresca la lista

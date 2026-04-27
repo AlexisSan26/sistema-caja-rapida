@@ -44,17 +44,17 @@ class ProductoNuevo(BaseModel):
     precio_sugerido: float
     stock_actual: int = 0
     stock_minimo: int = 5
-    proveedor: str = None
-    fecha_caducidad: str = None
+    proveedor: str | None = None
+    fecha_caducidad: str | None = None
 
 class ActualizacionProducto(BaseModel):
     nombre_producto: str
     precio_sugerido: float
     stock_actual: int
     stock_minimo: int
-    proveedor: str = None
-    codigo_barras: str = None
-    fecha_caducidad: str = None
+    proveedor: str | None = None
+    codigo_barras: str | None = None
+    fecha_caducidad: str | None = None
 
 class EntradaMercancia(BaseModel):
     id_producto: int
