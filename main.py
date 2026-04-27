@@ -39,7 +39,7 @@ class ActualizacionPrecio(BaseModel):
     nuevo_precio: float
 
 class ProductoNuevo(BaseModel):
-    codigo_barras: str = None
+    codigo_barras: str | None = None
     nombre_producto: str
     precio_sugerido: float
     stock_actual: int = 0
@@ -59,13 +59,13 @@ class ActualizacionProducto(BaseModel):
 class EntradaMercancia(BaseModel):
     id_producto: int
     cantidad: int
-    fecha_caducidad: str = None
-    notas: str = None
+    fecha_caducidad: str | None = None
+    notas: str | None = None
 
 class ResurtidoPorCodigo(BaseModel):
     codigo_barras: str
     cantidad: int
-    fecha_caducidad: str = None
+    fecha_caducidad: str | None = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
