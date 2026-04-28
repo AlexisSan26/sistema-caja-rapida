@@ -1060,6 +1060,18 @@
                     monto: monto
                 })
             });
+            // --- EL ESCUDO CONTRA ERRORES ---
+            if (!res.ok) {
+                let errorMsg = "Error del servidor.";
+                try {
+                    const errorData = await res.json();
+                    errorMsg = errorData.detail ? JSON.stringify(errorData.detail) : errorData.mensaje;
+                } catch(e) {
+                    errorMsg = "Error interno (Posible falla en MySQL). Revisa los logs de Render.";
+                }
+                alert("❌ " + errorMsg);
+                return;
+            }
             const data = await res.json();
             alert(`✅ Abono registrado. Saldo restante: $${parseFloat(data.saldo_restante).toFixed(2)}`);
             cerrarBsFiado();

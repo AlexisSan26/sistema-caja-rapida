@@ -2,6 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from enum import Enum
 import mysql.connector
 from dotenv import load_dotenv
 
@@ -27,9 +28,16 @@ db_config = {
 
 
 # ─── Modelos ──────────────────────────────────────────────────────────────────
+class TiposPermitidos(str, Enum):
+    VENTA = "VENTA"
+    FIADO = "FIADO"
+    RETIRO = "RETIRO"
+    FONDO_CAJA = "FONDO_CAJA"
+    COBRO_FIADO = "COBRO_FIADO"
+
 class Movimiento(BaseModel):
     id_turno: int
-    tipo_movimiento: str
+    tipo_movimiento: TiposPermitidos  # <-- ¡Aquí está el nuevo candado!
     producto: str = "Venta general"
     cantidad: float = 1.0
     precio_unitario: float
