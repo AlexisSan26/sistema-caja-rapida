@@ -401,6 +401,24 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
         cursor.close()
         conexion.close()
 
+@app.delete("/eliminar_producto/{id_producto}")
+def eliminar_producto(id_producto: int):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        # Soft delete: Cambiamos el estado a 2 (Inactivo) en lugar de borrarlo
+        cursor.execute(
+            "UPDATE productos SET activo = 2 WHERE id_producto = %s",
+            (id_producto,)
+        )
+        conexion.commit()
+        if cursor.rowcount > 0:
+            return {"mensaje": "Producto eliminado del sistema (archivado)"}
+        return {"mensaje": "No se encontró el producto o ya estaba inactivo"}
+    finally:
+        cursor.close()
+        conexion.close()
+
 @app.post("/entrada_mercancia")
 def entrada_mercancia(e: EntradaMercancia):
     conexion = conectar_bd()

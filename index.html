@@ -381,6 +381,7 @@
             <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Caducidad</div><div class="valor" id="sheet-caducidad"></div></div></div>
         </div>
         <button class="btn btn-primary w-100 btn-lg mt-2" onclick="activarModoEdicion()">✏️ Editar</button>
+        <button class="btn btn-danger w-100 btn-lg mt-2 fw-bold" onclick="eliminarProductoActual()">🗑️ Eliminar Producto</button>
         <button class="btn btn-outline-secondary w-100 mt-2" onclick="cerrarBottomSheet()">Cerrar</button>
     </div>
     <div id="sheet-edicion" style="display:none;">
@@ -936,6 +937,41 @@
             cerrarBottomSheet();
             cargarInventario();
         } catch (e) { mostrarError("Error al guardar los cambios."); }
+    }
+
+    async function eliminarProductoActual() {
+        if (!productoEnEdicion) return;
+
+        // Confirmación de seguridad en pantalla
+        const confirmar = confirm(`¿Estás seguro de que deseas ELIMINAR "${productoEnEdicion.nombre_producto}" del sistema?\n\nEsta acción lo ocultará del inventario y la caja, pero mantendrá el historial de ventas.`);
+        if (!confirmar) return;
+
+        try {
+            const res = await fetch(`${API_URL}/eliminar_producto/${productoEnEdicion.id_producto}`, {
+                method: "DELETE"
+            });
+
+            if (!res.ok) {
+                alert("❌ Error del servidor al intentar eliminar.");
+                return;
+            }
+
+            const data = await res.json();
+            alert("✅ " + data.mensaje);
+
+            // Refrescar el sistema
+            cerrarBottomSheet();
+            cargarInventario();
+
+            // Si el producto estaba escrito en la caja, lo borramos visualmente
+            try {
+                document.getElementById("producto").value = "";
+                document.getElementById("precio").value = "";
+            } catch(e) {}
+
+        } catch (e) {
+            mostrarError("Error de conexión al eliminar el producto.");
+        }
     }
 
     // ─── ALERTAS ──────────────────────────────────────────────────────────────
