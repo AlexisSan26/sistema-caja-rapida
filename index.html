@@ -827,11 +827,23 @@
                 : (p === '' ? 'btn btn-sm btn-outline-dark' : 'btn btn-sm btn-outline-primary');
         });
     }
-    function filtrarInventario() {
+    ffunction filtrarInventario() {
         const q = document.getElementById("buscador-inventario").value.toLowerCase();
         let filtrados = todosLosProductos;
-        if (q) filtrados = filtrados.filter(p => p.nombre_producto.toLowerCase().includes(q));
-        if (proveedorFiltro) filtrados = filtrados.filter(p => p.proveedor === proveedorFiltro);
+
+        if (q) {
+            filtrados = filtrados.filter(p =>
+                // Busca coincidencias en el nombre del producto
+                p.nombre_producto.toLowerCase().includes(q) ||
+                // O busca coincidencias en el código de barras (si es que tiene uno)
+                (p.codigo_barras && p.codigo_barras.toLowerCase().includes(q))
+            );
+        }
+
+        if (proveedorFiltro) {
+            filtrados = filtrados.filter(p => p.proveedor === proveedorFiltro);
+        }
+
         renderInventario(filtrados);
     }
     function renderInventario(productos) {
