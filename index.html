@@ -12,20 +12,13 @@
     <style>
         .tabla-scroll { max-height: 250px; overflow-y: auto; }
         .texto-lista { font-size: 1.1rem; }
-
         #aviso-error {
-            display: none;
-            position: fixed;
-            bottom: 5rem; left: 50%;
-            transform: translateX(-50%);
-            background: #dc3545; color: white;
-            padding: .6rem 1.2rem; border-radius: 8px;
-            font-size: .95rem; z-index: 9999;
-            box-shadow: 0 2px 8px rgba(0,0,0,.25);
-            white-space: nowrap;
+            display:none; position:fixed; bottom:5rem; left:50%;
+            transform:translateX(-50%); background:#dc3545; color:white;
+            padding:.6rem 1.2rem; border-radius:8px; font-size:.95rem;
+            z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.25); white-space:nowrap;
         }
-
-        #menu-lateral { display: none; position: fixed; top:0; left:0; width:100%; height:100%; z-index:8000; }
+        #menu-lateral { display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:8000; }
         #menu-fondo { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.45); }
         #menu-panel {
             position:absolute; top:0; left:0; width:260px; height:100%;
@@ -41,14 +34,12 @@
         }
         #menu-panel .menu-item:hover { background:#f0f0f0; }
         #menu-panel .menu-item.activo { background:#e8f5e9; color:#2e7d32; }
-
         #btn-menu {
             position:fixed; top:.75rem; left:.75rem; z-index:7000;
             background:white; border:1px solid #ddd; border-radius:8px;
             padding:.4rem .6rem; font-size:1.3rem; cursor:pointer;
             box-shadow:0 2px 6px rgba(0,0,0,.15);
         }
-
         #btn-flotante {
             position:fixed; bottom:1.5rem; right:1.5rem;
             width:58px; height:58px; border-radius:50%;
@@ -57,16 +48,12 @@
             z-index:6000; cursor:pointer; display:none;
             align-items:center; justify-content:center;
         }
-
         .pantalla { display:none; }
         .pantalla.activa { display:block; }
-
         #badge-alertas {
             background:#dc3545; color:white; border-radius:50%;
             font-size:.7rem; padding:.15rem .4rem; margin-left:.3rem; display:none;
         }
-
-        /* ── Bottom sheet de detalle/edición ── */
         #bottom-sheet-overlay {
             display:none; position:fixed; top:0; left:0;
             width:100%; height:100%; background:rgba(0,0,0,.45); z-index:9500;
@@ -75,19 +62,19 @@
             position:fixed; bottom:0; left:0; right:0;
             background:white; border-radius:16px 16px 0 0;
             padding:1.25rem 1.25rem 2rem;
-            max-height:90vh; overflow-y:auto;
-            z-index:9600;
-            transform:translateY(100%);
-            transition:transform .3s ease;
+            max-height:90vh; overflow-y:auto; z-index:9600;
+            transform:translateY(100%); transition:transform .3s ease;
         }
         #bottom-sheet.visible { transform:translateY(0); }
-        .sheet-handle {
-            width:40px; height:4px; background:#ddd;
-            border-radius:2px; margin:0 auto 1rem;
-        }
+        .sheet-handle { width:40px; height:4px; background:#ddd; border-radius:2px; margin:0 auto 1rem; }
         .campo-lectura { background:#f8f9fa; border-radius:8px; padding:.6rem .9rem; margin-bottom:.75rem; }
         .campo-lectura .etiqueta { font-size:.75rem; color:#6c757d; margin-bottom:.1rem; }
         .campo-lectura .valor { font-size:1rem; font-weight:500; color:#212529; }
+        /* fiados */
+        .tarjeta-cliente { cursor:pointer; transition:box-shadow .15s; }
+        .tarjeta-cliente:hover { box-shadow:0 4px 12px rgba(0,0,0,.15) !important; }
+        .saldo-cero { color:#198754; font-weight:700; }
+        .saldo-deuda { color:#dc3545; font-weight:700; }
     </style>
 </head>
 <body class="bg-light">
@@ -105,6 +92,7 @@
         <button class="menu-item" id="menu-alertas" onclick="irA('alertas')">
             🔔 Alertas <span id="badge-alertas"></span>
         </button>
+        <button class="menu-item" id="menu-fiados" onclick="irA('fiados')">💳 Fiados</button>
     </div>
 </div>
 
@@ -119,7 +107,6 @@
     <div class="text-center mb-4">
         <button class="btn btn-sm btn-outline-secondary" onclick="abrirHistorial()">Ver Historial de Cortes 📅</button>
     </div>
-
     <div id="panel-historial" class="card shadow-sm mb-4 border-secondary" style="display:none;">
         <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Historial de Turnos</h5>
@@ -130,14 +117,12 @@
             <div id="detalle-historial"></div>
         </div>
     </div>
-
     <div class="card mb-4 shadow-sm" id="panel-apertura">
         <div class="card-body text-center">
             <h5 id="texto-turno" class="text-muted">No hay turno abierto</h5>
             <button id="btn-abrir" class="btn btn-primary btn-lg mt-2" onclick="abrirTurno()" style="display:none;">Abrir Caja (Nuevo Turno)</button>
         </div>
     </div>
-
     <div id="panel-ventas" class="card mb-4 shadow-sm" style="display:none;">
         <div class="card-header bg-success text-white">
             <h5 class="mb-0">Registrar Movimiento</h5>
@@ -147,8 +132,16 @@
                 <label class="fw-bold">Tipo de movimiento:</label>
                 <select id="tipo" class="form-select form-select-lg" onchange="ajustarCampos()">
                     <option value="VENTA">Venta Normal</option>
+                    <option value="FIADO">Fiado</option>
                     <option value="RETIRO">Retiro de Dinero</option>
                     <option value="FONDO_CAJA">Fondo de Caja (Inicio)</option>
+                </select>
+            </div>
+            <!-- Selector de cliente (solo visible en FIADO) -->
+            <div class="mb-3" id="div-cliente" style="display:none;">
+                <label class="fw-bold">Cliente:</label>
+                <select id="select-cliente" class="form-select form-select-lg">
+                    <option value="">— Selecciona cliente —</option>
                 </select>
             </div>
             <div class="mb-3" id="div-producto">
@@ -179,7 +172,6 @@
             <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">Guardar Registro</button>
         </div>
     </div>
-
     <div id="panel-lista" class="card mb-4 shadow-sm" style="display:none;">
         <div class="card-header bg-dark text-white text-center p-2">
             <h6 class="mb-0 text-white">Movimientos del Turno</h6>
@@ -199,7 +191,6 @@
             </table>
         </div>
     </div>
-
     <div id="panel-corte" class="card shadow-sm border-danger mb-3" style="display:none;">
         <div class="card-body text-center">
             <button class="btn btn-danger btn-lg w-100" onclick="hacerCorte()">Hacer Corte de Caja</button>
@@ -231,6 +222,15 @@
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">🔔 Alertas</h4>
     <div id="lista-alertas"><p class="text-center text-muted mt-4">Cargando alertas...</p></div>
+</div>
+</div>
+
+<!-- ══ PANTALLA: FIADOS ══ -->
+<div id="pantalla-fiados" class="pantalla">
+<div class="container mt-4 pb-5" style="max-width:600px;">
+    <h4 class="text-center mb-3" style="margin-top:2.5rem;">💳 Fiados</h4>
+    <button class="btn btn-success w-100 mb-3" onclick="abrirModalNuevoCliente()">+ Agregar cliente</button>
+    <div id="lista-clientes"><p class="text-center text-muted mt-4">Cargando...</p></div>
 </div>
 </div>
 
@@ -306,92 +306,98 @@
     </div>
 </div>
 
-<!-- ══ BOTTOM SHEET: detalle y edición de producto ══ -->
+<!-- ══ MODAL: NUEVO CLIENTE ══ -->
+<div id="modal-nuevo-cliente" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9100;overflow-y:auto;">
+    <div style="background:white;margin:4rem auto;max-width:400px;border-radius:12px;padding:1.5rem;">
+        <h5 class="mb-3">Nuevo cliente</h5>
+        <div class="mb-3">
+            <label class="fw-bold">Nombre *</label>
+            <input type="text" id="nuevo-cliente-nombre" class="form-control form-control-lg" placeholder="Ej. Juan López">
+        </div>
+        <div class="mb-3">
+            <label class="fw-bold">Teléfono <span class="text-muted fw-normal">(opcional)</span></label>
+            <input type="tel" id="nuevo-cliente-tel" class="form-control form-control-lg" placeholder="228...">
+        </div>
+        <button class="btn btn-success w-100 btn-lg mb-2" onclick="guardarNuevoCliente()">Guardar ✓</button>
+        <button class="btn btn-outline-secondary w-100" onclick="cerrarModalNuevoCliente()">Cancelar</button>
+    </div>
+</div>
+
+<!-- ══ BOTTOM SHEET: cuenta de fiado ══ -->
+<div id="bs-fiado-overlay" onclick="cerrarBsFiado()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9500;"></div>
+<div id="bs-fiado" style="position:fixed;bottom:0;left:0;right:0;background:white;border-radius:16px 16px 0 0;padding:1.25rem 1.25rem 2rem;max-height:92vh;overflow-y:auto;z-index:9600;transform:translateY(100%);transition:transform .3s ease;">
+    <div class="sheet-handle"></div>
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <h5 id="bs-fiado-nombre" class="fw-bold mb-0"></h5>
+            <small id="bs-fiado-tel" class="text-muted"></small>
+        </div>
+        <div class="text-end">
+            <div class="text-muted" style="font-size:.8rem;">Saldo actual</div>
+            <div id="bs-fiado-saldo" class="h4 mb-0"></div>
+        </div>
+    </div>
+
+    <!-- Historial de lo que debe -->
+    <div class="mb-3">
+        <div class="fw-bold mb-1" style="font-size:.85rem;color:#6c757d;text-transform:uppercase;">Lo que debe</div>
+        <div id="bs-fiado-detalle" class="tabla-scroll" style="max-height:160px;"></div>
+    </div>
+
+    <!-- Abonos -->
+    <div class="mb-3">
+        <div class="fw-bold mb-1" style="font-size:.85rem;color:#6c757d;text-transform:uppercase;">Abonos</div>
+        <div id="bs-fiado-abonos" class="tabla-scroll" style="max-height:100px;"></div>
+    </div>
+
+    <!-- Registrar abono -->
+    <div class="card border-success mb-3">
+        <div class="card-body py-2">
+            <label class="fw-bold mb-1">Registrar abono ($)</label>
+            <div class="input-group">
+                <input type="number" id="monto-abono" class="form-control form-control-lg" placeholder="0.00">
+                <button class="btn btn-success" onclick="confirmarAbono()">Abonar ✓</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-outline-secondary w-100" onclick="cerrarBsFiado()">Cerrar</button>
+</div>
+
+<!-- ══ BOTTOM SHEET: inventario ══ -->
 <div id="bottom-sheet-overlay" onclick="cerrarBottomSheet()"></div>
 <div id="bottom-sheet">
     <div class="sheet-handle"></div>
-
-    <!-- Modo lectura -->
     <div id="sheet-lectura">
         <h5 id="sheet-nombre" class="fw-bold mb-3"></h5>
         <div class="row">
-            <div class="col-6">
-                <div class="campo-lectura">
-                    <div class="etiqueta">Precio</div>
-                    <div class="valor" id="sheet-precio"></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="campo-lectura">
-                    <div class="etiqueta">Stock actual</div>
-                    <div class="valor" id="sheet-stock"></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="campo-lectura">
-                    <div class="etiqueta">Stock mínimo</div>
-                    <div class="valor" id="sheet-minimo"></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="campo-lectura">
-                    <div class="etiqueta">Proveedor</div>
-                    <div class="valor" id="sheet-proveedor"></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="campo-lectura">
-                    <div class="etiqueta">Código de barras</div>
-                    <div class="valor" id="sheet-codigo"></div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="campo-lectura">
-                    <div class="etiqueta">Caducidad</div>
-                    <div class="valor" id="sheet-caducidad"></div>
-                </div>
-            </div>
+            <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Precio</div><div class="valor" id="sheet-precio"></div></div></div>
+            <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Stock actual</div><div class="valor" id="sheet-stock"></div></div></div>
+            <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Stock mínimo</div><div class="valor" id="sheet-minimo"></div></div></div>
+            <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Proveedor</div><div class="valor" id="sheet-proveedor"></div></div></div>
+            <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Código de barras</div><div class="valor" id="sheet-codigo"></div></div></div>
+            <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Caducidad</div><div class="valor" id="sheet-caducidad"></div></div></div>
         </div>
         <button class="btn btn-primary w-100 btn-lg mt-2" onclick="activarModoEdicion()">✏️ Editar</button>
         <button class="btn btn-outline-secondary w-100 mt-2" onclick="cerrarBottomSheet()">Cerrar</button>
     </div>
-
-    <!-- Modo edición -->
     <div id="sheet-edicion" style="display:none;">
         <h5 class="fw-bold mb-3">✏️ Editar producto</h5>
-        <div class="mb-2">
-            <label class="fw-bold">Nombre</label>
-            <input type="text" id="edit-nombre" class="form-control">
+        <div class="mb-2"><label class="fw-bold">Nombre</label><input type="text" id="edit-nombre" class="form-control"></div>
+        <div class="row mb-2">
+            <div class="col-6"><label class="fw-bold">Precio ($)</label><input type="number" id="edit-precio" class="form-control"></div>
+            <div class="col-6"><label class="fw-bold">Stock actual</label><input type="number" id="edit-stock" class="form-control"></div>
         </div>
         <div class="row mb-2">
-            <div class="col-6">
-                <label class="fw-bold">Precio ($)</label>
-                <input type="number" id="edit-precio" class="form-control">
-            </div>
-            <div class="col-6">
-                <label class="fw-bold">Stock actual</label>
-                <input type="number" id="edit-stock" class="form-control">
-            </div>
-        </div>
-        <div class="row mb-2">
-            <div class="col-6">
-                <label class="fw-bold">Stock mínimo</label>
-                <input type="number" id="edit-minimo" class="form-control">
-            </div>
+            <div class="col-6"><label class="fw-bold">Stock mínimo</label><input type="number" id="edit-minimo" class="form-control"></div>
             <div class="col-6">
                 <label class="fw-bold">Proveedor</label>
                 <input type="text" id="edit-proveedor" class="form-control" list="lista-proveedores-edit">
                 <datalist id="lista-proveedores-edit"></datalist>
             </div>
         </div>
-        <div class="mb-2">
-            <label class="fw-bold">Código de barras <span class="text-muted fw-normal">(opcional)</span></label>
-            <input type="text" id="edit-codigo" class="form-control">
-        </div>
-        <div class="mb-3">
-            <label class="fw-bold">Fecha caducidad <span class="text-muted fw-normal">(opcional)</span></label>
-            <input type="date" id="edit-caducidad" class="form-control">
-        </div>
+        <div class="mb-2"><label class="fw-bold">Código de barras <span class="text-muted fw-normal">(opcional)</span></label><input type="text" id="edit-codigo" class="form-control"></div>
+        <div class="mb-3"><label class="fw-bold">Fecha caducidad <span class="text-muted fw-normal">(opcional)</span></label><input type="date" id="edit-caducidad" class="form-control"></div>
         <button class="btn btn-success w-100 btn-lg mb-2" onclick="guardarEdicion()">Guardar cambios ✓</button>
         <button class="btn btn-outline-secondary w-100" onclick="cancelarEdicion()">← Cancelar</button>
     </div>
@@ -404,14 +410,14 @@
     let intervaloActualizacion = null;
     let idsEnTabla = new Set();
     const API_URL = "https://sistema-caja-rapida.onrender.com";
-
     let todosLosProductos = [];
     let proveedorFiltro = "";
     let productoResurtidoActual = null;
     let scannerCaja = null;
     let scannerInv = null;
     let scannerResurtido = null;
-    let productoEnEdicion = null; // guarda el producto que está abierto en el sheet
+    let productoEnEdicion = null;
+    let clienteFiadoActual = null; // { id_cliente, id_cuenta }
 
     // ─── Error ────────────────────────────────────────────────────────────────
     let timeoutError = null;
@@ -434,8 +440,8 @@
         btnFlotante.style.display = pantalla === 'inventario' ? 'flex' : 'none';
         if (pantalla === 'inventario') cargarInventario();
         if (pantalla === 'alertas') cargarAlertas();
+        if (pantalla === 'fiados') cargarClientes();
     }
-
     function toggleMenu() {
         const m = document.getElementById('menu-lateral');
         m.style.display = m.style.display === 'block' ? 'none' : 'block';
@@ -475,9 +481,7 @@
             document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
         }
     }
-
     function cerrarHistorial() { document.getElementById("panel-historial").style.display = "none"; }
-
     async function verDetalleHistorial(idTurno) {
         document.getElementById("detalle-historial").innerHTML = "<p class='text-center mt-3'>Cargando ticket...</p>";
         try {
@@ -534,7 +538,6 @@
             document.getElementById("btn-abrir").style.display = "inline-block";
         }
     }
-
     function configurarInterfazAbierta() {
         document.getElementById("panel-apertura").style.display = "none";
         document.getElementById("panel-ventas").style.display = "block";
@@ -546,7 +549,6 @@
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
         intervaloActualizacion = setInterval(sincronizarTodo, 3000);
     }
-
     async function sincronizarTodo() {
         if (!idTurnoActual) return;
         try {
@@ -565,7 +567,6 @@
             actualizarLista();
         } catch (e) { mostrarError(); }
     }
-
     function resetearInterfazCerrada() {
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
         intervaloActualizacion = null;
@@ -580,7 +581,6 @@
         document.getElementById("texto-turno").innerText = "No hay turno abierto";
         document.getElementById("texto-turno").className = "text-muted";
     }
-
     async function actualizarLista() {
         if (!idTurnoActual) return;
         try {
@@ -605,9 +605,8 @@
             }).join("");
         } catch (e) { mostrarError(); }
     }
-
     async function manejarInputProducto() {
-        if (document.getElementById("tipo").value !== "VENTA") return;
+        if (!["VENTA","FIADO"].includes(document.getElementById("tipo").value)) return;
         const texto = document.getElementById("producto").value;
         const divCantidad = document.getElementById("div-cantidad");
         if (!texto) { divCantidad.style.visibility = "visible"; return; }
@@ -630,17 +629,18 @@
             if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
         } catch (e) { mostrarError("No se pudo buscar productos."); }
     }
-
     function ajustarCampos() {
         const tipo = document.getElementById("tipo").value;
         const divProducto = document.getElementById("div-producto");
         const divCantidad = document.getElementById("div-cantidad");
+        const divCliente = document.getElementById("div-cliente");
         const labelMonto = document.getElementById("label-monto");
         const labelProducto = document.getElementById("label-producto");
         const btnActualizarPrecio = document.getElementById("btn-actualizar-precio");
         const inputProducto = document.getElementById("producto");
         document.getElementById("producto").value = "";
         document.getElementById("precio").value = "";
+        divCliente.style.display = "none";
         if (tipo === "VENTA") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "visible";
@@ -648,6 +648,15 @@
             labelMonto.innerText = "Precio Unitario ($):";
             inputProducto.placeholder = "Ej. Sabritas, Coca-Cola...";
             btnActualizarPrecio.style.display = "block";
+        } else if (tipo === "FIADO") {
+            divProducto.style.display = "block";
+            divCantidad.style.visibility = "visible";
+            divCliente.style.display = "block";
+            labelProducto.innerText = "Producto fiado:";
+            labelMonto.innerText = "Precio ($):";
+            inputProducto.placeholder = "Ej. Sabritas, Coca-Cola...";
+            btnActualizarPrecio.style.display = "none";
+            cargarClientesSelect();
         } else if (tipo === "RETIRO") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "hidden";
@@ -663,7 +672,17 @@
             document.getElementById("producto").value = "Fondo inicial";
         }
     }
-
+    async function cargarClientesSelect() {
+        try {
+            const res = await fetch(`${API_URL}/clientes`);
+            const clientes = await res.json();
+            const sel = document.getElementById("select-cliente");
+            sel.innerHTML = '<option value="">— Selecciona cliente —</option>';
+            clientes.forEach(c => {
+                sel.innerHTML += `<option value="${c.id_cliente}">${c.nombre} (debe $${parseFloat(c.saldo_actual).toFixed(2)})</option>`;
+            });
+        } catch (_) {}
+    }
     async function actualizarPrecioMaestro() {
         const nombreProducto = document.getElementById("producto").value.trim();
         const nuevoPrecio = parseFloat(document.getElementById("precio").value);
@@ -682,7 +701,6 @@
             alert(data.mensaje);
         } catch (e) { mostrarError("Error al actualizar el precio."); }
     }
-
     async function abrirTurno() {
         try {
             const res = await fetch(`${API_URL}/abrir_turno`, { method: "POST" });
@@ -691,18 +709,50 @@
             configurarInterfazAbierta();
         } catch (e) { mostrarError("Error al conectar con el servidor."); }
     }
-
     async function registrar() {
         const tipo = document.getElementById("tipo").value;
         const montoVal = parseFloat(document.getElementById("precio").value);
         let cantidadVal = parseFloat(document.getElementById("cantidad").value);
         let nombreProducto = document.getElementById("producto").value.trim();
         if (isNaN(montoVal) || montoVal < 0) { alert("Por favor ingresa un monto válido."); return; }
-        if (tipo === "VENTA" && (isNaN(cantidadVal) || cantidadVal <= 0)) { alert("¡Error! La cantidad debe ser mayor a 0."); return; }
-        if (tipo === "VENTA" && !nombreProducto) { alert("¡Cuidado! Olvidaste escribir el nombre del producto."); return; }
+        if (["VENTA","FIADO"].includes(tipo) && (isNaN(cantidadVal) || cantidadVal <= 0)) { alert("¡Error! La cantidad debe ser mayor a 0."); return; }
+        if (["VENTA","FIADO"].includes(tipo) && !nombreProducto) { alert("¡Cuidado! Olvidaste escribir el nombre del producto."); return; }
         if (tipo === "RETIRO" && !nombreProducto) { alert("Favor de poner el concepto o motivo del retiro."); return; }
         if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
-        if (tipo !== "VENTA") cantidadVal = 1;
+        if (!["VENTA","FIADO"].includes(tipo)) cantidadVal = 1;
+
+        // ── Flujo especial para FIADO ─────────────────────────────────────────
+        if (tipo === "FIADO") {
+            const idCliente = document.getElementById("select-cliente").value;
+            if (!idCliente) { alert("Selecciona un cliente para el fiado."); return; }
+            try {
+                // Obtener id_cuenta del cliente
+                const resCuenta = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
+                const dataCuenta = await resCuenta.json();
+                const res = await fetch(`${API_URL}/agregar_fiado`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        id_cuenta: dataCuenta.id_cuenta,
+                        id_turno: idTurnoActual,
+                        producto: nombreProducto,
+                        cantidad: cantidadVal,
+                        precio: montoVal
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre}`);
+                    document.getElementById("producto").value = "";
+                    document.getElementById("precio").value = "";
+                    document.getElementById("cantidad").value = "1";
+                    ajustarCampos();
+                } else { mostrarError("Error al registrar el fiado."); }
+            } catch (e) { mostrarError("Error al registrar el fiado."); }
+            return;
+        }
+
+        // ── Flujo normal VENTA / RETIRO / FONDO_CAJA ─────────────────────────
         try {
             const res = await fetch(`${API_URL}/registrar_movimiento`, {
                 method: "POST",
@@ -718,7 +768,6 @@
             } else { mostrarError("El servidor rechazó el registro."); }
         } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); }
     }
-
     async function borrarMovimiento(idMovimiento) {
         if (!confirm("⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.")) return;
         try {
@@ -727,12 +776,10 @@
             else { mostrarError("Error al cancelar el movimiento."); }
         } catch (e) { mostrarError("Error de conexión al cancelar."); }
     }
-
     function mostrarTicket(datos) {
         const cierre = new Date().toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
         document.getElementById("resultado-corte").innerHTML = construirTicketHTML(datos, null, cierre);
     }
-
     async function hacerCorte() {
         if (!idTurnoActual) return;
         if (!confirm("⚠️ ¿Estás seguro de que deseas CERRAR LA CAJA y hacer el corte?\n\nYa no podrás agregar más ventas a este turno.")) return;
@@ -761,7 +808,6 @@
             document.getElementById("lista-inventario").innerHTML = "<p class='text-danger text-center mt-4'>Error al cargar inventario.</p>";
         }
     }
-
     function renderFiltrosProveedor(proveedores) {
         const cont = document.getElementById("filtros-proveedor");
         cont.innerHTML = `<button class="btn btn-sm ${proveedorFiltro === '' ? 'btn-dark' : 'btn-outline-dark'}" onclick="setProveedor('')">Todos</button>`;
@@ -769,7 +815,6 @@
             cont.innerHTML += `<button class="btn btn-sm ${proveedorFiltro === p ? 'btn-primary' : 'btn-outline-primary'}" onclick="setProveedor('${p}')">${p}</button>`;
         });
     }
-
     function setProveedor(p) {
         proveedorFiltro = p;
         filtrarInventario();
@@ -780,7 +825,6 @@
                 : (p === '' ? 'btn btn-sm btn-outline-dark' : 'btn btn-sm btn-outline-primary');
         });
     }
-
     function filtrarInventario() {
         const q = document.getElementById("buscador-inventario").value.toLowerCase();
         let filtrados = todosLosProductos;
@@ -788,137 +832,95 @@
         if (proveedorFiltro) filtrados = filtrados.filter(p => p.proveedor === proveedorFiltro);
         renderInventario(filtrados);
     }
-
     function renderInventario(productos) {
         const cont = document.getElementById("lista-inventario");
-        if (productos.length === 0) {
-            cont.innerHTML = "<p class='text-center text-muted mt-4'>No se encontraron productos.</p>";
-            return;
-        }
+        if (productos.length === 0) { cont.innerHTML = "<p class='text-center text-muted mt-4'>No se encontraron productos.</p>"; return; }
         cont.innerHTML = productos.map(p => {
             const stockColor = p.stock_actual <= p.stock_minimo ? 'text-danger fw-bold' : 'text-success fw-bold';
             const hoy = new Date();
             const cad = p.fecha_caducidad ? new Date(p.fecha_caducidad) : null;
             const diasCad = cad ? Math.ceil((cad - hoy) / (1000*60*60*24)) : null;
-            const alertaCad = diasCad !== null && diasCad <= 7
-                ? `<span class="badge bg-warning text-dark ms-1">Cad: ${diasCad}d</span>` : '';
-            // Al tocar la tarjeta abre el bottom sheet de detalle
+            const alertaCad = diasCad !== null && diasCad <= 7 ? `<span class="badge bg-warning text-dark ms-1">Cad: ${diasCad}d</span>` : '';
             return `<div class="card mb-2 shadow-sm" onclick="abrirDetalleProducto(${p.id_producto})" style="cursor:pointer;">
                 <div class="card-body py-2 px-3">
                     <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="fw-bold">${p.nombre_producto} ${alertaCad}</div>
-                            <small class="text-muted">${p.proveedor || ''}</small>
-                        </div>
-                        <div class="text-end">
-                            <div class="${stockColor}">Stock: ${p.stock_actual}</div>
-                            <small class="text-muted">$${parseFloat(p.precio_sugerido).toFixed(2)}</small>
-                        </div>
+                        <div><div class="fw-bold">${p.nombre_producto} ${alertaCad}</div><small class="text-muted">${p.proveedor || ''}</small></div>
+                        <div class="text-end"><div class="${stockColor}">Stock: ${p.stock_actual}</div><small class="text-muted">$${parseFloat(p.precio_sugerido).toFixed(2)}</small></div>
                     </div>
                 </div>
             </div>`;
         }).join("");
     }
 
-    // ─── BOTTOM SHEET ─────────────────────────────────────────────────────────
+    // ─── BOTTOM SHEET INVENTARIO ──────────────────────────────────────────────
     function abrirDetalleProducto(idProducto) {
         const p = todosLosProductos.find(x => x.id_producto === idProducto);
         if (!p) return;
         productoEnEdicion = p;
-
-        // Llenar modo lectura
         document.getElementById("sheet-nombre").textContent = p.nombre_producto;
         document.getElementById("sheet-precio").textContent = `$${parseFloat(p.precio_sugerido).toFixed(2)}`;
         document.getElementById("sheet-stock").textContent = p.stock_actual;
         document.getElementById("sheet-minimo").textContent = p.stock_minimo;
         document.getElementById("sheet-proveedor").textContent = p.proveedor || "—";
         document.getElementById("sheet-codigo").textContent = p.codigo_barras || "—";
-        document.getElementById("sheet-caducidad").textContent = p.fecha_caducidad
-            ? new Date(p.fecha_caducidad).toLocaleDateString('es-MX') : "—";
-
-        // Mostrar modo lectura, ocultar edición
+        document.getElementById("sheet-caducidad").textContent = p.fecha_caducidad ? new Date(p.fecha_caducidad).toLocaleDateString('es-MX') : "—";
         document.getElementById("sheet-lectura").style.display = "block";
         document.getElementById("sheet-edicion").style.display = "none";
-
-        // Abrir sheet
         document.getElementById("bottom-sheet-overlay").style.display = "block";
         setTimeout(() => document.getElementById("bottom-sheet").classList.add("visible"), 10);
     }
-
     function cerrarBottomSheet() {
         document.getElementById("bottom-sheet").classList.remove("visible");
-        setTimeout(() => {
-            document.getElementById("bottom-sheet-overlay").style.display = "none";
-        }, 300);
+        setTimeout(() => { document.getElementById("bottom-sheet-overlay").style.display = "none"; }, 300);
         productoEnEdicion = null;
     }
-
     function activarModoEdicion() {
         if (!productoEnEdicion) return;
         const p = productoEnEdicion;
-
-        // Llenar campos de edición con los datos actuales
         document.getElementById("edit-nombre").value = p.nombre_producto;
         document.getElementById("edit-precio").value = p.precio_sugerido;
         document.getElementById("edit-stock").value = p.stock_actual;
         document.getElementById("edit-minimo").value = p.stock_minimo;
         document.getElementById("edit-proveedor").value = p.proveedor || "";
         document.getElementById("edit-codigo").value = p.codigo_barras || "";
-        document.getElementById("edit-caducidad").value = p.fecha_caducidad
-            ? p.fecha_caducidad.split('T')[0] : "";
-
-        // Cargar proveedores en el datalist de edición
-        fetch(`${API_URL}/proveedores`)
-            .then(r => r.json())
-            .then(provs => {
-                document.getElementById("lista-proveedores-edit").innerHTML =
-                    provs.map(pv => `<option value="${pv}">`).join("");
-            }).catch(() => {});
-
+        document.getElementById("edit-caducidad").value = p.fecha_caducidad ? p.fecha_caducidad.split('T')[0] : "";
+        fetch(`${API_URL}/proveedores`).then(r => r.json()).then(provs => {
+            document.getElementById("lista-proveedores-edit").innerHTML = provs.map(pv => `<option value="${pv}">`).join("");
+        }).catch(() => {});
         document.getElementById("sheet-lectura").style.display = "none";
         document.getElementById("sheet-edicion").style.display = "block";
     }
-
     function cancelarEdicion() {
         document.getElementById("sheet-lectura").style.display = "block";
         document.getElementById("sheet-edicion").style.display = "none";
     }
-
     async function guardarEdicion() {
         if (!productoEnEdicion) return;
         const nombre = document.getElementById("edit-nombre").value.trim();
         const precio = parseFloat(document.getElementById("edit-precio").value);
         const stock = parseInt(document.getElementById("edit-stock").value);
         const minimo = parseInt(document.getElementById("edit-minimo").value);
-
         if (!nombre) { alert("El nombre no puede estar vacío."); return; }
         if (isNaN(precio) || precio < 0) { alert("Escribe un precio válido."); return; }
         if (isNaN(stock) || stock < 0) { alert("El stock no puede ser negativo."); return; }
         if (isNaN(minimo) || minimo < 0) { alert("El stock mínimo no puede ser negativo."); return; }
-
         try {
             const res = await fetch(`${API_URL}/actualizar_producto/${productoEnEdicion.id_producto}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    nombre_producto: nombre,
-                    precio_sugerido: precio,
-                    stock_actual: stock,
-                    stock_minimo: minimo,
+                    nombre_producto: nombre, precio_sugerido: precio,
+                    stock_actual: stock, stock_minimo: minimo,
                     proveedor: document.getElementById("edit-proveedor").value.trim() || null,
                     codigo_barras: document.getElementById("edit-codigo").value.trim() || null,
                     fecha_caducidad: document.getElementById("edit-caducidad").value || null
                 })
             });
             const data = await res.json();
-            if (!res.ok) {
-                console.error("Error del servidor:", data);
-                alert("❌ Error: " + (data.detail ? JSON.stringify(data.detail) : data.mensaje));
-                return;
-            }
+            if (!res.ok) { alert("❌ Error: " + (data.detail ? JSON.stringify(data.detail) : data.mensaje)); return; }
             alert("✅ " + data.mensaje);
             cerrarBottomSheet();
-            cargarInventario(); // refresca la lista
+            cargarInventario();
         } catch (e) { mostrarError("Error al guardar los cambios."); }
     }
 
@@ -931,10 +933,7 @@
             const badge = document.getElementById("badge-alertas");
             if (alertas.length > 0) { badge.textContent = alertas.length; badge.style.display = "inline"; }
             else { badge.style.display = "none"; }
-            if (alertas.length === 0) {
-                document.getElementById("lista-alertas").innerHTML = "<p class='text-center text-success mt-4'>✅ Todo en orden, no hay alertas.</p>";
-                return;
-            }
+            if (alertas.length === 0) { document.getElementById("lista-alertas").innerHTML = "<p class='text-center text-success mt-4'>✅ Todo en orden, no hay alertas.</p>"; return; }
             document.getElementById("lista-alertas").innerHTML = alertas.map(a => {
                 const esCad = a.alerta === 'POR_CADUCAR';
                 const color = esCad ? 'border-warning' : 'border-danger';
@@ -950,17 +949,135 @@
                     </div>
                 </div>`;
             }).join("");
+        } catch (e) { document.getElementById("lista-alertas").innerHTML = "<p class='text-danger text-center mt-4'>Error al cargar alertas.</p>"; }
+    }
+
+    // ─── FIADOS ───────────────────────────────────────────────────────────────
+    async function cargarClientes() {
+        document.getElementById("lista-clientes").innerHTML = "<p class='text-center text-muted mt-4'>Cargando...</p>";
+        try {
+            const res = await fetch(`${API_URL}/clientes`);
+            const clientes = await res.json();
+            if (clientes.length === 0) {
+                document.getElementById("lista-clientes").innerHTML = "<p class='text-center text-muted mt-4'>No hay clientes registrados.</p>";
+                return;
+            }
+            document.getElementById("lista-clientes").innerHTML = clientes.map(c => {
+                const saldo = parseFloat(c.saldo_actual);
+                const colorSaldo = saldo <= 0 ? 'saldo-cero' : 'saldo-deuda';
+                const textoSaldo = saldo <= 0 ? 'Al corriente ✅' : `Debe $${saldo.toFixed(2)}`;
+                return `<div class="card mb-2 shadow-sm tarjeta-cliente" onclick="abrirCuentaCliente(${c.id_cliente})">
+                    <div class="card-body py-2 px-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold">${c.nombre}</div>
+                            <small class="text-muted">${c.telefono || ''}</small>
+                        </div>
+                        <div class="${colorSaldo}">${textoSaldo}</div>
+                    </div>
+                </div>`;
+            }).join("");
         } catch (e) {
-            document.getElementById("lista-alertas").innerHTML = "<p class='text-danger text-center mt-4'>Error al cargar alertas.</p>";
+            document.getElementById("lista-clientes").innerHTML = "<p class='text-danger text-center mt-4'>Error al cargar clientes.</p>";
         }
+    }
+
+    async function abrirCuentaCliente(idCliente) {
+        try {
+            const res = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
+            const datos = await res.json();
+            clienteFiadoActual = { id_cliente: idCliente, id_cuenta: datos.id_cuenta };
+
+            document.getElementById("bs-fiado-nombre").textContent = datos.cliente.nombre;
+            document.getElementById("bs-fiado-tel").textContent = datos.cliente.telefono || "";
+            const saldo = parseFloat(datos.saldo);
+            document.getElementById("bs-fiado-saldo").textContent = `$${saldo.toFixed(2)}`;
+            document.getElementById("bs-fiado-saldo").className = saldo <= 0 ? 'h4 mb-0 saldo-cero' : 'h4 mb-0 saldo-deuda';
+
+            // Detalle de lo que debe
+            if (datos.detalle.length === 0) {
+                document.getElementById("bs-fiado-detalle").innerHTML = "<p class='text-muted text-center py-2'>Sin productos fiados.</p>";
+            } else {
+                document.getElementById("bs-fiado-detalle").innerHTML = `
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light"><tr><th>Fecha</th><th>Producto</th><th class="text-end">Total</th></tr></thead>
+                        <tbody>${datos.detalle.map(d =>
+                            `<tr><td>${d.fecha}</td><td>${d.producto} x${d.cantidad}</td><td class="text-end">$${parseFloat(d.subtotal).toFixed(2)}</td></tr>`
+                        ).join("")}</tbody>
+                    </table>`;
+            }
+
+            // Abonos
+            if (datos.abonos.length === 0) {
+                document.getElementById("bs-fiado-abonos").innerHTML = "<p class='text-muted text-center py-2'>Sin abonos registrados.</p>";
+            } else {
+                document.getElementById("bs-fiado-abonos").innerHTML = `
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light"><tr><th>Fecha</th><th>Nota</th><th class="text-end">Monto</th></tr></thead>
+                        <tbody>${datos.abonos.map(a =>
+                            `<tr><td>${a.fecha}</td><td>${a.nota || '—'}</td><td class="text-end text-success">$${parseFloat(a.monto).toFixed(2)}</td></tr>`
+                        ).join("")}</tbody>
+                    </table>`;
+            }
+
+            document.getElementById("monto-abono").value = "";
+            document.getElementById("bs-fiado-overlay").style.display = "block";
+            setTimeout(() => document.getElementById("bs-fiado").classList.add("visible"), 10);
+        } catch (e) { mostrarError("Error al cargar la cuenta."); }
+    }
+
+    function cerrarBsFiado() {
+        document.getElementById("bs-fiado").classList.remove("visible");
+        setTimeout(() => { document.getElementById("bs-fiado-overlay").style.display = "none"; }, 300);
+        clienteFiadoActual = null;
+    }
+
+    async function confirmarAbono() {
+        if (!clienteFiadoActual) return;
+        if (!idTurnoActual) { alert("Debes tener un turno abierto para registrar un abono."); return; }
+        const monto = parseFloat(document.getElementById("monto-abono").value);
+        if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
+        try {
+            const res = await fetch(`${API_URL}/registrar_abono`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id_cuenta: clienteFiadoActual.id_cuenta,
+                    id_turno: idTurnoActual,
+                    monto: monto
+                })
+            });
+            const data = await res.json();
+            alert(`✅ Abono registrado. Saldo restante: $${parseFloat(data.saldo_restante).toFixed(2)}`);
+            cerrarBsFiado();
+            cargarClientes();
+            actualizarLista();
+        } catch (e) { mostrarError("Error al registrar el abono."); }
+    }
+
+    function abrirModalNuevoCliente() { document.getElementById("modal-nuevo-cliente").style.display = "block"; document.getElementById("nuevo-cliente-nombre").value = ""; document.getElementById("nuevo-cliente-tel").value = ""; }
+    function cerrarModalNuevoCliente() { document.getElementById("modal-nuevo-cliente").style.display = "none"; }
+    async function guardarNuevoCliente() {
+        const nombre = document.getElementById("nuevo-cliente-nombre").value.trim();
+        if (!nombre) { alert("El nombre es obligatorio."); return; }
+        try {
+            const res = await fetch(`${API_URL}/clientes`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ nombre, telefono: document.getElementById("nuevo-cliente-tel").value.trim() || null })
+            });
+            const data = await res.json();
+            alert("✅ " + data.mensaje);
+            cerrarModalNuevoCliente();
+            cargarClientes();
+        } catch (e) { mostrarError("Error al guardar el cliente."); }
     }
 
     // ─── ESCÁNER CAJA ─────────────────────────────────────────────────────────
     function abrirEscanerCaja() {
         document.getElementById("escaner-caja-container").style.display = "block";
         scannerCaja = new Html5Qrcode("lector-qr-caja");
-        const _cfgCaja = { fps: 30, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
-        scannerCaja.start({ facingMode: "environment" }, _cfgCaja,
+        const cfg = { fps: 30, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
+        scannerCaja.start({ facingMode: "environment" }, cfg,
             async (codigo) => {
                 cerrarEscanerCaja();
                 const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
@@ -970,15 +1087,11 @@
                     document.getElementById("precio").value = data.producto.precio_sugerido;
                 } else {
                     document.getElementById("producto").value = codigo;
-                    if (confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) {
-                        irA('inventario');
-                        abrirFlujoResurtido(codigo);
-                    }
+                    if (confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) { irA('inventario'); abrirFlujoResurtido(codigo); }
                 }
             }, () => {}
         ).catch(() => mostrarError("No se pudo acceder a la cámara."));
     }
-
     function cerrarEscanerCaja() {
         if (scannerCaja) { scannerCaja.stop().catch(() => {}); scannerCaja = null; }
         document.getElementById("escaner-caja-container").style.display = "none";
@@ -988,16 +1101,11 @@
     function abrirEscanerInventario() {
         document.getElementById("escaner-inv-container").style.display = "block";
         scannerInv = new Html5Qrcode("lector-qr-inv");
-        const _cfgInv = { fps: 25, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
-        scannerInv.start({ facingMode: "environment" }, _cfgInv,
-            (codigo) => {
-                cerrarEscanerInventario();
-                document.getElementById("buscador-inventario").value = codigo;
-                filtrarInventario();
-            }, () => {}
+        const cfg = { fps: 25, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
+        scannerInv.start({ facingMode: "environment" }, cfg,
+            (codigo) => { cerrarEscanerInventario(); document.getElementById("buscador-inventario").value = codigo; filtrarInventario(); }, () => {}
         ).catch(() => mostrarError("No se pudo acceder a la cámara."));
     }
-
     function cerrarEscanerInventario() {
         if (scannerInv) { scannerInv.stop().catch(() => {}); scannerInv = null; }
         document.getElementById("escaner-inv-container").style.display = "none";
@@ -1012,20 +1120,9 @@
         cargarProveedoresDatalist();
         if (codigoInicial) buscarParaResurtir();
     }
-
-    function cerrarModalResurtido() {
-        document.getElementById("modal-resurtido").style.display = "none";
-        cerrarEscanerResurtido();
-    }
-
-    function mostrarPaso(n) {
-        [1,2,3].forEach(i => {
-            document.getElementById(`paso-${i}`).style.display = i === n ? "block" : "none";
-        });
-    }
-
+    function cerrarModalResurtido() { document.getElementById("modal-resurtido").style.display = "none"; cerrarEscanerResurtido(); }
+    function mostrarPaso(n) { [1,2,3].forEach(i => { document.getElementById(`paso-${i}`).style.display = i === n ? "block" : "none"; }); }
     function volverPaso1() { mostrarPaso(1); }
-
     async function buscarParaResurtir() {
         const q = document.getElementById("buscar-resurtido").value.trim();
         if (!q) { document.getElementById("resultados-resurtido").innerHTML = ""; return; }
@@ -1033,21 +1130,14 @@
             const res = await fetch(`${API_URL}/inventario?q=${encodeURIComponent(q)}`);
             const productos = await res.json();
             const cont = document.getElementById("resultados-resurtido");
-            if (productos.length === 0) {
-                cont.innerHTML = "<p class='text-muted text-center mt-2'>No encontrado. Puedes registrarlo como nuevo.</p>";
-                return;
-            }
+            if (productos.length === 0) { cont.innerHTML = "<p class='text-muted text-center mt-2'>No encontrado. Puedes registrarlo como nuevo.</p>"; return; }
             cont.innerHTML = productos.slice(0, 5).map(p =>
                 `<button class="list-group-item list-group-item-action" onclick="seleccionarParaResurtir(${p.id_producto}, '${p.nombre_producto.replace(/'/g, "\\'")}')">
-                    <div class="d-flex justify-content-between">
-                        <span>${p.nombre_producto}</span>
-                        <span class="text-muted">Stock: ${p.stock_actual}</span>
-                    </div>
+                    <div class="d-flex justify-content-between"><span>${p.nombre_producto}</span><span class="text-muted">Stock: ${p.stock_actual}</span></div>
                 </button>`
             ).join("");
         } catch (e) { mostrarError("Error al buscar."); }
     }
-
     function seleccionarParaResurtir(idProducto, nombre) {
         productoResurtidoActual = idProducto;
         document.getElementById("nombre-resurtido").textContent = nombre;
@@ -1055,7 +1145,6 @@
         document.getElementById("fecha-cad-resurtido").value = "";
         mostrarPaso(2);
     }
-
     async function confirmarResurtido() {
         const cantidad = parseInt(document.getElementById("cantidad-resurtido").value);
         const fechaCad = document.getElementById("fecha-cad-resurtido").value;
@@ -1072,7 +1161,6 @@
             cargarInventario();
         } catch (e) { mostrarError("Error al registrar entrada."); }
     }
-
     function irAltaNueva() {
         const busqueda = document.getElementById("buscar-resurtido").value.trim();
         document.getElementById("nuevo-nombre").value = isNaN(busqueda) ? busqueda : "";
@@ -1084,7 +1172,6 @@
         document.getElementById("nuevo-caducidad").value = "";
         mostrarPaso(3);
     }
-
     async function guardarProductoNuevo() {
         const nombre = document.getElementById("nuevo-nombre").value.trim();
         const precio = parseFloat(document.getElementById("nuevo-precio").value);
@@ -1096,8 +1183,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     codigo_barras: document.getElementById("nuevo-codigo").value.trim() || null,
-                    nombre_producto: nombre,
-                    precio_sugerido: precio,
+                    nombre_producto: nombre, precio_sugerido: precio,
                     stock_actual: parseInt(document.getElementById("nuevo-stock").value) || 0,
                     stock_minimo: parseInt(document.getElementById("nuevo-minimo").value) || 5,
                     proveedor: document.getElementById("nuevo-proveedor").value.trim() || null,
@@ -1110,7 +1196,6 @@
             cargarInventario();
         } catch (e) { mostrarError("Error al guardar el producto."); }
     }
-
     async function cargarProveedoresDatalist() {
         try {
             const res = await fetch(`${API_URL}/proveedores`);
@@ -1123,23 +1208,18 @@
     function abrirEscanerResurtido() {
         document.getElementById("escaner-resurtido-container").style.display = "block";
         scannerResurtido = new Html5Qrcode("lector-qr-resurtido");
-        const _cfgRes = { fps: 25, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
-        scannerResurtido.start({ facingMode: "environment" }, _cfgRes,
+        const cfg = { fps: 25, qrbox: { width: 320, height: 120 }, formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.QR_CODE ] };
+        scannerResurtido.start({ facingMode: "environment" }, cfg,
             async (codigo) => {
                 cerrarEscanerResurtido();
                 document.getElementById("buscar-resurtido").value = codigo;
                 const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
                 const data = await res.json();
-                if (data.encontrado) {
-                    seleccionarParaResurtir(data.producto.id_producto, data.producto.nombre_producto);
-                } else {
-                    document.getElementById("nuevo-codigo").value = codigo;
-                    irAltaNueva();
-                }
+                if (data.encontrado) { seleccionarParaResurtir(data.producto.id_producto, data.producto.nombre_producto); }
+                else { document.getElementById("nuevo-codigo").value = codigo; irAltaNueva(); }
             }, () => {}
         ).catch(() => mostrarError("No se pudo acceder a la cámara."));
     }
-
     function cerrarEscanerResurtido() {
         if (scannerResurtido) { scannerResurtido.stop().catch(() => {}); scannerResurtido = null; }
         document.getElementById("escaner-resurtido-container").style.display = "none";

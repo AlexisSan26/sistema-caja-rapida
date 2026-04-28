@@ -67,6 +67,24 @@ class ResurtidoPorCodigo(BaseModel):
     cantidad: int
     fecha_caducidad: str | None = None
 
+# ─── Modelos fiados (nuevos) ──────────────────────────────────────────────────
+class ClienteNuevo(BaseModel):
+    nombre: str
+    telefono: str | None = None
+
+class ItemFiado(BaseModel):
+    id_cuenta: int
+    id_turno: int
+    producto: str
+    cantidad: float = 1.0
+    precio: float
+
+class AbonoFiado(BaseModel):
+    id_cuenta: int
+    id_turno: int
+    monto: float
+    nota: str | None = None
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def conectar_bd():
@@ -86,7 +104,7 @@ def _calcular_resumen(cursor, id_turno: int) -> dict:
 
     cursor.execute("""
         SELECT
-            SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA') THEN total_movimiento ELSE 0 END) -
+            SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) -
             SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS total_en_caja
         FROM movimientos WHERE id_turno = %s
     """, (id_turno,))
@@ -171,6 +189,7 @@ def registrar(mov: Movimiento):
             VALUES (%s, %s, %s, %s, %s)
         """, (mov.id_turno, mov.tipo_movimiento, nombre_limpio, mov.cantidad, mov.precio_unitario))
 
+        # ── Descuenta stock automáticamente en ventas ─────────────────────────
         if mov.tipo_movimiento == 'VENTA' and nombre_limpio not in ("", "Venta sin nombre"):
             cursor.execute(
                 "SELECT COUNT(*) FROM productos WHERE nombre_producto = %s",
@@ -182,6 +201,13 @@ def registrar(mov: Movimiento):
                     "INSERT INTO productos (nombre_producto, precio_sugerido, activo) VALUES (%s, %s, 1)",
                     (nombre_limpio, mov.precio_unitario)
                 )
+            else:
+                # Descuenta stock si el producto existe en catálogo
+                cursor.execute("""
+                    UPDATE productos
+                    SET stock_actual = GREATEST(0, stock_actual - %s)
+                    WHERE nombre_producto = %s AND activo = 1
+                """, (int(mov.cantidad), nombre_limpio))
 
         conexion.commit()
         return {"mensaje": "Registro guardado correctamente"}
@@ -301,7 +327,6 @@ def buscar_productos(q: str = ""):
 
 
 # ─── Endpoints de inventario ──────────────────────────────────────────────────
-
 @app.get("/producto_por_codigo/{codigo}")
 def producto_por_codigo(codigo: str):
     conexion = conectar_bd()
@@ -339,7 +364,6 @@ def registrar_producto(p: ProductoNuevo):
         cursor.close()
         conexion.close()
 
-# ─── NUEVO: editar producto completo ─────────────────────────────────────────
 @app.put("/actualizar_producto/{id_producto}")
 def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
     conexion = conectar_bd()
@@ -356,14 +380,10 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
                 fecha_caducidad = %s
             WHERE id_producto = %s AND activo = 1
         """, (
-            datos.nombre_producto,
-            datos.precio_sugerido,
-            datos.stock_actual,
-            datos.stock_minimo,
-            datos.proveedor or None,
-            datos.codigo_barras or None,
-            datos.fecha_caducidad or None,
-            id_producto
+            datos.nombre_producto, datos.precio_sugerido,
+            datos.stock_actual, datos.stock_minimo,
+            datos.proveedor or None, datos.codigo_barras or None,
+            datos.fecha_caducidad or None, id_producto
         ))
         conexion.commit()
         if cursor.rowcount > 0:
@@ -486,6 +506,197 @@ def descontar_stock(id_producto: int, cantidad: float = 1):
         )
         conexion.commit()
         return {"mensaje": "Stock actualizado"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ─── Endpoints de fiados (nuevos) ─────────────────────────────────────────────
+
+@app.get("/clientes")
+def listar_clientes():
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT c.id_cliente, c.nombre, c.telefono,
+                   COALESCE(
+                     (SELECT SUM(df.cantidad * df.precio)
+                      FROM detalle_fiado df
+                      JOIN cuentas_fiado cf ON df.id_cuenta = cf.id_cuenta
+                      WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA')
+                   , 0) -
+                   COALESCE(
+                     (SELECT SUM(a.monto)
+                      FROM abonos a
+                      JOIN cuentas_fiado cf ON a.id_cuenta = cf.id_cuenta
+                      WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA')
+                   , 0) AS saldo_actual
+            FROM clientes c
+            WHERE c.activo = 1
+            ORDER BY c.nombre ASC
+        """)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conexion.close()
+
+@app.post("/clientes")
+def crear_cliente(c: ClienteNuevo):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "INSERT INTO clientes (nombre, telefono) VALUES (%s, %s)",
+            (c.nombre.strip(), c.telefono or None)
+        )
+        id_cliente = cursor.lastrowid
+        # Abre cuenta de fiado automáticamente
+        cursor.execute(
+            "INSERT INTO cuentas_fiado (id_cliente) VALUES (%s)",
+            (id_cliente,)
+        )
+        conexion.commit()
+        return {"mensaje": "Cliente registrado", "id_cliente": id_cliente}
+    finally:
+        cursor.close()
+        conexion.close()
+
+@app.get("/cuenta_fiado/{id_cliente}")
+def obtener_cuenta(id_cliente: int):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        # Datos del cliente
+        cursor.execute(
+            "SELECT id_cliente, nombre, telefono FROM clientes WHERE id_cliente = %s AND activo = 1",
+            (id_cliente,)
+        )
+        cliente = cursor.fetchone()
+        if not cliente:
+            return {"error": "Cliente no encontrado"}
+
+        # Cuenta abierta
+        cursor.execute(
+            "SELECT id_cuenta FROM cuentas_fiado WHERE id_cliente = %s AND estado = 'ABIERTA' LIMIT 1",
+            (id_cliente,)
+        )
+        cuenta = cursor.fetchone()
+        if not cuenta:
+            # Abre una cuenta nueva si no existe
+            cursor.execute("INSERT INTO cuentas_fiado (id_cliente) VALUES (%s)", (id_cliente,))
+            conexion.commit()
+            id_cuenta = cursor.lastrowid
+        else:
+            id_cuenta = cuenta['id_cuenta']
+
+        # Detalle de lo que debe
+        cursor.execute("""
+            SELECT producto, cantidad, precio, (cantidad * precio) AS subtotal,
+                   DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
+            FROM detalle_fiado WHERE id_cuenta = %s
+            ORDER BY fecha_hora ASC
+        """, (id_cuenta,))
+        detalle = cursor.fetchall()
+
+        # Abonos
+        cursor.execute("""
+            SELECT monto, nota, DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
+            FROM abonos WHERE id_cuenta = %s
+            ORDER BY fecha_hora ASC
+        """, (id_cuenta,))
+        abonos = cursor.fetchall()
+
+        total_fiado = sum(float(d['subtotal']) for d in detalle)
+        total_abonos = sum(float(a['monto']) for a in abonos)
+        saldo = total_fiado - total_abonos
+
+        return {
+            "cliente": cliente,
+            "id_cuenta": id_cuenta,
+            "detalle": detalle,
+            "abonos": abonos,
+            "total_fiado": total_fiado,
+            "total_abonos": total_abonos,
+            "saldo": saldo
+        }
+    finally:
+        cursor.close()
+        conexion.close()
+
+@app.post("/agregar_fiado")
+def agregar_fiado(item: ItemFiado):
+    """Registra un producto fiado — no entra a caja, solo a la cuenta del cliente."""
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        # Guarda en detalle_fiado
+        cursor.execute("""
+            INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio)
+            VALUES (%s, %s, %s, %s)
+        """, (item.id_cuenta, item.producto.strip(), item.cantidad, item.precio))
+
+        # Descuenta stock si el producto existe en catálogo
+        cursor.execute("""
+            UPDATE productos SET stock_actual = GREATEST(0, stock_actual - %s)
+            WHERE nombre_producto = %s AND activo = 1
+        """, (int(item.cantidad), item.producto.strip()))
+
+        conexion.commit()
+        return {"mensaje": "Fiado registrado correctamente"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+@app.post("/registrar_abono")
+def registrar_abono(abono: AbonoFiado):
+    """Registra un abono — entra a caja como COBRO_FIADO y descuenta la deuda."""
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+
+        # Obtener nombre del cliente para el concepto en movimientos
+        cursor.execute("""
+            SELECT c.nombre FROM clientes c
+            JOIN cuentas_fiado cf ON c.id_cliente = cf.id_cliente
+            WHERE cf.id_cuenta = %s
+        """, (abono.id_cuenta,))
+        res = cursor.fetchone()
+        nombre_cliente = res['nombre'] if res else "Cliente"
+
+        # Guarda el abono en la tabla de abonos
+        cursor.execute(
+            "INSERT INTO abonos (id_cuenta, monto, nota) VALUES (%s, %s, %s)",
+            (abono.id_cuenta, abono.monto, abono.nota or None)
+        )
+
+        # Registra en movimientos para que entre al corte del día
+        cursor.execute("""
+            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario)
+            VALUES (%s, 'COBRO_FIADO', %s, 1, %s)
+        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto))
+
+        # Verifica si el saldo quedó en cero para saldar la cuenta
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(df.cantidad * df.precio), 0) AS total_fiado
+            FROM detalle_fiado df WHERE df.id_cuenta = %s
+        """, (abono.id_cuenta,))
+        tf = cursor.fetchone()
+        cursor.execute(
+            "SELECT COALESCE(SUM(monto), 0) AS total_abonos FROM abonos WHERE id_cuenta = %s",
+            (abono.id_cuenta,)
+        )
+        ta = cursor.fetchone()
+        saldo_nuevo = float(tf['total_fiado']) - float(ta['total_abonos'])
+        if saldo_nuevo <= 0:
+            cursor.execute(
+                "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s",
+                (abono.id_cuenta,)
+            )
+
+        conexion.commit()
+        return {"mensaje": "Abono registrado", "saldo_restante": max(0, saldo_nuevo)}
     finally:
         cursor.close()
         conexion.close()
