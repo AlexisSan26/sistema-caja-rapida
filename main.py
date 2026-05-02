@@ -726,3 +726,7 @@ def registrar_abono(abono: AbonoFiado):
     finally:
         cursor.close()
         conexion.close()
+
+@app.get("/ping")
+def ping():
+    return {"status": "ok"}
