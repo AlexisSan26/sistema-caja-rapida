@@ -470,7 +470,7 @@
         document.getElementById('menu-' + pantalla).classList.add('activo');
         const btnFlotante = document.getElementById('btn-flotante');
         btnFlotante.style.display = pantalla === 'inventario' ? 'flex' : 'none';
-        if (pantalla === 'inventario') cargarInventario();
+        if (pantalla === 'inventario') { cargarInventario(); setTimeout(() => document.getElementById("buscador-inventario").focus(), 300); }
         if (pantalla === 'alertas') cargarAlertas();
         if (pantalla === 'fiados') cargarClientes();
     }
@@ -644,6 +644,7 @@
             }).join("");
         } catch (e) { mostrarError(); }
     }
+    let debounceTimer = null;
     async function manejarInputProducto() {
         if (!["VENTA","FIADO"].includes(document.getElementById("tipo").value)) return;
         const texto = document.getElementById("producto").value;
@@ -653,38 +654,50 @@
         // ── Detecta código de barras del escáner físico (solo dígitos, 6+ chars) ─
         const esCodigoBarras = /^\d{6,}$/.test(texto.trim());
         if (esCodigoBarras) {
-            try {
-                const res = await fetch(`${API_URL}/producto_por_codigo/${texto.trim()}`);
-                const data = await res.json();
-                if (data.encontrado) {
-                    // Agrega directo al carrito y limpia el input
-                    agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
-                    document.getElementById("producto").value = "";
-                    document.getElementById("precio").value = "";
-                    document.getElementById("cantidad").value = "1";
-                }
-            } catch (e) { mostrarError("Error al buscar por código."); }
+            // Espera 80ms para asegurarse que el escáner terminó de escribir
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(async () => {
+                const val = document.getElementById("producto").value.trim();
+                if (!/^\d{6,}$/.test(val)) return;
+                try {
+                    const res = await fetch(`${API_URL}/producto_por_codigo/${val}`);
+                    const data = await res.json();
+                    if (data.encontrado) {
+                        agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                        document.getElementById("producto").value = "";
+                        document.getElementById("precio").value = "";
+                        document.getElementById("cantidad").value = "1";
+                        document.getElementById("producto").focus();
+                    }
+                } catch (e) { mostrarError("Error al buscar por código."); }
+            }, 80);
             return;
         }
 
-        const textoMin = texto.toLowerCase();
-        const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
-        const esGranel = palabrasGranel.some(p => textoMin.includes(p));
-        divCantidad.style.visibility = esGranel ? "hidden" : "visible";
-        if (esGranel) document.getElementById("cantidad").value = "1";
-        try {
-            const res = await fetch(`${API_URL}/buscar_productos?q=${encodeURIComponent(texto)}`);
-            productosMemoria = await res.json();
-            const datalist = document.getElementById("lista-productos");
-            datalist.innerHTML = "";
-            productosMemoria.forEach(p => {
-                const opcion = document.createElement("option");
-                opcion.value = p.nombre_producto;
-                datalist.appendChild(opcion);
-            });
-            const coincidencia = productosMemoria.find(p => p.nombre_producto === texto);
-            if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
-        } catch (e) { mostrarError("No se pudo buscar productos."); }
+        // ── Búsqueda por nombre: debounce de 300ms para no saturar el servidor ─
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            const textoActual = document.getElementById("producto").value;
+            if (!textoActual || /^\d{6,}$/.test(textoActual.trim())) return;
+            const textoMin = textoActual.toLowerCase();
+            const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
+            const esGranel = palabrasGranel.some(p => textoMin.includes(p));
+            divCantidad.style.visibility = esGranel ? "hidden" : "visible";
+            if (esGranel) document.getElementById("cantidad").value = "1";
+            try {
+                const res = await fetch(`${API_URL}/buscar_productos?q=${encodeURIComponent(textoActual)}`);
+                productosMemoria = await res.json();
+                const datalist = document.getElementById("lista-productos");
+                datalist.innerHTML = "";
+                productosMemoria.forEach(p => {
+                    const opcion = document.createElement("option");
+                    opcion.value = p.nombre_producto;
+                    datalist.appendChild(opcion);
+                });
+                const coincidencia = productosMemoria.find(p => p.nombre_producto === textoActual);
+                if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
+            } catch (e) { mostrarError("No se pudo buscar productos."); }
+        }, 300);
     }
 
     function manejarEnterProducto(event) {
@@ -692,6 +705,10 @@
             event.preventDefault();
             const tipo = document.getElementById("tipo").value;
             if (["VENTA","FIADO"].includes(tipo)) {
+                const texto = document.getElementById("producto").value.trim();
+                // Si es código de barras, el debounce ya lo procesa — solo evitar que mueva el foco
+                if (/^\d{6,}$/.test(texto)) return;
+                // Si es texto manual, agregar a lista
                 agregarALista();
             }
         }
@@ -1341,6 +1358,7 @@
         document.getElementById("resultados-resurtido").innerHTML = "";
         cargarProveedoresDatalist();
         if (codigoInicial) buscarParaResurtir();
+        setTimeout(() => document.getElementById("buscar-resurtido").focus(), 200);
     }
     function cerrarModalResurtido() { document.getElementById("modal-resurtido").style.display = "none"; cerrarEscanerResurtido(); }
     function mostrarPaso(n) { [1,2,3].forEach(i => { document.getElementById(`paso-${i}`).style.display = i === n ? "block" : "none"; }); }
