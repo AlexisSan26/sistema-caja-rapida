@@ -613,6 +613,22 @@
         const texto = document.getElementById("producto").value;
         const divCantidad = document.getElementById("div-cantidad");
         if (!texto) { divCantidad.style.visibility = "visible"; return; }
+
+        // ── Detecta código de barras del escáner físico (solo dígitos, 6+ chars) ─
+        const esCodigoBarras = /^\d{6,}$/.test(texto.trim());
+        if (esCodigoBarras) {
+            try {
+                const res = await fetch(`${API_URL}/producto_por_codigo/${texto.trim()}`);
+                const data = await res.json();
+                if (data.encontrado) {
+                    document.getElementById("producto").value = data.producto.nombre_producto;
+                    document.getElementById("precio").value = data.producto.precio_sugerido;
+                    document.getElementById("cantidad").focus();
+                }
+            } catch (e) { mostrarError("Error al buscar por código."); }
+            return;
+        }
+
         const textoMin = texto.toLowerCase();
         const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
         const esGranel = palabrasGranel.some(p => textoMin.includes(p));
@@ -1189,6 +1205,22 @@
         const q = document.getElementById("buscar-resurtido").value.trim();
         if (!q) { document.getElementById("resultados-resurtido").innerHTML = ""; return; }
         try {
+            // ── Si es código de barras, busca directo por código ──────────────
+            const esCodigoBarras = /^\d{6,}$/.test(q);
+            if (esCodigoBarras) {
+                const res = await fetch(`${API_URL}/producto_por_codigo/${q}`);
+                const data = await res.json();
+                if (data.encontrado) {
+                    seleccionarParaResurtir(data.producto.id_producto, data.producto.nombre_producto);
+                    return;
+                }
+                // No existe en catálogo — ofrece darlo de alta con el código prellenado
+                document.getElementById("resultados-resurtido").innerHTML =
+                    "<p class='text-muted text-center mt-2'>Código no registrado. Puedes agregarlo como nuevo.</p>";
+                document.getElementById("nuevo-codigo").value = q;
+                return;
+            }
+            // ── Búsqueda normal por nombre ────────────────────────────────────
             const res = await fetch(`${API_URL}/inventario?q=${encodeURIComponent(q)}`);
             const productos = await res.json();
             const cont = document.getElementById("resultados-resurtido");
