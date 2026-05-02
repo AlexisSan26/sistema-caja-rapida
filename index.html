@@ -149,29 +149,57 @@
             <div class="mb-3" id="div-producto">
                 <label id="label-producto" class="fw-bold">Producto:</label>
                 <div class="input-group">
-                    <input type="text" id="producto" class="form-control form-control-lg" list="lista-productos" oninput="manejarInputProducto()" autocomplete="off" placeholder="Ej. Sabritas, Coca-Cola...">
+                    <input type="text" id="producto" class="form-control form-control-lg" list="lista-productos" oninput="manejarInputProducto()" onkeydown="manejarEnterProducto(event)" autocomplete="off" placeholder="Ej. Sabritas, Coca-Cola...">
                     <button class="btn btn-outline-secondary" type="button" onclick="abrirEscanerCaja()" title="Escanear">📷</button>
                 </div>
                 <datalist id="lista-productos"></datalist>
             </div>
-            <div class="row">
+            <div class="row" id="div-campos-manuales">
                 <div class="col-6 mb-3" id="div-cantidad">
                     <label class="fw-bold">Cantidad:</label>
-                    <input type="number" id="cantidad" class="form-control form-control-lg" value="1">
+                    <input type="number" id="cantidad" class="form-control form-control-lg" value="1" min="0.01" step="any">
                 </div>
                 <div class="col-6 mb-3" id="div-precio">
-                    <label id="label-monto" class="fw-bold">Monto ($):</label>
+                    <label id="label-monto" class="fw-bold">Precio ($):</label>
                     <div class="input-group">
                         <input type="number" id="precio" class="form-control form-control-lg" placeholder="0.00">
                         <button class="btn btn-warning fw-bold" type="button" id="btn-actualizar-precio" onclick="actualizarPrecioMaestro()" title="Guardar precio">🔄</button>
                     </div>
                 </div>
             </div>
+            <!-- Botón agregar a lista (solo ventas/fiado) -->
+            <div id="div-btn-agregar" class="mb-3" style="display:none;">
+                <button class="btn btn-outline-success w-100 btn-lg" onclick="agregarALista()">➕ Agregar a lista</button>
+            </div>
             <div id="escaner-caja-container" style="display:none;" class="mb-3">
                 <div id="lector-qr-caja"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerCaja()">Cerrar cámara</button>
             </div>
-            <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">Guardar Registro</button>
+
+            <!-- ══ LISTA PREVIA DE PRODUCTOS (CARRITO) ══ -->
+            <div id="div-carrito" style="display:none;" class="mb-3">
+                <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos</div>
+                <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
+                    <table class="table table-sm mb-0" id="tabla-carrito">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center" style="width:60px;">Cant</th>
+                                <th class="text-center" style="width:80px;">Precio</th>
+                                <th class="text-center" style="width:36px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpo-carrito"></tbody>
+                    </table>
+                </div>
+                <!-- Total grande -->
+                <div class="text-end mt-3 px-1">
+                    <div class="text-muted" style="font-size:.85rem;">Total de la venta</div>
+                    <div id="total-carrito" class="fw-bold" style="font-size:2rem;color:#198754;">$0.00</div>
+                </div>
+            </div>
+
+            <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">💾 Guardar Registro</button>
         </div>
     </div>
     <div id="panel-lista" class="card mb-4 shadow-sm" style="display:none;">
@@ -421,6 +449,7 @@
     let scannerResurtido = null;
     let productoEnEdicion = null;
     let clienteFiadoActual = null; // { id_cliente, id_cuenta }
+    let carritoItems = []; // [{nombre, cantidad, precio}]
 
     // ─── Error ────────────────────────────────────────────────────────────────
     let timeoutError = null;
@@ -548,9 +577,16 @@
         document.getElementById("panel-corte").style.display = "block";
         document.getElementById("btn-abrir").style.display = "none";
         document.getElementById("resultado-corte").innerHTML = "";
+        // Inicializar tipo VENTA con carrito visible
+        document.getElementById("tipo").value = "VENTA";
+        document.getElementById("div-btn-agregar").style.display = "block";
+        carritoItems = [];
+        renderCarrito();
         actualizarLista();
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
         intervaloActualizacion = setInterval(sincronizarTodo, 3000);
+        // Autofocus en el input de producto
+        setTimeout(() => document.getElementById("producto").focus(), 200);
     }
     async function sincronizarTodo() {
         if (!idTurnoActual) return;
@@ -621,9 +657,11 @@
                 const res = await fetch(`${API_URL}/producto_por_codigo/${texto.trim()}`);
                 const data = await res.json();
                 if (data.encontrado) {
-                    document.getElementById("producto").value = data.producto.nombre_producto;
-                    document.getElementById("precio").value = data.producto.precio_sugerido;
-                    document.getElementById("cantidad").focus();
+                    // Agrega directo al carrito y limpia el input
+                    agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                    document.getElementById("producto").value = "";
+                    document.getElementById("precio").value = "";
+                    document.getElementById("cantidad").value = "1";
                 }
             } catch (e) { mostrarError("Error al buscar por código."); }
             return;
@@ -648,6 +686,85 @@
             if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
         } catch (e) { mostrarError("No se pudo buscar productos."); }
     }
+
+    function manejarEnterProducto(event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            const tipo = document.getElementById("tipo").value;
+            if (["VENTA","FIADO"].includes(tipo)) {
+                agregarALista();
+            }
+        }
+    }
+
+    function agregarProductoAlCarrito(nombre, precio, cantidad = 1) {
+        const existente = carritoItems.find(i => i.nombre === nombre);
+        if (existente) {
+            existente.cantidad += cantidad;
+        } else {
+            carritoItems.push({ nombre, cantidad, precio: parseFloat(precio) });
+        }
+        renderCarrito();
+    }
+
+    function agregarALista() {
+        const tipo = document.getElementById("tipo").value;
+        if (!["VENTA","FIADO"].includes(tipo)) return;
+        const nombre = document.getElementById("producto").value.trim();
+        const precio = parseFloat(document.getElementById("precio").value);
+        const cantidad = parseFloat(document.getElementById("cantidad").value) || 1;
+        if (!nombre) { mostrarError("Escribe el nombre del producto."); return; }
+        if (isNaN(precio) || precio < 0) { mostrarError("Escribe un precio válido."); return; }
+        agregarProductoAlCarrito(nombre, precio, cantidad);
+        // Limpiar campos para siguiente producto
+        document.getElementById("producto").value = "";
+        document.getElementById("precio").value = "";
+        document.getElementById("cantidad").value = "1";
+        document.getElementById("producto").focus();
+    }
+
+    function quitarDelCarrito(idx) {
+        carritoItems.splice(idx, 1);
+        renderCarrito();
+    }
+
+    function renderCarrito() {
+        const divCarrito = document.getElementById("div-carrito");
+        const cuerpo = document.getElementById("cuerpo-carrito");
+        const totalEl = document.getElementById("total-carrito");
+        if (carritoItems.length === 0) {
+            divCarrito.style.display = "none";
+            totalEl.textContent = "$0.00";
+            return;
+        }
+        divCarrito.style.display = "block";
+        let total = 0;
+        cuerpo.innerHTML = carritoItems.map((item, idx) => {
+            const subtotal = item.cantidad * item.precio;
+            total += subtotal;
+            return `<tr>
+                <td style="font-size:.9rem;vertical-align:middle;">${item.nombre}</td>
+                <td class="text-center" style="vertical-align:middle;">
+                    <input type="number" class="form-control form-control-sm text-center p-1"
+                        style="width:56px;display:inline-block;"
+                        value="${item.cantidad}" min="0.01" step="any"
+                        onchange="actualizarCantidadCarrito(${idx}, this.value)">
+                </td>
+                <td class="text-center" style="vertical-align:middle;font-size:.9rem;">$${item.precio.toFixed(2)}</td>
+                <td class="text-center" style="vertical-align:middle;">
+                    <button class="btn btn-sm btn-outline-danger py-0 px-1 lh-1" onclick="quitarDelCarrito(${idx})">✕</button>
+                </td>
+            </tr>`;
+        }).join("");
+        totalEl.textContent = `$${total.toFixed(2)}`;
+    }
+
+    function actualizarCantidadCarrito(idx, val) {
+        const n = parseFloat(val);
+        if (isNaN(n) || n <= 0) { quitarDelCarrito(idx); return; }
+        carritoItems[idx].cantidad = n;
+        renderCarrito();
+    }
     function ajustarCampos() {
         const tipo = document.getElementById("tipo").value;
         const divProducto = document.getElementById("div-producto");
@@ -657,9 +774,15 @@
         const labelProducto = document.getElementById("label-producto");
         const btnActualizarPrecio = document.getElementById("btn-actualizar-precio");
         const inputProducto = document.getElementById("producto");
+        const divBtnAgregar = document.getElementById("div-btn-agregar");
         document.getElementById("producto").value = "";
         document.getElementById("precio").value = "";
         divCliente.style.display = "none";
+
+        // Limpiar carrito al cambiar tipo
+        carritoItems = [];
+        renderCarrito();
+
         if (tipo === "VENTA") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "visible";
@@ -667,6 +790,8 @@
             labelMonto.innerText = "Precio Unitario ($):";
             inputProducto.placeholder = "Ej. Sabritas, Coca-Cola...";
             btnActualizarPrecio.style.display = "block";
+            divBtnAgregar.style.display = "block";
+            setTimeout(() => inputProducto.focus(), 100);
         } else if (tipo === "FIADO") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "visible";
@@ -675,7 +800,9 @@
             labelMonto.innerText = "Precio ($):";
             inputProducto.placeholder = "Ej. Sabritas, Coca-Cola...";
             btnActualizarPrecio.style.display = "none";
+            divBtnAgregar.style.display = "block";
             cargarClientesSelect();
+            setTimeout(() => inputProducto.focus(), 100);
         } else if (tipo === "RETIRO") {
             divProducto.style.display = "block";
             divCantidad.style.visibility = "hidden";
@@ -683,11 +810,13 @@
             inputProducto.placeholder = "Ej. Pago a proveedores, pasajes...";
             labelMonto.innerText = "Monto ($):";
             btnActualizarPrecio.style.display = "none";
+            divBtnAgregar.style.display = "none";
         } else if (tipo === "FONDO_CAJA") {
             divProducto.style.display = "none";
             divCantidad.style.visibility = "hidden";
             labelMonto.innerText = "Monto inicial ($):";
             btnActualizarPrecio.style.display = "none";
+            divBtnAgregar.style.display = "none";
             document.getElementById("producto").value = "Fondo inicial";
         }
     }
@@ -730,48 +859,64 @@
     }
     async function registrar() {
         const tipo = document.getElementById("tipo").value;
+
+        // ── VENTA y FIADO: registrar todos los items del carrito ──────────────
+        if (["VENTA","FIADO"].includes(tipo)) {
+            if (carritoItems.length === 0) { alert("Agrega al menos un producto a la lista antes de guardar."); return; }
+
+            if (tipo === "FIADO") {
+                const idCliente = document.getElementById("select-cliente").value;
+                if (!idCliente) { alert("Selecciona un cliente para el fiado."); return; }
+                try {
+                    const resCuenta = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
+                    const dataCuenta = await resCuenta.json();
+                    for (const item of carritoItems) {
+                        await fetch(`${API_URL}/agregar_fiado`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                id_cuenta: dataCuenta.id_cuenta,
+                                id_turno: idTurnoActual,
+                                producto: item.nombre,
+                                cantidad: item.cantidad,
+                                precio: item.precio
+                            })
+                        });
+                    }
+                    alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
+                } catch (e) { mostrarError("Error al registrar el fiado."); return; }
+            } else {
+                // VENTA normal
+                try {
+                    for (const item of carritoItems) {
+                        const res = await fetch(`${API_URL}/registrar_movimiento`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ id_turno: idTurnoActual, tipo_movimiento: "VENTA", producto: item.nombre, cantidad: item.cantidad, precio_unitario: item.precio })
+                        });
+                        if (!res.ok) { mostrarError("Error al guardar un producto. Verifica tu conexión."); return; }
+                    }
+                } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
+            }
+            // Limpiar carrito y campos
+            carritoItems = [];
+            renderCarrito();
+            document.getElementById("producto").value = "";
+            document.getElementById("precio").value = "";
+            document.getElementById("cantidad").value = "1";
+            document.getElementById("producto").focus();
+            actualizarLista();
+            return;
+        }
+
+        // ── RETIRO / FONDO_CAJA: flujo original (sin carrito) ─────────────────
         const montoVal = parseFloat(document.getElementById("precio").value);
         let cantidadVal = parseFloat(document.getElementById("cantidad").value);
         let nombreProducto = document.getElementById("producto").value.trim();
         if (isNaN(montoVal) || montoVal < 0) { alert("Por favor ingresa un monto válido."); return; }
-        if (["VENTA","FIADO"].includes(tipo) && (isNaN(cantidadVal) || cantidadVal <= 0)) { alert("¡Error! La cantidad debe ser mayor a 0."); return; }
-        if (["VENTA","FIADO"].includes(tipo) && !nombreProducto) { alert("¡Cuidado! Olvidaste escribir el nombre del producto."); return; }
         if (tipo === "RETIRO" && !nombreProducto) { alert("Favor de poner el concepto o motivo del retiro."); return; }
         if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
-        if (!["VENTA","FIADO"].includes(tipo)) cantidadVal = 1;
-
-        // ── Flujo especial para FIADO ─────────────────────────────────────────
-        if (tipo === "FIADO") {
-            const idCliente = document.getElementById("select-cliente").value;
-            if (!idCliente) { alert("Selecciona un cliente para el fiado."); return; }
-            try {
-                // Obtener id_cuenta del cliente
-                const resCuenta = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
-                const dataCuenta = await resCuenta.json();
-                const res = await fetch(`${API_URL}/agregar_fiado`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        id_cuenta: dataCuenta.id_cuenta,
-                        id_turno: idTurnoActual,
-                        producto: nombreProducto,
-                        cantidad: cantidadVal,
-                        precio: montoVal
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre}`);
-                    document.getElementById("producto").value = "";
-                    document.getElementById("precio").value = "";
-                    document.getElementById("cantidad").value = "1";
-                    ajustarCampos();
-                } else { mostrarError("Error al registrar el fiado."); }
-            } catch (e) { mostrarError("Error al registrar el fiado."); }
-            return;
-        }
-
-        // ── Flujo normal VENTA / RETIRO / FONDO_CAJA ─────────────────────────
+        cantidadVal = 1;
         try {
             const res = await fetch(`${API_URL}/registrar_movimiento`, {
                 method: "POST",
@@ -1161,8 +1306,7 @@
                 const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
                 const data = await res.json();
                 if (data.encontrado) {
-                    document.getElementById("producto").value = data.producto.nombre_producto;
-                    document.getElementById("precio").value = data.producto.precio_sugerido;
+                    agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido, 1);
                 } else {
                     document.getElementById("producto").value = codigo;
                     if (confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) { irA('inventario'); abrirFlujoResurtido(codigo); }
