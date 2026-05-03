@@ -146,6 +146,30 @@
                     <option value="">— Selecciona cliente —</option>
                 </select>
             </div>
+
+            <!-- ══ LISTA PREVIA DE PRODUCTOS (CARRITO) ══ -->
+            <div id="div-carrito" style="display:none;" class="mb-3">
+                <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos</div>
+                <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
+                    <table class="table table-sm mb-0" id="tabla-carrito">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Producto</th>
+                                <th class="text-center" style="width:60px;">Cant</th>
+                                <th class="text-center" style="width:80px;">Precio</th>
+                                <th class="text-center" style="width:36px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpo-carrito"></tbody>
+                    </table>
+                </div>
+                <!-- Total grande -->
+                <div class="text-end mt-3 px-1">
+                    <div class="text-muted" style="font-size:.85rem;">Total de la venta</div>
+                    <div id="total-carrito" class="fw-bold" style="font-size:2rem;color:#198754;">$0.00</div>
+                </div>
+            </div>
+
             <div class="mb-3" id="div-producto">
                 <label id="label-producto" class="fw-bold">Producto:</label>
                 <div class="input-group">
@@ -174,29 +198,6 @@
             <div id="escaner-caja-container" style="display:none;" class="mb-3">
                 <div id="lector-qr-caja"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerCaja()">Cerrar cámara</button>
-            </div>
-
-            <!-- ══ LISTA PREVIA DE PRODUCTOS (CARRITO) ══ -->
-            <div id="div-carrito" style="display:none;" class="mb-3">
-                <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos</div>
-                <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
-                    <table class="table table-sm mb-0" id="tabla-carrito">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Producto</th>
-                                <th class="text-center" style="width:60px;">Cant</th>
-                                <th class="text-center" style="width:80px;">Precio</th>
-                                <th class="text-center" style="width:36px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="cuerpo-carrito"></tbody>
-                    </table>
-                </div>
-                <!-- Total grande -->
-                <div class="text-end mt-3 px-1">
-                    <div class="text-muted" style="font-size:.85rem;">Total de la venta</div>
-                    <div id="total-carrito" class="fw-bold" style="font-size:2rem;color:#198754;">$0.00</div>
-                </div>
             </div>
 
             <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">💾 Guardar Registro</button>
