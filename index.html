@@ -1311,14 +1311,14 @@
         if (!idTurnoActual) { alert("Debes tener un turno abierto para registrar un abono."); return; }
         const monto = parseFloat(document.getElementById("monto-abono").value);
         if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
-        // Cerrar sheet inmediatamente (optimistic UI)
+        const idCuenta = clienteFiadoActual.id_cuenta;
         cerrarBsFiado();
         try {
             const res = await fetch(`${API_URL}/registrar_abono`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    id_cuenta: clienteFiadoActual.id_cuenta,
+                    id_cuenta: idCuenta,
                     id_turno: idTurnoActual,
                     monto: monto
                 })
