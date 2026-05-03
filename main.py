@@ -730,3 +730,30 @@ def registrar_abono(abono: AbonoFiado):
 @app.get("/ping")
 def ping():
     return {"status": "ok"}
+
+# ─── Venta en lote (todos los productos del carrito en una sola petición) ──────
+class ItemVenta(BaseModel):
+    producto: str
+    cantidad: float = 1.0
+    precio_unitario: float
+
+class VentaLote(BaseModel):
+    id_turno: int
+    items: list[ItemVenta]
+
+@app.post("/registrar_venta_lote")
+def registrar_venta_lote(venta: VentaLote):
+    if not venta.items:
+        return {"error": "Sin items"}
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.executemany(
+            "INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario) VALUES (%s, 'VENTA', %s, %s, %s)",
+            [(venta.id_turno, i.producto, i.cantidad, i.precio_unitario) for i in venta.items]
+        )
+        conexion.commit()
+        return {"ok": True, "registrados": len(venta.items)}
+    finally:
+        cursor.close()
+        conexion.close()

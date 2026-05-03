@@ -578,16 +578,23 @@
         document.getElementById("panel-corte").style.display = "block";
         document.getElementById("btn-abrir").style.display = "none";
         document.getElementById("resultado-corte").innerHTML = "";
-        // Inicializar tipo VENTA con carrito visible
         document.getElementById("tipo").value = "VENTA";
         document.getElementById("div-btn-agregar").style.display = "block";
         carritoItems = [];
         renderCarrito();
         actualizarLista();
+        // Cargar todos los productos en memoria para búsqueda local instantánea
+        cargarProductosEnMemoria();
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
         intervaloActualizacion = setInterval(sincronizarTodo, 3000);
-        // Autofocus en el input de producto
         setTimeout(() => document.getElementById("producto").focus(), 200);
+    }
+
+    async function cargarProductosEnMemoria() {
+        try {
+            const res = await fetch(`${API_URL}/productos`);
+            todosLosProductos = await res.json();
+        } catch (e) { console.warn("No se pudo cargar productos en memoria"); }
     }
     async function sincronizarTodo() {
         if (!idTurnoActual) return;
@@ -652,32 +659,42 @@
         const divCantidad = document.getElementById("div-cantidad");
         if (!texto) { divCantidad.style.visibility = "visible"; return; }
 
-        // ── Detecta código de barras del escáner físico (solo dígitos, 6+ chars) ─
+        // ── Código de barras del escáner físico ───────────────────────────────
         const esCodigoBarras = /^\d{6,}$/.test(texto.trim());
         if (esCodigoBarras) {
-            // Espera 80ms para asegurarse que el escáner terminó de escribir
             clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(async () => {
+            debounceTimer = setTimeout(() => {
                 const val = document.getElementById("producto").value.trim();
                 if (!/^\d{6,}$/.test(val)) return;
-                try {
-                    const res = await fetch(`${API_URL}/producto_por_codigo/${val}`);
-                    const data = await res.json();
-                    if (data.encontrado) {
-                        agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
-                        document.getElementById("producto").value = "";
-                        document.getElementById("precio").value = "";
-                        document.getElementById("cantidad").value = "1";
-                        document.getElementById("producto").focus();
-                    }
-                } catch (e) { mostrarError("Error al buscar por código."); }
+                // Buscar en memoria local primero (instantáneo)
+                const local = todosLosProductos.find(p => p.codigo_barras === val);
+                if (local) {
+                    agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
+                    document.getElementById("producto").value = "";
+                    document.getElementById("precio").value = "";
+                    document.getElementById("cantidad").value = "1";
+                    document.getElementById("producto").focus();
+                } else {
+                    // Si no está en memoria, consultar servidor
+                    fetch(`${API_URL}/producto_por_codigo/${val}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.encontrado) {
+                                agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                                document.getElementById("producto").value = "";
+                                document.getElementById("precio").value = "";
+                                document.getElementById("cantidad").value = "1";
+                                document.getElementById("producto").focus();
+                            }
+                        }).catch(() => mostrarError("Error al buscar por código."));
+                }
             }, 80);
             return;
         }
 
-        // ── Búsqueda por nombre: debounce de 300ms para no saturar el servidor ─
+        // ── Búsqueda por nombre: local e instantánea ──────────────────────────
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(async () => {
+        debounceTimer = setTimeout(() => {
             const textoActual = document.getElementById("producto").value;
             if (!textoActual || /^\d{6,}$/.test(textoActual.trim())) return;
             const textoMin = textoActual.toLowerCase();
@@ -685,20 +702,19 @@
             const esGranel = palabrasGranel.some(p => textoMin.includes(p));
             divCantidad.style.visibility = esGranel ? "hidden" : "visible";
             if (esGranel) document.getElementById("cantidad").value = "1";
-            try {
-                const res = await fetch(`${API_URL}/buscar_productos?q=${encodeURIComponent(textoActual)}`);
-                productosMemoria = await res.json();
-                const datalist = document.getElementById("lista-productos");
-                datalist.innerHTML = "";
-                productosMemoria.forEach(p => {
-                    const opcion = document.createElement("option");
-                    opcion.value = p.nombre_producto;
-                    datalist.appendChild(opcion);
-                });
-                const coincidencia = productosMemoria.find(p => p.nombre_producto === textoActual);
-                if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
-            } catch (e) { mostrarError("No se pudo buscar productos."); }
-        }, 300);
+
+            // Filtrar en memoria local (sin petición al servidor)
+            const resultados = todosLosProductos.filter(p =>
+                p.nombre_producto.toLowerCase().includes(textoMin) ||
+                (p.codigo_barras && p.codigo_barras.includes(textoMin))
+            ).slice(0, 20);
+
+            const datalist = document.getElementById("lista-productos");
+            datalist.innerHTML = resultados.map(p => `<option value="${p.nombre_producto}">`).join("");
+
+            const coincidencia = resultados.find(p => p.nombre_producto === textoActual);
+            if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
+        }, 80); // 80ms en vez de 300ms porque es local
     }
 
     function manejarEnterProducto(event) {
@@ -904,16 +920,21 @@
                     alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
                 } catch (e) { mostrarError("Error al registrar el fiado."); return; }
             } else {
-                // VENTA normal
+                // VENTA normal — una sola petición con todos los productos
                 try {
-                    for (const item of carritoItems) {
-                        const res = await fetch(`${API_URL}/registrar_movimiento`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ id_turno: idTurnoActual, tipo_movimiento: "VENTA", producto: item.nombre, cantidad: item.cantidad, precio_unitario: item.precio })
-                        });
-                        if (!res.ok) { mostrarError("Error al guardar un producto. Verifica tu conexión."); return; }
-                    }
+                    const res = await fetch(`${API_URL}/registrar_venta_lote`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            id_turno: idTurnoActual,
+                            items: carritoItems.map(i => ({
+                                producto: i.nombre,
+                                cantidad: i.cantidad,
+                                precio_unitario: i.precio
+                            }))
+                        })
+                    });
+                    if (!res.ok) { mostrarError("Error al guardar la venta."); return; }
                 } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
             }
             // Limpiar carrito y campos
