@@ -488,38 +488,54 @@
     }
 
     // ─── Historial ────────────────────────────────────────────────────────────
+    let cacheTurnos = null;
+    let cacheResumenes = {};
     async function abrirHistorial() {
         document.getElementById("panel-historial").style.display = "block";
         document.getElementById("detalle-historial").innerHTML = "";
-        document.getElementById("lista-historial").innerHTML = "<p class='text-center mt-3'>Cargando...</p>";
+        // Mostrar caché inmediatamente si existe
+        if (cacheTurnos) {
+            renderListaHistorial(cacheTurnos);
+        } else {
+            document.getElementById("lista-historial").innerHTML = "<p class='text-center mt-3'>Cargando...</p>";
+        }
         try {
             const res = await fetch(`${API_URL}/historial_turnos`);
-            const turnos = await res.json();
-            let html = "";
-            if (turnos.length === 0) {
-                html = "<p class='text-center text-muted mt-3'>No hay cortes registrados aún.</p>";
-            } else {
-                turnos.forEach(t => {
-                    const fechaTxt = t.fecha_apertura
-                        ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
-                        : "Fecha Desconocida";
-                    html += `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="verDetalleHistorial(${t.id_turno})">
-                        <strong>Turno #${t.id_turno}</strong>
-                        <span class="badge bg-secondary rounded-pill">${fechaTxt}</span>
-                    </button>`;
-                });
-            }
-            document.getElementById("lista-historial").innerHTML = html;
+            cacheTurnos = await res.json();
+            renderListaHistorial(cacheTurnos);
         } catch (e) {
-            document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
+            if (!cacheTurnos) document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
         }
+    }
+    function renderListaHistorial(turnos) {
+        let html = "";
+        if (turnos.length === 0) {
+            html = "<p class='text-center text-muted mt-3'>No hay cortes registrados aún.</p>";
+        } else {
+            turnos.forEach(t => {
+                const fechaTxt = t.fecha_apertura
+                    ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : "Fecha Desconocida";
+                html += `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="verDetalleHistorial(${t.id_turno})">
+                    <strong>Turno #${t.id_turno}</strong>
+                    <span class="badge bg-secondary rounded-pill">${fechaTxt}</span>
+                </button>`;
+            });
+        }
+        document.getElementById("lista-historial").innerHTML = html;
     }
     function cerrarHistorial() { document.getElementById("panel-historial").style.display = "none"; }
     async function verDetalleHistorial(idTurno) {
+        // Mostrar caché inmediatamente si existe
+        if (cacheResumenes[idTurno]) {
+            document.getElementById("detalle-historial").innerHTML = construirTicketHTML(cacheResumenes[idTurno], idTurno);
+            return;
+        }
         document.getElementById("detalle-historial").innerHTML = "<p class='text-center mt-3'>Cargando ticket...</p>";
         try {
             const res = await fetch(`${API_URL}/resumen_turno/${idTurno}`);
             const datos = await res.json();
+            cacheResumenes[idTurno] = datos;
             document.getElementById("detalle-historial").innerHTML = construirTicketHTML(datos, idTurno);
         } catch (e) {
             document.getElementById("detalle-historial").innerHTML = "<p class='text-danger'>Error al cargar el resumen.</p>";
@@ -640,7 +656,7 @@
             idsEnTabla = nuevosIds;
             cuerpo.innerHTML = movimientos.map(m => {
                 const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
-                return `<tr class="${color}">
+                return `<tr class="${color}" data-id="${m.id_movimiento}">
                     <td class="text-center">${m.hora || '--:--'}</td>
                     <td class="text-center">${m.cantidad}</td>
                     <td>${m.producto}</td>
@@ -973,11 +989,20 @@
     }
     async function borrarMovimiento(idMovimiento) {
         if (!confirm("⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.")) return;
+        // Quitar de la tabla al instante (optimistic UI)
+        const fila = document.querySelector(`tr[data-id="${idMovimiento}"]`);
+        if (fila) fila.remove();
+        idsEnTabla.delete(idMovimiento);
         try {
             const res = await fetch(`${API_URL}/borrar_movimiento/${idMovimiento}`, { method: "DELETE" });
-            if (res.ok) { actualizarLista(); }
-            else { mostrarError("Error al cancelar el movimiento."); }
-        } catch (e) { mostrarError("Error de conexión al cancelar."); }
+            if (!res.ok) {
+                mostrarError("Error al cancelar el movimiento.");
+                actualizarLista(); // revertir si falla
+            }
+        } catch (e) {
+            mostrarError("Error de conexión al cancelar.");
+            actualizarLista(); // revertir si falla
+        }
     }
     function mostrarTicket(datos) {
         const cierre = new Date().toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
@@ -1286,6 +1311,8 @@
         if (!idTurnoActual) { alert("Debes tener un turno abierto para registrar un abono."); return; }
         const monto = parseFloat(document.getElementById("monto-abono").value);
         if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
+        // Cerrar sheet inmediatamente (optimistic UI)
+        cerrarBsFiado();
         try {
             const res = await fetch(`${API_URL}/registrar_abono`, {
                 method: "POST",
@@ -1296,7 +1323,6 @@
                     monto: monto
                 })
             });
-            // --- EL ESCUDO CONTRA ERRORES ---
             if (!res.ok) {
                 let errorMsg = "Error del servidor.";
                 try {
@@ -1306,14 +1332,14 @@
                     errorMsg = "Error interno (Posible falla en MySQL). Revisa los logs de Render.";
                 }
                 alert("❌ " + errorMsg);
+                cargarClientes();
                 return;
             }
             const data = await res.json();
-            alert(`✅ Abono registrado. Saldo restante: $${parseFloat(data.saldo_restante).toFixed(2)}`);
-            cerrarBsFiado();
             cargarClientes();
             actualizarLista();
-        } catch (e) { mostrarError("Error al registrar el abono."); }
+            mostrarError(`✅ Abono de $${monto.toFixed(2)} registrado`);
+        } catch (e) { mostrarError("Error al registrar el abono."); cargarClientes(); }
     }
 
     function abrirModalNuevoCliente() { document.getElementById("modal-nuevo-cliente").style.display = "block"; document.getElementById("nuevo-cliente-nombre").value = ""; document.getElementById("nuevo-cliente-tel").value = ""; }
