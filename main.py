@@ -333,6 +333,19 @@ def buscar_productos(q: str = ""):
         cursor.close()
         conexion.close()
 
+@app.get("/productos")
+def obtener_todos_productos():
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT nombre_producto, precio_sugerido, codigo_barras FROM productos WHERE activo = 1 ORDER BY nombre_producto"
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conexion.close()
+
 
 # ─── Endpoints de inventario ──────────────────────────────────────────────────
 @app.get("/producto_por_codigo/{codigo}")
