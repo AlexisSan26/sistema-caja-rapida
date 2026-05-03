@@ -1311,15 +1311,14 @@
         if (!idTurnoActual) { alert("Debes tener un turno abierto para registrar un abono."); return; }
         const monto = parseFloat(document.getElementById("monto-abono").value);
         if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
-        // Guardar datos antes de cerrar el sheet
-        const idCuenta = clienteFiadoActual.id_cuenta;
+        // Cerrar sheet inmediatamente (optimistic UI)
         cerrarBsFiado();
         try {
             const res = await fetch(`${API_URL}/registrar_abono`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    id_cuenta: idCuenta,
+                    id_cuenta: clienteFiadoActual.id_cuenta,
                     id_turno: idTurnoActual,
                     monto: monto
                 })
@@ -1337,9 +1336,9 @@
                 return;
             }
             const data = await res.json();
-            alert(`✅ Abono registrado. Saldo restante: $${parseFloat(data.saldo_restante).toFixed(2)}`);
             cargarClientes();
             actualizarLista();
+            mostrarError(`✅ Abono de $${monto.toFixed(2)} registrado`);
         } catch (e) { mostrarError("Error al registrar el abono."); cargarClientes(); }
     }
 
