@@ -227,8 +227,23 @@ def registrar(mov: Movimiento):
 def borrar_movimiento(id_movimiento: int):
     conexion = conectar_bd()
     try:
-        cursor = conexion.cursor()
+        cursor = conexion.cursor(dictionary=True)
+        # Obtener datos del movimiento antes de borrar
+        cursor.execute(
+            "SELECT tipo_movimiento, producto, cantidad FROM movimientos WHERE id_movimiento = %s",
+            (id_movimiento,)
+        )
+        mov = cursor.fetchone()
+        if not mov:
+            return {"mensaje": "Movimiento no encontrado"}
         cursor.execute("DELETE FROM movimientos WHERE id_movimiento = %s", (id_movimiento,))
+        # Revertir stock solo si era una VENTA
+        if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:
+            cursor.execute("""
+                UPDATE productos
+                SET stock_actual = stock_actual + %s
+                WHERE nombre_producto = %s AND activo = 1
+            """, (int(mov["cantidad"]), mov["producto"]))
         conexion.commit()
         return {"mensaje": "Movimiento cancelado"}
     finally:
@@ -601,6 +616,29 @@ def crear_cliente(c: ClienteNuevo):
         cursor.close()
         conexion.close()
 
+@app.delete("/clientes/{id_cliente}")
+def eliminar_cliente(id_cliente: int):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        # Verificar si tiene saldo pendiente
+        cursor.execute("""
+            SELECT COALESCE(SUM(df.cantidad * df.precio), 0) - COALESCE(SUM(a.monto), 0) AS saldo
+            FROM cuentas_fiado cf
+            LEFT JOIN detalle_fiado df ON df.id_cuenta = cf.id_cuenta
+            LEFT JOIN abonos a ON a.id_cuenta = cf.id_cuenta
+            WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA'
+        """, (id_cliente,))
+        row = cursor.fetchone()
+        if row and float(row["saldo"]) > 0:
+            return {"error": f"El cliente tiene saldo pendiente de ${float(row['saldo']):.2f}. Salda la cuenta antes de eliminar."}
+        cursor.execute("UPDATE clientes SET activo = 0 WHERE id_cliente = %s", (id_cliente,))
+        conexion.commit()
+        return {"mensaje": "Cliente eliminado"}
+    finally:
+        cursor.close()
+        conexion.close()
+
 @app.get("/cuenta_fiado/{id_cliente}")
 def obtener_cuenta(id_cliente: int):
     conexion = conectar_bd()
@@ -761,10 +799,26 @@ def registrar_venta_lote(venta: VentaLote):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
-        cursor.executemany(
-            "INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario) VALUES (%s, 'VENTA', %s, %s, %s)",
-            [(venta.id_turno, i.producto, i.cantidad, i.precio_unitario) for i in venta.items]
-        )
+        for i in venta.items:
+            nombre_limpio = i.producto.strip() if i.producto else "Venta sin nombre"
+            cursor.execute(
+                "INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario) VALUES (%s, 'VENTA', %s, %s, %s)",
+                (venta.id_turno, nombre_limpio, i.cantidad, i.precio_unitario)
+            )
+            # Descuenta stock o crea producto nuevo igual que registrar_movimiento
+            cursor.execute("SELECT COUNT(*) FROM productos WHERE nombre_producto = %s", (nombre_limpio,))
+            existe = cursor.fetchone()[0] > 0
+            if not existe:
+                cursor.execute(
+                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo) VALUES (%s, %s, 1)",
+                    (nombre_limpio, i.precio_unitario)
+                )
+            else:
+                cursor.execute("""
+                    UPDATE productos
+                    SET stock_actual = GREATEST(0, stock_actual - %s)
+                    WHERE nombre_producto = %s AND activo = 1
+                """, (int(i.cantidad), nombre_limpio))
         conexion.commit()
         return {"ok": True, "registrados": len(venta.items)}
     finally:
