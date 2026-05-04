@@ -510,7 +510,7 @@
 
     function filtrarHistorialPorFecha() {
         if (!cacheTurnos) return;
-        const fecha = document.getElementById("filtro-fecha-historial").value;
+        const fecha = document.getElementById("input-fecha-manual").value;
         if (!fecha) { renderListaHistorial(cacheTurnos); return; }
         const filtrados = cacheTurnos.filter(t => {
             if (!t.fecha_apertura) return false;
@@ -613,6 +613,17 @@
     // abrirHistorial y cerrarHistorial se mantienen por compatibilidad pero ya no se usan
     function abrirHistorial() { irA('historial'); }
     function cerrarHistorial() { irA('caja'); }
+
+    function aplicarFechaCalendario(fecha) {
+        if (!cacheTurnos) return;
+        if (!fecha) { renderListaHistorial(cacheTurnos.slice(0, 10)); return; }
+        const filtrados = cacheTurnos.filter(t => {
+            if (!t.fecha_apertura) return false;
+            return t.fecha_apertura.toString().startsWith(fecha);
+        });
+        renderListaHistorial(filtrados);
+        document.getElementById("detalle-historial").innerHTML = "";
+    }
 
     // ─── Ticket ───────────────────────────────────────────────────────────────
     function construirTicketHTML(datos, idTurno, momentoCierre = null) {
