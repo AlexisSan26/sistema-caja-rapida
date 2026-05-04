@@ -258,9 +258,9 @@
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">📅 Historial de Cortes</h4>
     <div class="mb-3">
-        <label class="fw-bold text-secondary" style="font-size:.85rem;">Filtrar por fecha</label>
-        <input type="date" id="filtro-fecha-historial" class="form-control form-control-lg"
-            onchange="filtrarHistorialPorFecha()">
+        <label class="fw-bold text-secondary" style="font-size:.85rem;">Buscar por fecha</label>
+        <input type="date" id="input-fecha-manual" class="form-control form-control-lg"
+            onchange="aplicarFechaCalendario(this.value)">
     </div>
     <div id="lista-historial" class="list-group mb-3"></div>
     <div id="detalle-historial"></div>
@@ -497,13 +497,13 @@
     async function cargarHistorial() {
         document.getElementById("lista-historial").innerHTML = "<p class='text-center text-muted mt-3'>Cargando...</p>";
         document.getElementById("detalle-historial").innerHTML = "";
-        document.getElementById("filtro-fecha-historial").value = "";
+        document.getElementById("input-fecha-manual").value = "";
         try {
             const res = await fetch(`${API_URL}/historial_turnos`);
             cacheTurnos = await res.json();
-            renderListaHistorial(cacheTurnos);
+            renderListaHistorial(cacheTurnos.slice(0, 10));
         } catch (e) {
-            if (cacheTurnos) { renderListaHistorial(cacheTurnos); return; }
+            if (cacheTurnos) { renderListaHistorial(cacheTurnos.slice(0, 10)); return; }
             document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
         }
     }
@@ -539,14 +539,27 @@
     }
 
     function seleccionarTurno(idTurno) {
-        // Resaltar seleccionado y apagar los demás
-        document.querySelectorAll('[id^="turno-btn-"]').forEach(btn => {
-            const isSelected = btn.id === `turno-btn-${idTurno}`;
-            btn.style.opacity = isSelected ? '1' : '0.35';
-            btn.style.fontWeight = isSelected ? 'bold' : 'normal';
-            btn.style.borderLeft = isSelected ? '4px solid #198754' : '4px solid transparent';
-        });
+        if (!cacheTurnos) return;
+        const turno = cacheTurnos.find(t => t.id_turno === idTurno);
+        if (!turno) return;
+        const fecha = turno.fecha_apertura
+            ? new Date(turno.fecha_apertura.replace(' ', 'T')).toLocaleDateString('es-MX', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })
+            : "Fecha desconocida";
+        document.getElementById("lista-historial").innerHTML = `
+            <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                style="border-left:4px solid #198754;" onclick="mostrarTodosLosTurnos()">
+                <strong>Turno #${turno.id_turno}</strong>
+                <span class="badge bg-secondary rounded-pill" style="font-size:.75rem;">${fecha}</span>
+            </button>
+            <div class="text-center mt-1">
+                <button class="btn btn-sm btn-link text-secondary p-0" onclick="mostrarTodosLosTurnos()">← Ver todos</button>
+            </div>`;
         verDetalleHistorial(idTurno);
+    }
+
+    function mostrarTodosLosTurnos() {
+        document.getElementById("detalle-historial").innerHTML = "";
+        renderListaHistorial(cacheTurnos ? cacheTurnos.slice(0, 10) : []);
     }
 
     async function verDetalleHistorial(idTurno) {
