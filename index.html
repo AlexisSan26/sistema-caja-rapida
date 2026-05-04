@@ -685,7 +685,7 @@
         // Cargar todos los productos en memoria para búsqueda local instantánea
         cargarProductosEnMemoria();
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
-        intervaloActualizacion = setInterval(sincronizarTodo, 3000);
+        intervaloActualizacion = setInterval(sincronizarTodo, 8000);
         setTimeout(() => document.getElementById("producto").focus(), 200);
     }
 

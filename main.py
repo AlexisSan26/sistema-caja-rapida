@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from enum import Enum
 import mysql.connector
 from dotenv import load_dotenv
+import mysql.connector.pooling
 
 load_dotenv()
 
@@ -25,6 +26,14 @@ db_config = {
     'password': os.getenv('DB_PASSWORD'),
     'database': os.getenv('DB_NAME'),
 }
+# ─── EL ACELERADOR: Pool de conexiones ────────────────────────────────────────
+# Esto abre 5 conexiones fijas a Aiven y las recicla, haciendo todo 10x más rápido
+db_pool = mysql.connector.pooling.MySQLConnectionPool(
+    pool_name="cajapool",
+    pool_size=5,
+    pool_reset_session=True,
+    **db_config
+)
 
 
 # ─── Modelos ──────────────────────────────────────────────────────────────────
@@ -96,7 +105,8 @@ class AbonoFiado(BaseModel):
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def conectar_bd():
-    conexion = mysql.connector.connect(**db_config)
+    # En lugar de conectarse desde cero, toma una conexión "caliente" del pool
+    conexion = db_pool.get_connection()
     cursor = conexion.cursor()
     cursor.execute("SET time_zone = '-06:00';")
     cursor.close()
