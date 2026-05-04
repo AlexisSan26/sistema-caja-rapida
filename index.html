@@ -497,15 +497,13 @@
     async function cargarHistorial() {
         document.getElementById("lista-historial").innerHTML = "<p class='text-center text-muted mt-3'>Cargando...</p>";
         document.getElementById("detalle-historial").innerHTML = "";
-        if (cacheTurnos) {
-            renderListaHistorial(cacheTurnos);
-            return;
-        }
+        document.getElementById("filtro-fecha-historial").value = "";
         try {
             const res = await fetch(`${API_URL}/historial_turnos`);
             cacheTurnos = await res.json();
             renderListaHistorial(cacheTurnos);
         } catch (e) {
+            if (cacheTurnos) { renderListaHistorial(cacheTurnos); return; }
             document.getElementById("lista-historial").innerHTML = "<p class='text-danger mt-3'>Error al cargar historial.</p>";
         }
     }
@@ -516,7 +514,8 @@
         if (!fecha) { renderListaHistorial(cacheTurnos); return; }
         const filtrados = cacheTurnos.filter(t => {
             if (!t.fecha_apertura) return false;
-            return new Date(t.fecha_apertura).toISOString().startsWith(fecha);
+            // fecha_apertura viene como "2026-05-03 10:00:00" desde MySQL
+            return t.fecha_apertura.toString().startsWith(fecha);
         });
         renderListaHistorial(filtrados);
         document.getElementById("detalle-historial").innerHTML = "";
@@ -532,11 +531,22 @@
             const fecha = t.fecha_apertura
                 ? new Date(t.fecha_apertura).toLocaleDateString('es-MX', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })
                 : "Fecha desconocida";
-            return `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="verDetalleHistorial(${t.id_turno})">
+            return `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" id="turno-btn-${t.id_turno}" onclick="seleccionarTurno(${t.id_turno})">
                 <strong>Turno #${t.id_turno}</strong>
                 <span class="badge bg-secondary rounded-pill">${fecha}</span>
             </button>`;
         }).join("");
+    }
+
+    function seleccionarTurno(idTurno) {
+        // Resaltar seleccionado y apagar los demás
+        document.querySelectorAll('[id^="turno-btn-"]').forEach(btn => {
+            const isSelected = btn.id === `turno-btn-${idTurno}`;
+            btn.style.opacity = isSelected ? '1' : '0.35';
+            btn.style.fontWeight = isSelected ? 'bold' : 'normal';
+            btn.style.borderLeft = isSelected ? '4px solid #198754' : '4px solid transparent';
+        });
+        verDetalleHistorial(idTurno);
     }
 
     async function verDetalleHistorial(idTurno) {
