@@ -750,15 +750,18 @@
             idsEnTabla = nuevosIds;
             cuerpo.innerHTML = movimientos.map(m => {
                 let badge = '';
-                if (m.tipo_movimiento === 'VENTA') badge = '<span class="badge bg-success me-1">Venta</span>';
-                else if (m.tipo_movimiento === 'RETIRO') badge = '<span class="badge bg-danger me-1">Retiro</span>';
-                else if (m.tipo_movimiento === 'COBRO_FIADO') badge = '<span class="badge bg-warning text-dark me-1">Abono</span>';
-                else if (m.tipo_movimiento === 'FONDO_CAJA') badge = '<span class="badge bg-primary me-1">Fondo</span>';
+                if (m.tipo_movimiento === 'VENTA') badge = '<span class="badge bg-success">Venta</span>';
+                else if (m.tipo_movimiento === 'RETIRO') badge = '<span class="badge bg-danger">Retiro</span>';
+                else if (m.tipo_movimiento === 'COBRO_FIADO') badge = '<span class="badge bg-warning text-dark">Abono</span>';
+                else if (m.tipo_movimiento === 'FONDO_CAJA') badge = '<span class="badge bg-primary">Fondo</span>';
 
                 return `<tr data-id="${m.id_movimiento}">
-                    <td class="text-center">${m.hora || '--:--'}</td>
+                    <td class="text-center" style="vertical-align: middle;">
+                        <div style="font-size:.85rem;">${m.hora || '--:--'}</div>
+                        <div class="mt-1" style="font-size: .75rem;">${badge}</div>
+                    </td>
                     <td class="text-center">${m.cantidad}</td>
-                    <td>${badge}${m.producto}</td>
+                    <td style="font-size:.9rem; vertical-align: middle;">${m.producto}</td>
                     <td class="text-center">$${m.total_movimiento.toFixed(2)}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
