@@ -231,7 +231,7 @@
         <div id="lector-qr-inv"></div>
         <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerInventario()">Cerrar cámara</button>
     </div>
-    <div id="filtros-proveedor" class="d-flex gap-2 flex-wrap mb-3"></div>
+    <div id="filtros-proveedor" class="mb-3"></div>
     <div id="lista-inventario"><p class="text-center text-muted mt-4">Cargando inventario...</p></div>
 </div>
 </div>
@@ -270,34 +270,46 @@
 <!-- ══ MODAL: RESURTIDO ══ -->
 <div id="modal-resurtido" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9000;overflow-y:auto;">
     <div style="background:white;margin:2rem auto;max-width:500px;border-radius:12px;padding:1.5rem;">
+
         <div id="paso-1">
-            <h5 class="mb-3">¿Qué llegó? 📦</h5>
-            <div class="input-group mb-3">
-                <input type="text" id="buscar-resurtido" class="form-control form-control-lg" placeholder="Nombre o escanea..." oninput="buscarParaResurtir()" autocomplete="off">
-                <button class="btn btn-outline-secondary" onclick="abrirEscanerResurtido()">📷</button>
+            <h5 class="mb-3">Resurtido de Mercancía 📦</h5>
+
+            <div id="div-carrito-resurtido" style="display:none;" class="mb-3">
+                <!-- Se inyectará el contenido mediante JS -->
             </div>
+
+            <div class="mb-3">
+                <label class="fw-bold">Producto:</label>
+                <div class="input-group">
+                    <input type="text" id="producto-resurtido" class="form-control form-control-lg" list="lista-productos-resurtido" oninput="manejarInputResurtido()" autocomplete="off" placeholder="Buscar o escanear...">
+                    <button class="btn btn-outline-secondary" type="button" onclick="abrirEscanerResurtido()" title="Escanear">📷</button>
+                </div>
+                <datalist id="lista-productos-resurtido"></datalist>
+            </div>
+
             <div id="escaner-resurtido-container" style="display:none;" class="mb-3">
                 <div id="lector-qr-resurtido"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerResurtido()">Cerrar cámara</button>
             </div>
-            <div id="resultados-resurtido" class="list-group mb-3"></div>
+
+            <div class="row mb-3">
+                <div class="col-6">
+                    <label class="fw-bold">Cantidad:</label>
+                    <input type="number" id="cantidad-resurtido" class="form-control form-control-lg" value="1" min="1">
+                </div>
+                <div class="col-6">
+                    <label class="fw-bold">Fecha caducidad:</label>
+                    <input type="date" id="fecha-cad-resurtido" class="form-control form-control-lg">
+                </div>
+            </div>
+
+            <button class="btn btn-outline-success w-100 btn-lg mb-3" onclick="agregarAlLoteResurtido()">➕ Agregar a lista</button>
+            <button class="btn btn-success w-100 btn-lg mb-3 shadow" onclick="enviarTicketProveedor()">💾 Guardar Ticket Completo</button>
+
             <button class="btn btn-outline-primary w-100 mb-2" onclick="irAltaNueva()">+ Registrar producto nuevo</button>
             <button class="btn btn-outline-secondary w-100" onclick="cerrarModalResurtido()">Cancelar</button>
         </div>
-        <div id="paso-2" style="display:none;">
-            <h5 class="mb-1">Resurtido</h5>
-            <p id="nombre-resurtido" class="text-muted mb-3"></p>
-            <div class="mb-3">
-                <label class="fw-bold">¿Cuántas piezas llegaron?</label>
-                <input type="number" id="cantidad-resurtido" class="form-control form-control-lg" value="1" min="1">
-            </div>
-            <div class="mb-3">
-                <label class="fw-bold">Fecha de caducidad <span class="text-muted fw-normal">(opcional)</span></label>
-                <input type="date" id="fecha-cad-resurtido" class="form-control form-control-lg">
-            </div>
-            <button class="btn btn-success w-100 btn-lg mb-2" onclick="confirmarResurtido()">Confirmar entrada ✓</button>
-            <button class="btn btn-outline-secondary w-100" onclick="volverPaso1()">← Volver</button>
-        </div>
+
         <div id="paso-3" style="display:none;">
             <h5 class="mb-3">Nuevo producto</h5>
             <div class="mb-2">
@@ -446,13 +458,13 @@
     const API_URL = "https://sistema-caja-rapida.onrender.com";
     let todosLosProductos = [];
     let proveedorFiltro = "";
-    let productoResurtidoActual = null;
     let scannerCaja = null;
     let scannerInv = null;
     let scannerResurtido = null;
     let productoEnEdicion = null;
-    let clienteFiadoActual = null; // { id_cliente, id_cuenta }
-    let carritoItems = []; // [{nombre, cantidad, precio}]
+    let clienteFiadoActual = null;
+    let carritoItems = [];
+    let loteResurtido = [];
 
     // ─── Error ────────────────────────────────────────────────────────────────
     let timeoutError = null;
@@ -514,7 +526,6 @@
         if (!fecha) { renderListaHistorial(cacheTurnos); return; }
         const filtrados = cacheTurnos.filter(t => {
             if (!t.fecha_apertura) return false;
-            // fecha_apertura viene como "2026-05-03 10:00:00" desde MySQL
             return t.fecha_apertura.toString().startsWith(fecha);
         });
         renderListaHistorial(filtrados);
@@ -565,7 +576,6 @@
     async function verDetalleHistorial(idTurno) {
         document.getElementById("detalle-historial").innerHTML = "<p class='text-center mt-3'>Cargando...</p>";
         try {
-            // Cargar resumen y movimientos en paralelo
             const [resResumen, resMov] = await Promise.all([
                 cacheResumenes[idTurno]
                     ? Promise.resolve({ json: () => cacheResumenes[idTurno], ok: true, _cached: true })
@@ -576,8 +586,6 @@
             if (!resResumen._cached) cacheResumenes[idTurno] = datos;
             const movimientos = await resMov.json();
 
-            // Tabla de movimientos
-            const colores = { RETIRO: 'text-danger', FONDO_CAJA: 'text-primary', COBRO_FIADO: 'text-warning' };
             const tablaHTML = `
                 <div class="mt-3">
                     <div class="fw-bold text-secondary mb-2" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;">Movimientos del turno</div>
@@ -592,13 +600,20 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${movimientos.map(m => `
-                                    <tr class="${colores[m.tipo_movimiento] || ''}">
+                                ${movimientos.map(m => {
+                                    let badge = '';
+                                    if (m.tipo_movimiento === 'VENTA') badge = '<span class="badge bg-success me-1">Venta</span>';
+                                    else if (m.tipo_movimiento === 'RETIRO') badge = '<span class="badge bg-danger me-1">Retiro</span>';
+                                    else if (m.tipo_movimiento === 'COBRO_FIADO') badge = '<span class="badge bg-warning text-dark me-1">Abono</span>';
+                                    else if (m.tipo_movimiento === 'FONDO_CAJA') badge = '<span class="badge bg-primary me-1">Fondo</span>';
+
+                                    return `<tr>
                                         <td style="font-size:.8rem;">${m.hora || '--'}</td>
-                                        <td style="font-size:.85rem;">${m.producto || '-'}</td>
+                                        <td style="font-size:.85rem;">${badge}${m.producto || '-'}</td>
                                         <td class="text-center">${m.cantidad}</td>
                                         <td class="text-center">$${parseFloat(m.total_movimiento).toFixed(2)}</td>
-                                    </tr>`).join('')}
+                                    </tr>`;
+                                }).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -609,10 +624,6 @@
             document.getElementById("detalle-historial").innerHTML = "<p class='text-danger'>Error al cargar el resumen.</p>";
         }
     }
-
-    // abrirHistorial y cerrarHistorial se mantienen por compatibilidad pero ya no se usan
-    function abrirHistorial() { irA('historial'); }
-    function cerrarHistorial() { irA('caja'); }
 
     function aplicarFechaCalendario(fecha) {
         if (!cacheTurnos) return;
@@ -640,14 +651,15 @@
                 <h6 class="mb-0 text-uppercase fw-bold text-primary">${encabezado}</h6>
                 <small class="text-muted">${subtitulo}</small>
             </div>
-            <p class="h5">Venta Total: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-            <p class="text-muted mb-1 mt-3">Cigarros y Time</p>
-            <p class="h5">Total: <strong>$${datos.total_cigarros_time.toFixed(2)}</strong></p>
-            <p class="text-muted mb-1 mt-2">Helados</p>
-            <p class="h5">Total: <strong>$${(datos.total_helados || 0).toFixed(2)}</strong></p>
+            <p class="h6 mb-1">Ingresos del Turno: <strong>$${(datos.total_ingresos || 0).toFixed(2)}</strong></p>
+            <p class="h6 mb-1 text-danger">Retiros: <strong>-$${(datos.total_retiros || 0).toFixed(2)}</strong></p>
+            <p class="h5 mt-2">Subtotal en Caja: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
             <hr>
-            <p class="h4">Efectivo Total: <span class="text-success">$${datos.total_neto.toFixed(2)}</span></p>
-            <small class="text-muted">(Descontando Cigarros, Time y Helados)</small>
+            <p class="text-muted mb-1">Menos Cigarros y Time: <strong>-$${datos.total_cigarros_time.toFixed(2)}</strong></p>
+            <p class="text-muted mb-1">Menos Helados: <strong>-$${(datos.total_helados || 0).toFixed(2)}</strong></p>
+            <hr style="border-top: 2px solid #000;">
+            <p class="h5 mb-1">Efectivo Neto a Entregar:</p>
+            <p class="h2 text-success fw-bold">$${datos.total_neto.toFixed(2)}</p>
         </div>`;
     }
 
@@ -682,7 +694,6 @@
         carritoItems = [];
         renderCarrito();
         actualizarLista();
-        // Cargar todos los productos en memoria para búsqueda local instantánea
         cargarProductosEnMemoria();
         if (intervaloActualizacion) clearInterval(intervaloActualizacion);
         intervaloActualizacion = setInterval(sincronizarTodo, 8000);
@@ -738,11 +749,16 @@
             if (!cambio) return;
             idsEnTabla = nuevosIds;
             cuerpo.innerHTML = movimientos.map(m => {
-                const color = m.tipo_movimiento === 'RETIRO' ? 'text-danger fw-bold' : '';
-                return `<tr class="${color}" data-id="${m.id_movimiento}">
+                let badge = '';
+                if (m.tipo_movimiento === 'VENTA') badge = '<span class="badge bg-success me-1">Venta</span>';
+                else if (m.tipo_movimiento === 'RETIRO') badge = '<span class="badge bg-danger me-1">Retiro</span>';
+                else if (m.tipo_movimiento === 'COBRO_FIADO') badge = '<span class="badge bg-warning text-dark me-1">Abono</span>';
+                else if (m.tipo_movimiento === 'FONDO_CAJA') badge = '<span class="badge bg-primary me-1">Fondo</span>';
+
+                return `<tr data-id="${m.id_movimiento}">
                     <td class="text-center">${m.hora || '--:--'}</td>
                     <td class="text-center">${m.cantidad}</td>
-                    <td>${m.producto}</td>
+                    <td>${badge}${m.producto}</td>
                     <td class="text-center">$${m.total_movimiento.toFixed(2)}</td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
@@ -758,14 +774,12 @@
         const divCantidad = document.getElementById("div-cantidad");
         if (!texto) { divCantidad.style.visibility = "visible"; return; }
 
-        // ── Código de barras del escáner físico ───────────────────────────────
         const esCodigoBarras = /^\d{4,}$/.test(texto.trim());
         if (esCodigoBarras) {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 const val = document.getElementById("producto").value.trim();
                 if (!/^\d{4,}$/.test(val)) return;
-                // Buscar en memoria local primero (instantáneo)
                 const local = todosLosProductos.find(p => p.codigo_barras === val);
                 if (local) {
                     agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
@@ -774,7 +788,6 @@
                     document.getElementById("cantidad").value = "1";
                     document.getElementById("producto").focus();
                 } else {
-                    // Si no está en memoria, consultar servidor
                     fetch(`${API_URL}/producto_por_codigo/${val}`)
                         .then(r => r.json())
                         .then(data => {
@@ -791,18 +804,16 @@
             return;
         }
 
-        // ── Búsqueda por nombre: local e instantánea ──────────────────────────
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
             const textoActual = document.getElementById("producto").value;
             if (!textoActual || /^\d{4,}$/.test(textoActual.trim())) return;
-            const textoMin = textoActual.toLowerCase();
+            const textoMin = textoActual.trim().toLowerCase();
             const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
             const esGranel = palabrasGranel.some(p => textoMin.includes(p));
             divCantidad.style.visibility = esGranel ? "hidden" : "visible";
             if (esGranel) document.getElementById("cantidad").value = "1";
 
-            // Filtrar en memoria local (sin petición al servidor)
             const resultados = todosLosProductos.filter(p =>
                 p.nombre_producto.toLowerCase().includes(textoMin) ||
                 (p.codigo_barras && p.codigo_barras.includes(textoMin))
@@ -811,9 +822,9 @@
             const datalist = document.getElementById("lista-productos");
             datalist.innerHTML = resultados.map(p => `<option value="${p.nombre_producto}">`).join("");
 
-            const coincidencia = resultados.find(p => p.nombre_producto === textoActual);
+            const coincidencia = resultados.find(p => p.nombre_producto === textoActual.trim());
             if (coincidencia && !esGranel) document.getElementById("precio").value = coincidencia.precio_sugerido;
-        }, 80); // 80ms en vez de 300ms porque es local
+        }, 80);
     }
 
     function manejarEnterProducto(event) {
@@ -822,9 +833,7 @@
             const tipo = document.getElementById("tipo").value;
             if (["VENTA","FIADO"].includes(tipo)) {
                 const texto = document.getElementById("producto").value.trim();
-                // Si es código de barras, el debounce ya lo procesa — solo evitar que mueva el foco
                 if (/^\d{4,}$/.test(texto)) return;
-                // Si es texto manual, agregar a lista
                 agregarALista();
             }
         }
@@ -849,7 +858,6 @@
         if (!nombre) { mostrarError("Escribe el nombre del producto."); return; }
         if (isNaN(precio) || precio < 0) { mostrarError("Escribe un precio válido."); return; }
         agregarProductoAlCarrito(nombre, precio, cantidad);
-        // Limpiar campos para siguiente producto
         document.getElementById("producto").value = "";
         document.getElementById("precio").value = "";
         document.getElementById("cantidad").value = "1";
@@ -912,7 +920,6 @@
         document.getElementById("precio").value = "";
         divCliente.style.display = "none";
 
-        // Limpiar carrito al cambiar tipo
         carritoItems = [];
         renderCarrito();
 
@@ -993,7 +1000,6 @@
     async function registrar() {
         const tipo = document.getElementById("tipo").value;
 
-        // ── VENTA y FIADO: registrar todos los items del carrito ──────────────
         if (["VENTA","FIADO"].includes(tipo)) {
             if (carritoItems.length === 0) { alert("Agrega al menos un producto a la lista antes de guardar."); return; }
 
@@ -1019,7 +1025,6 @@
                     alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
                 } catch (e) { mostrarError("Error al registrar el fiado."); return; }
             } else {
-                // VENTA normal — una sola petición con todos los productos
                 try {
                     const res = await fetch(`${API_URL}/registrar_venta_lote`, {
                         method: "POST",
@@ -1036,7 +1041,6 @@
                     if (!res.ok) { mostrarError("Error al guardar la venta."); return; }
                 } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
             }
-            // Limpiar carrito y campos
             carritoItems = [];
             renderCarrito();
             document.getElementById("producto").value = "";
@@ -1047,7 +1051,6 @@
             return;
         }
 
-        // ── RETIRO / FONDO_CAJA: flujo original (sin carrito) ─────────────────
         const montoVal = parseFloat(document.getElementById("precio").value);
         let cantidadVal = parseFloat(document.getElementById("cantidad").value);
         let nombreProducto = document.getElementById("producto").value.trim();
@@ -1072,7 +1075,6 @@
     }
     async function borrarMovimiento(idMovimiento) {
         if (!confirm("⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.")) return;
-        // Quitar de la tabla al instante (optimistic UI)
         const fila = document.querySelector(`tr[data-id="${idMovimiento}"]`);
         if (fila) fila.remove();
         idsEnTabla.delete(idMovimiento);
@@ -1080,11 +1082,11 @@
             const res = await fetch(`${API_URL}/borrar_movimiento/${idMovimiento}`, { method: "DELETE" });
             if (!res.ok) {
                 mostrarError("Error al cancelar el movimiento.");
-                actualizarLista(); // revertir si falla
+                actualizarLista();
             }
         } catch (e) {
             mostrarError("Error de conexión al cancelar.");
-            actualizarLista(); // revertir si falla
+            actualizarLista();
         }
     }
     function mostrarTicket(datos) {
@@ -1121,20 +1123,15 @@
     }
     function renderFiltrosProveedor(proveedores) {
         const cont = document.getElementById("filtros-proveedor");
-        cont.innerHTML = `<button class="btn btn-sm ${proveedorFiltro === '' ? 'btn-dark' : 'btn-outline-dark'}" onclick="setProveedor('')">Todos</button>`;
+        let opciones = `<option value="">Filtrar por proveedor: Todos</option>`;
         proveedores.forEach(p => {
-            cont.innerHTML += `<button class="btn btn-sm ${proveedorFiltro === p ? 'btn-primary' : 'btn-outline-primary'}" onclick="setProveedor('${p}')">${p}</button>`;
+            opciones += `<option value="${p}">${p}</option>`;
         });
+        cont.innerHTML = `<select class="form-select form-select-lg mb-3" onchange="setProveedor(this.value)">${opciones}</select>`;
     }
     function setProveedor(p) {
         proveedorFiltro = p;
         filtrarInventario();
-        document.querySelectorAll("#filtros-proveedor button").forEach(b => {
-            const esteP = b.textContent.trim() === (p || 'Todos');
-            b.className = esteP
-                ? (p === '' ? 'btn btn-sm btn-dark' : 'btn btn-sm btn-primary')
-                : (p === '' ? 'btn btn-sm btn-outline-dark' : 'btn btn-sm btn-outline-primary');
-        });
     }
     function filtrarInventario() {
         const q = document.getElementById("buscador-inventario").value.toLowerCase();
@@ -1142,9 +1139,7 @@
 
         if (q) {
             filtrados = filtrados.filter(p =>
-                // Busca coincidencias en el nombre del producto
                 p.nombre_producto.toLowerCase().includes(q) ||
-                // O busca coincidencias en el código de barras (si es que tiene uno)
                 (p.codigo_barras && p.codigo_barras.toLowerCase().includes(q))
             );
         }
@@ -1249,37 +1244,21 @@
 
     async function eliminarProductoActual() {
         if (!productoEnEdicion) return;
-
-        // Confirmación de seguridad en pantalla
         const confirmar = confirm(`¿Estás seguro de que deseas ELIMINAR "${productoEnEdicion.nombre_producto}" del sistema?\n\nEsta acción lo ocultará del inventario y la caja, pero mantendrá el historial de ventas.`);
         if (!confirmar) return;
 
         try {
-            const res = await fetch(`${API_URL}/eliminar_producto/${productoEnEdicion.id_producto}`, {
-                method: "DELETE"
-            });
-
-            if (!res.ok) {
-                alert("❌ Error del servidor al intentar eliminar.");
-                return;
-            }
-
+            const res = await fetch(`${API_URL}/eliminar_producto/${productoEnEdicion.id_producto}`, { method: "DELETE" });
+            if (!res.ok) { alert("❌ Error del servidor al intentar eliminar."); return; }
             const data = await res.json();
             alert("✅ " + data.mensaje);
-
-            // Refrescar el sistema
             cerrarBottomSheet();
             cargarInventario();
-
-            // Si el producto estaba escrito en la caja, lo borramos visualmente
             try {
                 document.getElementById("producto").value = "";
                 document.getElementById("precio").value = "";
             } catch(e) {}
-
-        } catch (e) {
-            mostrarError("Error de conexión al eliminar el producto.");
-        }
+        } catch (e) { mostrarError("Error de conexión al eliminar el producto."); }
     }
 
     // ─── ALERTAS ──────────────────────────────────────────────────────────────
@@ -1352,7 +1331,6 @@
             document.getElementById("bs-fiado-saldo").textContent = `$${saldo.toFixed(2)}`;
             document.getElementById("bs-fiado-saldo").className = saldo <= 0 ? 'h4 mb-0 saldo-cero' : 'h4 mb-0 saldo-deuda';
 
-            // Detalle de lo que debe
             if (datos.detalle.length === 0) {
                 document.getElementById("bs-fiado-detalle").innerHTML = "<p class='text-muted text-center py-2'>Sin productos fiados.</p>";
             } else {
@@ -1365,7 +1343,6 @@
                     </table>`;
             }
 
-            // Abonos
             if (datos.abonos.length === 0) {
                 document.getElementById("bs-fiado-abonos").innerHTML = "<p class='text-muted text-center py-2'>Sin abonos registrados.</p>";
             } else {
@@ -1401,11 +1378,7 @@
             const res = await fetch(`${API_URL}/registrar_abono`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    id_cuenta: idCuenta,
-                    id_turno: idTurnoActual,
-                    monto: monto
-                })
+                body: JSON.stringify({ id_cuenta: idCuenta, id_turno: idTurnoActual, monto: monto })
             });
             if (!res.ok) {
                 let errorMsg = "Error del servidor.";
@@ -1492,75 +1465,211 @@
         document.getElementById("escaner-inv-container").style.display = "none";
     }
 
-    // ─── FLUJO RESURTIDO ──────────────────────────────────────────────────────
+    // ─── FLUJO RESURTIDO (MODAL CLONADO) ──────────────────────────────────────
     function abrirFlujoResurtido(codigoInicial = null) {
         document.getElementById("modal-resurtido").style.display = "block";
-        mostrarPaso(1);
-        document.getElementById("buscar-resurtido").value = codigoInicial || "";
-        document.getElementById("resultados-resurtido").innerHTML = "";
-        cargarProveedoresDatalist();
-        if (codigoInicial) buscarParaResurtir();
-        setTimeout(() => document.getElementById("buscar-resurtido").focus(), 200);
-    }
-    function cerrarModalResurtido() { document.getElementById("modal-resurtido").style.display = "none"; cerrarEscanerResurtido(); }
-    function mostrarPaso(n) { [1,2,3].forEach(i => { document.getElementById(`paso-${i}`).style.display = i === n ? "block" : "none"; }); }
-    function volverPaso1() { mostrarPaso(1); }
-    async function buscarParaResurtir() {
-        const q = document.getElementById("buscar-resurtido").value.trim();
-        if (!q) { document.getElementById("resultados-resurtido").innerHTML = ""; return; }
-        try {
-            // ── Si es código de barras, busca directo por código ──────────────
-            const esCodigoBarras = /^\d{4,}$/.test(q);
-            if (esCodigoBarras) {
-                const res = await fetch(`${API_URL}/producto_por_codigo/${q}`);
-                const data = await res.json();
-                if (data.encontrado) {
-                    seleccionarParaResurtir(data.producto.id_producto, data.producto.nombre_producto);
-                    return;
-                }
-                // No existe en catálogo — ofrece darlo de alta con el código prellenado
-                document.getElementById("resultados-resurtido").innerHTML =
-                    "<p class='text-muted text-center mt-2'>Código no registrado. Puedes agregarlo como nuevo.</p>";
-                document.getElementById("nuevo-codigo").value = q;
-                return;
-            }
-            // ── Búsqueda normal por nombre ────────────────────────────────────
-            const res = await fetch(`${API_URL}/inventario?q=${encodeURIComponent(q)}`);
-            const productos = await res.json();
-            const cont = document.getElementById("resultados-resurtido");
-            if (productos.length === 0) { cont.innerHTML = "<p class='text-muted text-center mt-2'>No encontrado. Puedes registrarlo como nuevo.</p>"; return; }
-            cont.innerHTML = productos.slice(0, 5).map(p =>
-                `<button class="list-group-item list-group-item-action" onclick="seleccionarParaResurtir(${p.id_producto}, '${p.nombre_producto.replace(/'/g, "\\'")}')">
-                    <div class="d-flex justify-content-between"><span>${p.nombre_producto}</span><span class="text-muted">Stock: ${p.stock_actual}</span></div>
-                </button>`
-            ).join("");
-        } catch (e) { mostrarError("Error al buscar."); }
-    }
-    function seleccionarParaResurtir(idProducto, nombre) {
-        productoResurtidoActual = idProducto;
-        document.getElementById("nombre-resurtido").textContent = nombre;
-        document.getElementById("cantidad-resurtido").value = 1;
+        document.getElementById("paso-1").style.display = "block";
+        document.getElementById("paso-3").style.display = "none";
+
+        loteResurtido = [];
+        renderLoteResurtido();
+
+        document.getElementById("producto-resurtido").value = codigoInicial || "";
+        document.getElementById("cantidad-resurtido").value = "1";
         document.getElementById("fecha-cad-resurtido").value = "";
-        mostrarPaso(2);
+
+        cargarProveedoresDatalist();
+
+        if (codigoInicial) manejarInputResurtido();
+
+        setTimeout(() => document.getElementById("producto-resurtido").focus(), 200);
     }
-    async function confirmarResurtido() {
+
+    function cerrarModalResurtido() {
+        document.getElementById("modal-resurtido").style.display = "none";
+        cerrarEscanerResurtido();
+        loteResurtido = [];
+        renderLoteResurtido();
+    }
+
+    let debounceResurtidoTimer = null;
+    async function manejarInputResurtido() {
+        const texto = document.getElementById("producto-resurtido").value;
+        if (!texto) return;
+
+        const esCodigoBarras = /^\d{4,}$/.test(texto.trim());
+        if (esCodigoBarras) {
+            clearTimeout(debounceResurtidoTimer);
+            debounceResurtidoTimer = setTimeout(() => {
+                const val = document.getElementById("producto-resurtido").value.trim();
+                if (!/^\d{4,}$/.test(val)) return;
+
+                const local = todosLosProductos.find(p => p.codigo_barras === val);
+                if (!local) {
+                    fetch(`${API_URL}/producto_por_codigo/${val}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!data.encontrado) {
+                                if(confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) {
+                                    document.getElementById("nuevo-codigo").value = val;
+                                    irAltaNueva();
+                                }
+                            }
+                        }).catch(() => mostrarError("Error al buscar por código."));
+                }
+            }, 80);
+            return;
+        }
+
+        clearTimeout(debounceResurtidoTimer);
+        debounceResurtidoTimer = setTimeout(() => {
+            const textoActual = document.getElementById("producto-resurtido").value;
+            if (!textoActual || /^\d{4,}$/.test(textoActual.trim())) return;
+            const textoMin = textoActual.toLowerCase();
+
+            const resultados = todosLosProductos.filter(p =>
+                p.nombre_producto.toLowerCase().includes(textoMin) ||
+                (p.codigo_barras && p.codigo_barras.includes(textoMin))
+            ).slice(0, 20);
+
+            const datalist = document.getElementById("lista-productos-resurtido");
+            datalist.innerHTML = resultados.map(p => `<option value="${p.nombre_producto}">`).join("");
+        }, 80);
+    }
+
+    function agregarAlLoteResurtido() {
+        const nombre = document.getElementById("producto-resurtido").value.trim();
         const cantidad = parseInt(document.getElementById("cantidad-resurtido").value);
         const fechaCad = document.getElementById("fecha-cad-resurtido").value;
-        if (!cantidad || cantidad <= 0) { alert("La cantidad debe ser mayor a 0."); return; }
+
+        if (!nombre) { alert("Escribe el nombre del producto o escanea su código."); return; }
+        if (isNaN(cantidad) || cantidad <= 0) { alert("La cantidad debe ser mayor a 0."); return; }
+
+        const productoLocal = todosLosProductos.find(p => p.nombre_producto === nombre || p.codigo_barras === nombre);
+
+        if (productoLocal) {
+            loteResurtido.push({
+                id_producto: productoLocal.id_producto,
+                nombre: productoLocal.nombre_producto,
+                cantidad: cantidad,
+                fecha_caducidad: fechaCad || null,
+                stock_actual: productoLocal.stock_actual
+            });
+
+            renderLoteResurtido();
+
+            document.getElementById("producto-resurtido").value = "";
+            document.getElementById("cantidad-resurtido").value = "1";
+            document.getElementById("fecha-cad-resurtido").value = "";
+            document.getElementById("producto-resurtido").focus();
+        } else {
+            alert("⚠️ Producto no encontrado en el inventario. Verifícalo o regístralo como nuevo.");
+        }
+    }
+
+    function renderLoteResurtido() {
+        const contenedor = document.getElementById("div-carrito-resurtido");
+
+        if (loteResurtido.length === 0) {
+            contenedor.style.display = "none";
+            return;
+        }
+
+        contenedor.style.display = "block";
+
+        contenedor.innerHTML = `
+            <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos a ingresar</div>
+            <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
+                <table class="table table-sm mb-0" id="tabla-lote-resurtido">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Producto</th>
+                            <th class="text-center" style="width:60px; font-size:.8rem;">Stock</th>
+                            <th class="text-center" style="width:70px; font-size:.8rem;">Entran</th>
+                            <th class="text-center" style="width:36px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${loteResurtido.map((item, idx) => `
+                            <tr>
+                                <td style="font-size:.9rem;vertical-align:middle;">${item.nombre}</td>
+                                <td class="text-center text-muted fw-bold" style="vertical-align:middle;font-size:.85rem;">
+                                    ${item.stock_actual}
+                                </td>
+                                <td class="text-center" style="vertical-align:middle;">
+                                    <input type="number" class="form-control form-control-sm text-center p-1"
+                                        style="width:60px;display:inline-block;"
+                                        value="${item.cantidad}" min="1"
+                                        onchange="actualizarCantidadLote(${idx}, this.value)">
+                                </td>
+                                <td class="text-center" style="vertical-align:middle;">
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-1 lh-1" onclick="quitarDelLoteResurtido(${idx})">✕</button>
+                                </td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function actualizarCantidadLote(idx, val) {
+        const n = parseInt(val);
+        if (isNaN(n) || n <= 0) {
+            quitarDelLoteResurtido(idx);
+            return;
+        }
+        loteResurtido[idx].cantidad = n;
+        renderLoteResurtido();
+    }
+
+    function quitarDelLoteResurtido(index) {
+        loteResurtido.splice(index, 1);
+        renderLoteResurtido();
+    }
+
+    async function enviarTicketProveedor() {
+        if (loteResurtido.length === 0) {
+            alert("No hay productos en la lista para guardar.");
+            return;
+        }
+
         try {
-            const res = await fetch(`${API_URL}/entrada_mercancia`, {
+            const itemsLote = loteResurtido.map(item => ({
+                id_producto: item.id_producto,
+                cantidad: item.cantidad,
+                fecha_caducidad: item.fecha_caducidad
+            }));
+
+            const res = await fetch(`${API_URL}/entrada_mercancia_lote`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id_producto: productoResurtidoActual, cantidad, fecha_caducidad: fechaCad || null })
+                body: JSON.stringify({
+                    items: itemsLote,
+                    nota_general: "Ticket de resurtido en lote"
+                })
             });
+
             const data = await res.json();
-            alert(data.mensaje);
+
+            if(!res.ok) {
+                 throw new Error(data.error || "Error al registrar el lote");
+            }
+
+            alert("✅ " + data.mensaje);
+
+            loteResurtido = [];
+            renderLoteResurtido();
             cerrarModalResurtido();
             cargarInventario();
-        } catch (e) { mostrarError("Error al registrar entrada."); }
+
+        } catch (e) {
+            mostrarError("Error al registrar el ticket completo.");
+        }
     }
+
     function irAltaNueva() {
-        const busqueda = document.getElementById("buscar-resurtido").value.trim();
+        const busqueda = document.getElementById("producto-resurtido").value.trim();
         document.getElementById("nuevo-nombre").value = isNaN(busqueda) ? busqueda : "";
         document.getElementById("nuevo-codigo").value = (!isNaN(busqueda) && busqueda) ? busqueda : "";
         document.getElementById("nuevo-precio").value = "";
@@ -1568,8 +1677,16 @@
         document.getElementById("nuevo-minimo").value = "5";
         document.getElementById("nuevo-proveedor").value = "";
         document.getElementById("nuevo-caducidad").value = "";
-        mostrarPaso(3);
+
+        document.getElementById("paso-1").style.display = "none";
+        document.getElementById("paso-3").style.display = "block";
     }
+
+    function volverPaso1() {
+        document.getElementById("paso-3").style.display = "none";
+        document.getElementById("paso-1").style.display = "block";
+    }
+
     async function guardarProductoNuevo() {
         const nombre = document.getElementById("nuevo-nombre").value.trim();
         const precio = parseFloat(document.getElementById("nuevo-precio").value);
@@ -1590,10 +1707,13 @@
             });
             const data = await res.json();
             alert("✅ " + (data.mensaje || "Producto registrado"));
-            cerrarModalResurtido();
+
+            document.getElementById("producto-resurtido").value = nombre;
+            volverPaso1();
             cargarInventario();
         } catch (e) { mostrarError("Error al guardar el producto."); }
     }
+
     async function cargarProveedoresDatalist() {
         try {
             const res = await fetch(`${API_URL}/proveedores`);
@@ -1602,7 +1722,6 @@
         } catch (_) {}
     }
 
-    // ─── ESCÁNER RESURTIDO ────────────────────────────────────────────────────
     function abrirEscanerResurtido() {
         document.getElementById("escaner-resurtido-container").style.display = "block";
         scannerResurtido = new Html5Qrcode("lector-qr-resurtido");
@@ -1610,11 +1729,8 @@
         scannerResurtido.start({ facingMode: "environment" }, cfg,
             async (codigo) => {
                 cerrarEscanerResurtido();
-                document.getElementById("buscar-resurtido").value = codigo;
-                const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
-                const data = await res.json();
-                if (data.encontrado) { seleccionarParaResurtir(data.producto.id_producto, data.producto.nombre_producto); }
-                else { document.getElementById("nuevo-codigo").value = codigo; irAltaNueva(); }
+                document.getElementById("producto-resurtido").value = codigo;
+                manejarInputResurtido();
             }, () => {}
         ).catch(() => mostrarError("No se pudo acceder a la cámara."));
     }
