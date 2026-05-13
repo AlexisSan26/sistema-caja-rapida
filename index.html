@@ -81,6 +81,15 @@
 </head>
 <body class="bg-light">
 
+<div id="modal-login-saas" style="display:flex; position:fixed; top:0; left:0; width:100%; height:100%; background:#f8f9fa; z-index:99999; justify-content:center; align-items:center;">
+    <div class="card shadow-lg" style="width:90%; max-width:400px; padding:2.5rem; border-radius:12px;">
+        <h3 class="text-center mb-4 fw-bold">📦 Caja Rápida</h3>
+        <input type="text" id="login-user-saas" class="form-control mb-3 form-control-lg" placeholder="Usuario">
+        <input type="password" id="login-pass-saas" class="form-control mb-4 form-control-lg" placeholder="Contraseña">
+        <button class="btn btn-success w-100 btn-lg shadow-sm" onclick="loginSaaS()">Ingresar al Sistema</button>
+    </div>
+</div>
+
 <button id="btn-menu" onclick="toggleMenu()">☰</button>
 
 <div id="menu-lateral">
@@ -96,13 +105,13 @@
         </button>
         <button class="menu-item" id="menu-fiados" onclick="irA('fiados')">💳 Fiados</button>
         <button class="menu-item" id="menu-historial" onclick="irA('historial')">📅 Historial</button>
+        <button class="menu-item text-danger mt-auto" onclick="logoutSaaS()">🚪 Cerrar Sesión</button>
     </div>
 </div>
 
 <div id="aviso-error">⚠️ Sin conexión — reintentando...</div>
 <button id="btn-flotante" onclick="abrirFlujoResurtido()" title="Agregar mercancía">➕</button>
 
-<!-- ══ PANTALLA: CAJA ══ -->
 <div id="pantalla-caja" class="pantalla activa">
 <div class="container mt-4" style="max-width:600px;">
     <h2 class="text-center mb-1" style="margin-top:2.5rem;">Caja Rápida</h2>
@@ -127,7 +136,6 @@
                     <option value="FONDO_CAJA">Fondo de Caja (Inicio)</option>
                 </select>
             </div>
-            <!-- Selector de cliente (solo visible en FIADO) -->
             <div class="mb-3" id="div-cliente" style="display:none;">
                 <label class="fw-bold">Cliente:</label>
                 <select id="select-cliente" class="form-select form-select-lg">
@@ -135,7 +143,6 @@
                 </select>
             </div>
 
-            <!-- ══ LISTA PREVIA DE PRODUCTOS (CARRITO) ══ -->
             <div id="div-carrito" style="display:none;" class="mb-3">
                 <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos</div>
                 <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
@@ -151,7 +158,6 @@
                         <tbody id="cuerpo-carrito"></tbody>
                     </table>
                 </div>
-                <!-- Total grande -->
                 <div class="text-end mt-3 px-1">
                     <div class="text-muted" style="font-size:.85rem;">Total de la venta</div>
                     <div id="total-carrito" class="fw-bold" style="font-size:2rem;color:#198754;">$0.00</div>
@@ -179,7 +185,6 @@
                     </div>
                 </div>
             </div>
-            <!-- Botón agregar a lista (solo ventas/fiado) -->
             <div id="div-btn-agregar" class="mb-3" style="display:none;">
                 <button class="btn btn-outline-success w-100 btn-lg" onclick="agregarALista()">➕ Agregar a lista</button>
             </div>
@@ -219,7 +224,6 @@
 </div>
 </div>
 
-<!-- ══ PANTALLA: INVENTARIO ══ -->
 <div id="pantalla-inventario" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">📋 Inventario</h4>
@@ -236,7 +240,6 @@
 </div>
 </div>
 
-<!-- ══ PANTALLA: ALERTAS ══ -->
 <div id="pantalla-alertas" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">🔔 Alertas</h4>
@@ -244,7 +247,6 @@
 </div>
 </div>
 
-<!-- ══ PANTALLA: FIADOS ══ -->
 <div id="pantalla-fiados" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">💳 Fiados</h4>
@@ -253,7 +255,6 @@
 </div>
 </div>
 
-<!-- ══ PANTALLA: HISTORIAL ══ -->
 <div id="pantalla-historial" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">📅 Historial de Cortes</h4>
@@ -267,7 +268,6 @@
 </div>
 </div>
 
-<!-- ══ MODAL: RESURTIDO ══ -->
 <div id="modal-resurtido" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9000;overflow-y:auto;">
     <div style="background:white;margin:2rem auto;max-width:500px;border-radius:12px;padding:1.5rem;">
 
@@ -275,8 +275,7 @@
             <h5 class="mb-3">Resurtido de Mercancía 📦</h5>
 
             <div id="div-carrito-resurtido" style="display:none;" class="mb-3">
-                <!-- Se inyectará el contenido mediante JS -->
-            </div>
+                </div>
 
             <div class="mb-3">
                 <label class="fw-bold">Producto:</label>
@@ -351,7 +350,6 @@
     </div>
 </div>
 
-<!-- ══ MODAL: NUEVO CLIENTE ══ -->
 <div id="modal-nuevo-cliente" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9100;overflow-y:auto;">
     <div style="background:white;margin:4rem auto;max-width:400px;border-radius:12px;padding:1.5rem;">
         <h5 class="mb-3">Nuevo cliente</h5>
@@ -368,7 +366,6 @@
     </div>
 </div>
 
-<!-- ══ BOTTOM SHEET: cuenta de fiado ══ -->
 <div id="bs-fiado-overlay" onclick="cerrarBsFiado()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9500;"></div>
 <div id="bs-fiado" style="position:fixed;bottom:0;left:0;right:0;background:white;border-radius:16px 16px 0 0;padding:1.25rem 1.25rem 2rem;max-height:92vh;overflow-y:auto;z-index:9600;transform:translateY(100%);transition:transform .3s ease;">
     <div class="sheet-handle"></div>
@@ -383,19 +380,16 @@
         </div>
     </div>
 
-    <!-- Historial de lo que debe -->
     <div class="mb-3">
         <div class="fw-bold mb-1" style="font-size:.85rem;color:#6c757d;text-transform:uppercase;">Lo que debe</div>
         <div id="bs-fiado-detalle" class="tabla-scroll" style="max-height:160px;"></div>
     </div>
 
-    <!-- Abonos -->
     <div class="mb-3">
         <div class="fw-bold mb-1" style="font-size:.85rem;color:#6c757d;text-transform:uppercase;">Abonos</div>
         <div id="bs-fiado-abonos" class="tabla-scroll" style="max-height:100px;"></div>
     </div>
 
-    <!-- Registrar abono -->
     <div class="card border-success mb-3">
         <div class="card-body py-2">
             <label class="fw-bold mb-1">Registrar abono ($)</label>
@@ -409,7 +403,6 @@
     <button class="btn btn-outline-secondary w-100" onclick="cerrarBsFiado()">Cerrar</button>
 </div>
 
-<!-- ══ BOTTOM SHEET: inventario ══ -->
 <div id="bottom-sheet-overlay" onclick="cerrarBottomSheet()"></div>
 <div id="bottom-sheet">
     <div class="sheet-handle"></div>
@@ -450,12 +443,63 @@
 </div>
 
 <script>
+    const API_URL = "https://sistema-caja-rapida.onrender.com";
+
+    // --- INTERCEPTOR SAAS ---
+    const originalFetch = window.fetch;
+    window.fetch = async (url, options = {}) => {
+        if (typeof url === 'string' && url.startsWith(API_URL) && !url.includes('/login')) {
+            const token = localStorage.getItem('saas_token');
+            if (token) {
+                options.headers = {
+                    ...options.headers,
+                    'Authorization': `Bearer ${token}`
+                };
+            }
+        }
+        const res = await originalFetch(url, options);
+        if (res.status === 401 || res.status === 403) {
+            logoutSaaS();
+        }
+        return res;
+    };
+
+    // --- LÓGICA DE LOGIN SAAS ---
+    async function loginSaaS() {
+        const usr = document.getElementById('login-user-saas').value.trim();
+        const pwd = document.getElementById('login-pass-saas').value.trim();
+        if(!usr || !pwd) return alert("Ingresa usuario y contraseña.");
+
+        try {
+            const res = await originalFetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: usr, password: pwd})
+            });
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('saas_token', data.access_token);
+                document.getElementById('modal-login-saas').style.display = 'none';
+                window.location.reload();
+            } else {
+                alert('❌ Usuario o contraseña incorrectos.');
+            }
+        } catch(e) {
+            alert('❌ Error al conectar con el servidor.');
+        }
+    }
+
+    function logoutSaaS() {
+        localStorage.removeItem('saas_token');
+        document.getElementById('modal-login-saas').style.display = 'flex';
+        cerrarMenu();
+    }
+
     // ─── Variables globales ───────────────────────────────────────────────────
     let idTurnoActual = null;
     let productosMemoria = [];
     let intervaloActualizacion = null;
     let idsEnTabla = new Set();
-    const API_URL = "https://sistema-caja-rapida.onrender.com";
     let todosLosProductos = [];
     let proveedorFiltro = "";
     let scannerCaja = null;
@@ -1742,11 +1786,19 @@
         document.getElementById("escaner-resurtido-container").style.display = "none";
     }
 
-    // ─── Init ─────────────────────────────────────────────────────────────────
+   // ─── Init ─────────────────────────────────────────────────────────────────
     window.onload = function () {
-        mostrarFechaDelDia();
-        verificarEstadoInicial();
-        setTimeout(cargarAlertas, 2000);
+        // 1. Revisamos si el usuario ya tiene su token guardado
+        if (!localStorage.getItem('saas_token')) {
+            // Si no tiene token, forzamos a que vea el login
+            document.getElementById('modal-login-saas').style.display = 'flex';
+        } else {
+            // Si ya tiene token, ocultamos el login y arrancamos la app normal
+            document.getElementById('modal-login-saas').style.display = 'none';
+            mostrarFechaDelDia();
+            verificarEstadoInicial();
+            setTimeout(cargarAlertas, 2000);
+        }
     };
 </script>
 </body>

@@ -1,11 +1,15 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from enum import Enum
 import mysql.connector
 from dotenv import load_dotenv
 import mysql.connector.pooling
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 load_dotenv()
 
@@ -26,17 +30,52 @@ db_config = {
     'password': os.getenv('DB_PASSWORD'),
     'database': os.getenv('DB_NAME'),
 }
-# ─── EL ACELERADOR: Pool de conexiones ────────────────────────────────────────
-# Esto abre 5 conexiones fijas a Aiven y las recicla, haciendo todo 10x más rápido
+
+# ─── RENDIMIENTO: Pool de conexiones a 8 ──────────────────────────────────────
 db_pool = mysql.connector.pooling.MySQLConnectionPool(
-    pool_name="cajapool",
-    pool_size=5,
+    pool_name="cajapool_saas",
+    pool_size=8,
     pool_reset_session=True,
     **db_config
 )
 
+# ─── SEGURIDAD: JWT y Bcrypt ──────────────────────────────────────────────────
+SECRET_KEY = os.getenv("SECRET_KEY", "super_secret_key_caja_rapida_saas")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 días
 
-# ─── Modelos ──────────────────────────────────────────────────────────────────
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+
+class TokenData(BaseModel):
+    id_tienda: int
+    id_usuario: int
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciales inválidas o token expirado",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        id_tienda: int = payload.get("id_tienda")
+        id_usuario: int = payload.get("id_usuario")
+        if id_tienda is None or id_usuario is None:
+            raise credentials_exception
+        return TokenData(id_tienda=id_tienda, id_usuario=id_usuario)
+    except JWTError:
+        raise credentials_exception
+
+
+# ─── Modelos Operativos ───────────────────────────────────────────────────────
 class TiposPermitidos(str, Enum):
     VENTA = "VENTA"
     FIADO = "FIADO"
@@ -91,7 +130,6 @@ class ResurtidoPorCodigo(BaseModel):
     fecha_caducidad: str | None = None
 
 
-# Nuevos modelos para Entrada en Lote
 class ItemEntradaLote(BaseModel):
     id_producto: int
     cantidad: int
@@ -103,7 +141,6 @@ class EntradaLote(BaseModel):
     nota_general: str | None = None
 
 
-# ─── Modelos fiados (nuevos) ──────────────────────────────────────────────────
 class ClienteNuevo(BaseModel):
     nombre: str
     telefono: str | None = None
@@ -124,9 +161,19 @@ class AbonoFiado(BaseModel):
     nota: str | None = None
 
 
+class ItemVenta(BaseModel):
+    producto: str
+    cantidad: float = 1.0
+    precio_unitario: float
+
+
+class VentaLote(BaseModel):
+    id_turno: int
+    items: list[ItemVenta]
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def conectar_bd():
-    # En lugar de conectarse desde cero, toma una conexión "caliente" del pool
     conexion = db_pool.get_connection()
     cursor = conexion.cursor()
     cursor.execute("SET time_zone = '-06:00';")
@@ -134,20 +181,20 @@ def conectar_bd():
     return conexion
 
 
-def _calcular_resumen(cursor, id_turno: int) -> dict:
+def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
     cursor.execute(
-        "SELECT fecha_apertura FROM turnos WHERE id_turno = %s", (id_turno,)
+        "SELECT fecha_apertura FROM turnos WHERE id_turno = %s AND id_tienda = %s",
+        (id_turno, id_tienda)
     )
     res = cursor.fetchone()
     fecha_apertura = res['fecha_apertura'] if res else None
 
-    # TAREA 2: Desglose de ingresos y retiros separados
     cursor.execute("""
         SELECT
             SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ingresos,
             SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros
-        FROM movimientos WHERE id_turno = %s
-    """, (id_turno,))
+        FROM movimientos WHERE id_turno = %s AND id_tienda = %s
+    """, (id_turno, id_tienda))
     res_total = cursor.fetchone()
 
     total_ingresos = float(res_total['ingresos']) if res_total and res_total['ingresos'] else 0.0
@@ -157,18 +204,18 @@ def _calcular_resumen(cursor, id_turno: int) -> dict:
     cursor.execute("""
         SELECT SUM(total_movimiento) AS total_c
         FROM movimientos
-        WHERE id_turno = %s AND tipo_movimiento = 'VENTA'
+        WHERE id_turno = %s AND id_tienda = %s AND tipo_movimiento = 'VENTA'
         AND (producto LIKE '%cigarro%' OR producto LIKE '%time%')
-    """, (id_turno,))
+    """, (id_turno, id_tienda))
     res_c = cursor.fetchone()
     total_cigarros = float(res_c['total_c']) if res_c and res_c['total_c'] else 0.0
 
     cursor.execute("""
         SELECT SUM(total_movimiento) AS total_h
         FROM movimientos
-        WHERE id_turno = %s AND tipo_movimiento = 'VENTA'
+        WHERE id_turno = %s AND id_tienda = %s AND tipo_movimiento = 'VENTA'
         AND producto LIKE '%helado%'
-    """, (id_turno,))
+    """, (id_turno, id_tienda))
     res_h = cursor.fetchone()
     total_helados = float(res_h['total_h']) if res_h and res_h['total_h'] else 0.0
 
@@ -183,7 +230,32 @@ def _calcular_resumen(cursor, id_turno: int) -> dict:
     }
 
 
-# ─── Endpoints existentes ─────────────────────────────────────────────────────
+# ─── Auth Endpoint ────────────────────────────────────────────────────────────
+@app.post("/login")
+def login(datos: LoginRequest):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT id_usuario, id_tienda, password_hash FROM usuarios WHERE username = %s",
+            (datos.username,)
+        )
+        user = cursor.fetchone()
+        if not user or not pwd_context.verify(datos.password, user['password_hash']):
+            raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        encoded_jwt = jwt.encode(
+            {"id_tienda": user['id_tienda'], "id_usuario": user['id_usuario'], "exp": expire},
+            SECRET_KEY, algorithm=ALGORITHM
+        )
+        return {"access_token": encoded_jwt, "token_type": "bearer"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ─── Endpoints Operativos ─────────────────────────────────────────────────────
 @app.get("/despertar")
 async def despertar():
     return {"estado": "despierto", "mensaje": "Servidor listo para el turno"}
@@ -191,15 +263,16 @@ async def despertar():
 
 @app.get("/")
 def inicio():
-    return {"mensaje": "API del Sistema de Caja funcionando al 100%"}
+    return {"mensaje": "API del Sistema de Caja SaaS funcionando"}
 
 
 @app.get("/turno_actual")
-def obtener_turno_actual():
+def obtener_turno_actual(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id_turno, estado FROM turnos WHERE estado = 'ABIERTO' LIMIT 1")
+        cursor.execute("SELECT id_turno, estado FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
+                       (user.id_tienda,))
         turno = cursor.fetchone()
         return turno if turno else {"estado": "CERRADO"}
     finally:
@@ -208,15 +281,16 @@ def obtener_turno_actual():
 
 
 @app.post("/abrir_turno")
-def abrir_turno():
+def abrir_turno(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id_turno FROM turnos WHERE estado = 'ABIERTO' LIMIT 1")
+        cursor.execute("SELECT id_turno FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
+                       (user.id_tienda,))
         existente = cursor.fetchone()
         if existente:
             return {"mensaje": "Ya hay un turno abierto", "id_turno": existente['id_turno']}
-        cursor.execute("INSERT INTO turnos (estado) VALUES ('ABIERTO')")
+        cursor.execute("INSERT INTO turnos (estado, id_tienda) VALUES ('ABIERTO', %s)", (user.id_tienda,))
         conexion.commit()
         return {"mensaje": "Turno abierto con éxito", "id_turno": cursor.lastrowid}
     finally:
@@ -225,7 +299,7 @@ def abrir_turno():
 
 
 @app.post("/registrar_movimiento")
-def registrar(mov: Movimiento):
+def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
@@ -234,28 +308,27 @@ def registrar(mov: Movimiento):
             mov.cantidad = 1.0
 
         cursor.execute("""
-            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (mov.id_turno, mov.tipo_movimiento, nombre_limpio, mov.cantidad, mov.precio_unitario))
+            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (mov.id_turno, mov.tipo_movimiento, nombre_limpio, mov.cantidad, mov.precio_unitario, user.id_tienda))
 
-        # ── Descuenta stock automáticamente en ventas ─────────────────────────
         if mov.tipo_movimiento == 'VENTA' and nombre_limpio not in ("", "Venta sin nombre"):
             cursor.execute(
-                "SELECT COUNT(*) FROM productos WHERE nombre_producto = %s",
-                (nombre_limpio,)
+                "SELECT COUNT(*) FROM productos WHERE nombre_producto = %s AND id_tienda = %s",
+                (nombre_limpio, user.id_tienda)
             )
             existe = cursor.fetchone()[0] > 0
             if not existe:
                 cursor.execute(
-                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo) VALUES (%s, %s, 1)",
-                    (nombre_limpio, mov.precio_unitario)
+                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo, id_tienda) VALUES (%s, %s, 1, %s)",
+                    (nombre_limpio, mov.precio_unitario, user.id_tienda)
                 )
             else:
                 cursor.execute("""
                     UPDATE productos
                     SET stock_actual = stock_actual - %s
-                    WHERE nombre_producto = %s AND activo = 1
-                """, (int(mov.cantidad), nombre_limpio))
+                    WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                """, (int(mov.cantidad), nombre_limpio, user.id_tienda))
 
         conexion.commit()
         return {"mensaje": "Registro guardado correctamente"}
@@ -265,26 +338,26 @@ def registrar(mov: Movimiento):
 
 
 @app.delete("/borrar_movimiento/{id_movimiento}")
-def borrar_movimiento(id_movimiento: int):
+def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        # Obtener datos del movimiento antes de borrar
         cursor.execute(
-            "SELECT tipo_movimiento, producto, cantidad FROM movimientos WHERE id_movimiento = %s",
-            (id_movimiento,)
+            "SELECT tipo_movimiento, producto, cantidad FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
+            (id_movimiento, user.id_tienda)
         )
         mov = cursor.fetchone()
         if not mov:
             return {"mensaje": "Movimiento no encontrado"}
-        cursor.execute("DELETE FROM movimientos WHERE id_movimiento = %s", (id_movimiento,))
-        # Revertir stock solo si era una VENTA
+        cursor.execute("DELETE FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
+                       (id_movimiento, user.id_tienda))
+
         if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:
             cursor.execute("""
                 UPDATE productos
                 SET stock_actual = stock_actual + %s
-                WHERE nombre_producto = %s AND activo = 1
-            """, (int(mov["cantidad"]), mov["producto"]))
+                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+            """, (int(mov["cantidad"]), mov["producto"], user.id_tienda))
         conexion.commit()
         return {"mensaje": "Movimiento cancelado"}
     finally:
@@ -293,13 +366,13 @@ def borrar_movimiento(id_movimiento: int):
 
 
 @app.put("/actualizar_precio")
-def actualizar_precio(datos: ActualizacionPrecio):
+def actualizar_precio(datos: ActualizacionPrecio, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         cursor.execute(
-            "UPDATE productos SET precio_sugerido = %s WHERE nombre_producto = %s",
-            (datos.nuevo_precio, datos.nombre_producto)
+            "UPDATE productos SET precio_sugerido = %s WHERE nombre_producto = %s AND id_tienda = %s",
+            (datos.nuevo_precio, datos.nombre_producto, user.id_tienda)
         )
         conexion.commit()
         if cursor.rowcount > 0:
@@ -311,31 +384,31 @@ def actualizar_precio(datos: ActualizacionPrecio):
 
 
 @app.post("/corte_caja/{id_turno}")
-def hacer_corte(id_turno: int):
+def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
-            "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO' WHERE id_turno = %s",
-            (id_turno,)
+            "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO' WHERE id_turno = %s AND id_tienda = %s",
+            (id_turno, user.id_tienda)
         )
         conexion.commit()
-        return _calcular_resumen(cursor, id_turno)
+        return _calcular_resumen(cursor, id_turno, user.id_tienda)
     finally:
         cursor.close()
         conexion.close()
 
 
 @app.get("/historial_turnos")
-def historial_turnos():
+def historial_turnos(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
             SELECT id_turno, fecha_apertura, fecha_cierre
-            FROM turnos WHERE estado = 'CERRADO'
+            FROM turnos WHERE estado = 'CERRADO' AND id_tienda = %s
             ORDER BY id_turno DESC LIMIT 30
-        """)
+        """, (user.id_tienda,))
         return cursor.fetchall()
     finally:
         cursor.close()
@@ -343,18 +416,18 @@ def historial_turnos():
 
 
 @app.get("/resumen_turno/{id_turno}")
-def resumen_turno(id_turno: int):
+def resumen_turno(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        return _calcular_resumen(cursor, id_turno)
+        return _calcular_resumen(cursor, id_turno, user.id_tienda)
     finally:
         cursor.close()
         conexion.close()
 
 
 @app.get("/movimientos_turno/{id_turno}")
-def obtener_movimientos(id_turno: int):
+def obtener_movimientos(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
@@ -362,9 +435,9 @@ def obtener_movimientos(id_turno: int):
             SELECT id_movimiento, cantidad, producto, total_movimiento, tipo_movimiento,
                    TIME_FORMAT(fecha_hora, '%H:%i') as hora
             FROM movimientos
-            WHERE id_turno = %s
+            WHERE id_turno = %s AND id_tienda = %s
             ORDER BY id_movimiento DESC
-        """, (id_turno,))
+        """, (id_turno, user.id_tienda))
         return cursor.fetchall()
     finally:
         cursor.close()
@@ -372,7 +445,7 @@ def obtener_movimientos(id_turno: int):
 
 
 @app.get("/buscar_productos")
-def buscar_productos(q: str = ""):
+def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
@@ -381,14 +454,15 @@ def buscar_productos(q: str = ""):
                 SELECT p.nombre_producto, p.precio_sugerido
                 FROM productos p
                 LEFT JOIN (
-                    SELECT producto, COUNT(*) as ventas FROM movimientos GROUP BY producto
+                    SELECT producto, COUNT(*) as ventas FROM movimientos WHERE id_tienda = %s GROUP BY producto
                 ) m ON p.nombre_producto = m.producto
+                WHERE p.id_tienda = %s AND p.activo = 1
                 ORDER BY m.ventas DESC LIMIT 15
-            """)
+            """, (user.id_tienda, user.id_tienda))
         else:
             cursor.execute(
-                "SELECT nombre_producto, precio_sugerido FROM productos WHERE nombre_producto LIKE %s AND activo = 1 LIMIT 10",
-                (f"%{q}%",)
+                "SELECT nombre_producto, precio_sugerido FROM productos WHERE nombre_producto LIKE %s AND activo = 1 AND id_tienda = %s LIMIT 10",
+                (f"%{q}%", user.id_tienda)
             )
         return cursor.fetchall()
     finally:
@@ -397,12 +471,13 @@ def buscar_productos(q: str = ""):
 
 
 @app.get("/productos")
-def obtener_todos_productos():
+def obtener_todos_productos(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
-            "SELECT nombre_producto, precio_sugerido, codigo_barras FROM productos WHERE activo = 1 ORDER BY nombre_producto"
+            "SELECT nombre_producto, precio_sugerido, codigo_barras FROM productos WHERE activo = 1 AND id_tienda = %s ORDER BY nombre_producto",
+            (user.id_tienda,)
         )
         return cursor.fetchall()
     finally:
@@ -410,17 +485,16 @@ def obtener_todos_productos():
         conexion.close()
 
 
-# ─── Endpoints de inventario ──────────────────────────────────────────────────
 @app.get("/producto_por_codigo/{codigo}")
-def producto_por_codigo(codigo: str):
+def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
             SELECT id_producto, nombre_producto, precio_sugerido,
                    stock_actual, stock_minimo, proveedor, fecha_caducidad, codigo_barras
-            FROM productos WHERE codigo_barras = %s AND activo = 1
-        """, (codigo,))
+            FROM productos WHERE codigo_barras = %s AND activo = 1 AND id_tienda = %s
+        """, (codigo, user.id_tienda))
         producto = cursor.fetchone()
         if producto:
             return {"encontrado": True, "producto": producto}
@@ -431,18 +505,18 @@ def producto_por_codigo(codigo: str):
 
 
 @app.post("/registrar_producto")
-def registrar_producto(p: ProductoNuevo):
+def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         cursor.execute("""
             INSERT INTO productos
             (codigo_barras, nombre_producto, precio_sugerido,
-             stock_actual, stock_minimo, proveedor, fecha_caducidad, activo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 1)
+             stock_actual, stock_minimo, proveedor, fecha_caducidad, activo, id_tienda)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s)
         """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido,
               p.stock_actual, p.stock_minimo, p.proveedor or None,
-              p.fecha_caducidad or None))
+              p.fecha_caducidad or None, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Producto registrado", "id_producto": cursor.lastrowid}
     finally:
@@ -451,7 +525,7 @@ def registrar_producto(p: ProductoNuevo):
 
 
 @app.put("/actualizar_producto/{id_producto}")
-def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
+def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
@@ -464,12 +538,12 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
                 proveedor       = %s,
                 codigo_barras   = %s,
                 fecha_caducidad = %s
-            WHERE id_producto = %s AND activo = 1
+            WHERE id_producto = %s AND activo = 1 AND id_tienda = %s
         """, (
             datos.nombre_producto, datos.precio_sugerido,
             datos.stock_actual, datos.stock_minimo,
             datos.proveedor or None, datos.codigo_barras or None,
-            datos.fecha_caducidad or None, id_producto
+            datos.fecha_caducidad or None, id_producto, user.id_tienda
         ))
         conexion.commit()
         if cursor.rowcount > 0:
@@ -481,14 +555,13 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto):
 
 
 @app.delete("/eliminar_producto/{id_producto}")
-def eliminar_producto(id_producto: int):
+def eliminar_producto(id_producto: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
-        # Soft delete: Cambiamos el estado a 2 (Inactivo) en lugar de borrarlo
         cursor.execute(
-            "UPDATE productos SET activo = 2 WHERE id_producto = %s",
-            (id_producto,)
+            "UPDATE productos SET activo = 2 WHERE id_producto = %s AND id_tienda = %s",
+            (id_producto, user.id_tienda)
         )
         conexion.commit()
         if cursor.rowcount > 0:
@@ -500,23 +573,23 @@ def eliminar_producto(id_producto: int):
 
 
 @app.post("/entrada_mercancia")
-def entrada_mercancia(e: EntradaMercancia):
+def entrada_mercancia(e: EntradaMercancia, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         cursor.execute(
-            "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s",
-            (e.cantidad, e.id_producto)
+            "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s AND id_tienda = %s",
+            (e.cantidad, e.id_producto, user.id_tienda)
         )
         if e.fecha_caducidad:
             cursor.execute(
-                "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s",
-                (e.fecha_caducidad, e.id_producto)
+                "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s AND id_tienda = %s",
+                (e.fecha_caducidad, e.id_producto, user.id_tienda)
             )
         cursor.execute("""
-            INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas)
-            VALUES (%s, %s, %s, %s)
-        """, (e.id_producto, e.cantidad, e.fecha_caducidad or None, e.notas or None))
+            INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas, id_tienda)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (e.id_producto, e.cantidad, e.fecha_caducidad or None, e.notas or None, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Entrada registrada correctamente"}
     finally:
@@ -524,30 +597,28 @@ def entrada_mercancia(e: EntradaMercancia):
         conexion.close()
 
 
-# Nuevo endpoint para Entrada en Lote
 @app.post("/entrada_mercancia_lote")
-def entrada_mercancia_lote(lote: EntradaLote):
+def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_current_user)):
     if not lote.items:
         return {"error": "El lote está vacío"}
-
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         for item in lote.items:
             cursor.execute(
-                "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s",
-                (item.cantidad, item.id_producto)
+                "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s AND id_tienda = %s",
+                (item.cantidad, item.id_producto, user.id_tienda)
             )
             if item.fecha_caducidad:
                 cursor.execute(
-                    "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s",
-                    (item.fecha_caducidad, item.id_producto)
+                    "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s AND id_tienda = %s",
+                    (item.fecha_caducidad, item.id_producto, user.id_tienda)
                 )
             cursor.execute("""
-                INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas)
-                VALUES (%s, %s, %s, %s)
-            """, (item.id_producto, item.cantidad, item.fecha_caducidad or None, lote.nota_general or None))
-
+                INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas, id_tienda)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+            item.id_producto, item.cantidad, item.fecha_caducidad or None, lote.nota_general or None, user.id_tienda))
         conexion.commit()
         return {"mensaje": f"Se registraron {len(lote.items)} productos correctamente"}
     finally:
@@ -556,29 +627,29 @@ def entrada_mercancia_lote(lote: EntradaLote):
 
 
 @app.post("/resurtir_por_codigo")
-def resurtir_por_codigo(r: ResurtidoPorCodigo):
+def resurtir_por_codigo(r: ResurtidoPorCodigo, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
-            "SELECT id_producto, nombre_producto FROM productos WHERE codigo_barras = %s AND activo = 1",
-            (r.codigo_barras,)
+            "SELECT id_producto, nombre_producto FROM productos WHERE codigo_barras = %s AND activo = 1 AND id_tienda = %s",
+            (r.codigo_barras, user.id_tienda)
         )
         producto = cursor.fetchone()
         if not producto:
             return {"encontrado": False, "mensaje": "Producto no encontrado"}
         cursor.execute(
-            "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s",
-            (r.cantidad, producto['id_producto'])
+            "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s AND id_tienda = %s",
+            (r.cantidad, producto['id_producto'], user.id_tienda)
         )
         if r.fecha_caducidad:
             cursor.execute(
-                "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s",
-                (r.fecha_caducidad, producto['id_producto'])
+                "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s AND id_tienda = %s",
+                (r.fecha_caducidad, producto['id_producto'], user.id_tienda)
             )
         cursor.execute(
-            "INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad) VALUES (%s, %s, %s)",
-            (producto['id_producto'], r.cantidad, r.fecha_caducidad or None)
+            "INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, id_tienda) VALUES (%s, %s, %s, %s)",
+            (producto['id_producto'], r.cantidad, r.fecha_caducidad or None, user.id_tienda)
         )
         conexion.commit()
         return {"encontrado": True, "mensaje": f"Stock de {producto['nombre_producto']} actualizado"}
@@ -588,15 +659,15 @@ def resurtir_por_codigo(r: ResurtidoPorCodigo):
 
 
 @app.get("/inventario")
-def listar_inventario(q: str = "", proveedor: str = ""):
+def listar_inventario(q: str = "", proveedor: str = "", user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
         sql = """SELECT id_producto, codigo_barras, nombre_producto,
                         precio_sugerido, stock_actual, stock_minimo,
                         proveedor, fecha_caducidad
-                 FROM productos WHERE activo = 1"""
-        params = []
+                 FROM productos WHERE activo = 1 AND id_tienda = %s"""
+        params = [user.id_tienda]
         if q:
             sql += " AND nombre_producto LIKE %s"
             params.append(f"%{q}%")
@@ -612,11 +683,23 @@ def listar_inventario(q: str = "", proveedor: str = ""):
 
 
 @app.get("/alertas")
-def obtener_alertas():
+def obtener_alertas(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM v_alertas")
+        cursor.execute("""
+            SELECT id_producto, codigo_barras, nombre_producto, stock_actual, stock_minimo, proveedor, fecha_caducidad,
+                CASE 
+                    WHEN stock_actual <= stock_minimo THEN 'STOCK_BAJO' 
+                    WHEN fecha_caducidad IS NOT NULL AND fecha_caducidad <= DATE_ADD(NOW(), INTERVAL 7 DAY) THEN 'POR_CADUCAR' 
+                    ELSE 'OK' 
+                END as alerta 
+            FROM productos 
+            WHERE activo = 1 AND id_tienda = %s AND (
+                stock_actual <= stock_minimo OR (fecha_caducidad IS NOT NULL AND fecha_caducidad <= DATE_ADD(NOW(), INTERVAL 7 DAY))
+            )
+            ORDER BY alerta DESC, fecha_caducidad
+        """, (user.id_tienda,))
         return cursor.fetchall()
     finally:
         cursor.close()
@@ -624,12 +707,13 @@ def obtener_alertas():
 
 
 @app.get("/proveedores")
-def listar_proveedores():
+def listar_proveedores(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         cursor.execute(
-            "SELECT DISTINCT proveedor FROM productos WHERE proveedor IS NOT NULL AND activo = 1 ORDER BY proveedor"
+            "SELECT DISTINCT proveedor FROM productos WHERE proveedor IS NOT NULL AND activo = 1 AND id_tienda = %s ORDER BY proveedor",
+            (user.id_tienda,)
         )
         return [row[0] for row in cursor.fetchall()]
     finally:
@@ -638,13 +722,13 @@ def listar_proveedores():
 
 
 @app.post("/descontar_stock/{id_producto}")
-def descontar_stock(id_producto: int, cantidad: float = 1):
+def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         cursor.execute(
-            "UPDATE productos SET stock_actual = stock_actual - %s WHERE id_producto = %s",
-            (int(cantidad), id_producto)
+            "UPDATE productos SET stock_actual = stock_actual - %s WHERE id_producto = %s AND id_tienda = %s",
+            (int(cantidad), id_producto, user.id_tienda)
         )
         conexion.commit()
         return {"mensaje": "Stock actualizado"}
@@ -653,10 +737,8 @@ def descontar_stock(id_producto: int, cantidad: float = 1):
         conexion.close()
 
 
-# ─── Endpoints de fiados (nuevos) ─────────────────────────────────────────────
-
 @app.get("/clientes")
-def listar_clientes():
+def listar_clientes(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
@@ -666,18 +748,18 @@ def listar_clientes():
                      (SELECT SUM(df.cantidad * df.precio)
                       FROM detalle_fiado df
                       JOIN cuentas_fiado cf ON df.id_cuenta = cf.id_cuenta
-                      WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA')
+                      WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA' AND df.id_tienda = %s)
                    , 0) -
                    COALESCE(
                      (SELECT SUM(a.monto)
                       FROM abonos a
                       JOIN cuentas_fiado cf ON a.id_cuenta = cf.id_cuenta
-                      WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA')
+                      WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA' AND a.id_tienda = %s)
                    , 0) AS saldo_actual
             FROM clientes c
-            WHERE c.activo = 1
+            WHERE c.activo = 1 AND c.id_tienda = %s
             ORDER BY c.nombre ASC
-        """)
+        """, (user.id_tienda, user.id_tienda, user.id_tienda))
         return cursor.fetchall()
     finally:
         cursor.close()
@@ -685,19 +767,18 @@ def listar_clientes():
 
 
 @app.post("/clientes")
-def crear_cliente(c: ClienteNuevo):
+def crear_cliente(c: ClienteNuevo, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
         cursor.execute(
-            "INSERT INTO clientes (nombre, telefono) VALUES (%s, %s)",
-            (c.nombre.strip(), c.telefono or None)
+            "INSERT INTO clientes (nombre, telefono, id_tienda) VALUES (%s, %s, %s)",
+            (c.nombre.strip(), c.telefono or None, user.id_tienda)
         )
         id_cliente = cursor.lastrowid
-        # Abre cuenta de fiado automáticamente
         cursor.execute(
-            "INSERT INTO cuentas_fiado (id_cliente) VALUES (%s)",
-            (id_cliente,)
+            "INSERT INTO cuentas_fiado (id_cliente, id_tienda) VALUES (%s, %s)",
+            (id_cliente, user.id_tienda)
         )
         conexion.commit()
         return {"mensaje": "Cliente registrado", "id_cliente": id_cliente}
@@ -707,23 +788,22 @@ def crear_cliente(c: ClienteNuevo):
 
 
 @app.delete("/clientes/{id_cliente}")
-def eliminar_cliente(id_cliente: int):
+def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        # Verificar si tiene saldo pendiente
         cursor.execute("""
             SELECT COALESCE(SUM(df.cantidad * df.precio), 0) - COALESCE(SUM(a.monto), 0) AS saldo
             FROM cuentas_fiado cf
             LEFT JOIN detalle_fiado df ON df.id_cuenta = cf.id_cuenta
             LEFT JOIN abonos a ON a.id_cuenta = cf.id_cuenta
-            WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA'
-        """, (id_cliente,))
+            WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA' AND cf.id_tienda = %s
+        """, (id_cliente, user.id_tienda))
         row = cursor.fetchone()
         if row and float(row["saldo"]) > 0:
-            return {
-                "error": f"El cliente tiene saldo pendiente de ${float(row['saldo']):.2f}. Salda la cuenta antes de eliminar."}
-        cursor.execute("UPDATE clientes SET activo = 0 WHERE id_cliente = %s", (id_cliente,))
+            return {"error": f"El cliente tiene saldo pendiente de ${float(row['saldo']):.2f}. Salda la cuenta antes."}
+        cursor.execute("UPDATE clientes SET activo = 0 WHERE id_cliente = %s AND id_tienda = %s",
+                       (id_cliente, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Cliente eliminado"}
     finally:
@@ -732,48 +812,44 @@ def eliminar_cliente(id_cliente: int):
 
 
 @app.get("/cuenta_fiado/{id_cliente}")
-def obtener_cuenta(id_cliente: int):
+def obtener_cuenta(id_cliente: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        # Datos del cliente
         cursor.execute(
-            "SELECT id_cliente, nombre, telefono FROM clientes WHERE id_cliente = %s AND activo = 1",
-            (id_cliente,)
+            "SELECT id_cliente, nombre, telefono FROM clientes WHERE id_cliente = %s AND activo = 1 AND id_tienda = %s",
+            (id_cliente, user.id_tienda)
         )
         cliente = cursor.fetchone()
         if not cliente:
             return {"error": "Cliente no encontrado"}
 
-        # Cuenta abierta
         cursor.execute(
-            "SELECT id_cuenta FROM cuentas_fiado WHERE id_cliente = %s AND estado = 'ABIERTA' LIMIT 1",
-            (id_cliente,)
+            "SELECT id_cuenta FROM cuentas_fiado WHERE id_cliente = %s AND estado = 'ABIERTA' AND id_tienda = %s LIMIT 1",
+            (id_cliente, user.id_tienda)
         )
         cuenta = cursor.fetchone()
         if not cuenta:
-            # Abre una cuenta nueva si no existe
-            cursor.execute("INSERT INTO cuentas_fiado (id_cliente) VALUES (%s)", (id_cliente,))
+            cursor.execute("INSERT INTO cuentas_fiado (id_cliente, id_tienda) VALUES (%s, %s)",
+                           (id_cliente, user.id_tienda))
             conexion.commit()
             id_cuenta = cursor.lastrowid
         else:
             id_cuenta = cuenta['id_cuenta']
 
-        # Detalle de lo que debe
         cursor.execute("""
             SELECT producto, cantidad, precio, (cantidad * precio) AS subtotal,
                    DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
-            FROM detalle_fiado WHERE id_cuenta = %s
+            FROM detalle_fiado WHERE id_cuenta = %s AND id_tienda = %s
             ORDER BY fecha_hora ASC
-        """, (id_cuenta,))
+        """, (id_cuenta, user.id_tienda))
         detalle = cursor.fetchall()
 
-        # Abonos
         cursor.execute("""
             SELECT monto, nota, DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
-            FROM abonos WHERE id_cuenta = %s
+            FROM abonos WHERE id_cuenta = %s AND id_tienda = %s
             ORDER BY fecha_hora ASC
-        """, (id_cuenta,))
+        """, (id_cuenta, user.id_tienda))
         abonos = cursor.fetchall()
 
         total_fiado = sum(float(d['subtotal']) for d in detalle)
@@ -795,22 +871,19 @@ def obtener_cuenta(id_cliente: int):
 
 
 @app.post("/agregar_fiado")
-def agregar_fiado(item: ItemFiado):
-    """Registra un producto fiado — no entra a caja, solo a la cuenta del cliente."""
+def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
-        # Guarda en detalle_fiado
         cursor.execute("""
-            INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio)
-            VALUES (%s, %s, %s, %s)
-        """, (item.id_cuenta, item.producto.strip(), item.cantidad, item.precio))
+            INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (item.id_cuenta, item.producto.strip(), item.cantidad, item.precio, user.id_tienda))
 
         cursor.execute("""
             UPDATE productos SET stock_actual = stock_actual - %s
-            WHERE nombre_producto = %s AND activo = 1
-        """, (int(item.cantidad), item.producto.strip()))
-
+            WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+        """, (int(item.cantidad), item.producto.strip(), user.id_tienda))
         conexion.commit()
         return {"mensaje": "Fiado registrado correctamente"}
     finally:
@@ -819,52 +892,45 @@ def agregar_fiado(item: ItemFiado):
 
 
 @app.post("/registrar_abono")
-def registrar_abono(abono: AbonoFiado):
-    """Registra un abono — entra a caja como COBRO_FIADO y descuenta la deuda."""
+def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-
-        # Obtener nombre del cliente para el concepto en movimientos
         cursor.execute("""
             SELECT c.nombre FROM clientes c
             JOIN cuentas_fiado cf ON c.id_cliente = cf.id_cliente
-            WHERE cf.id_cuenta = %s
-        """, (abono.id_cuenta,))
+            WHERE cf.id_cuenta = %s AND cf.id_tienda = %s
+        """, (abono.id_cuenta, user.id_tienda))
         res = cursor.fetchone()
         nombre_cliente = res['nombre'] if res else "Cliente"
 
-        # Guarda el abono en la tabla de abonos
         cursor.execute(
-            "INSERT INTO abonos (id_cuenta, monto, nota) VALUES (%s, %s, %s)",
-            (abono.id_cuenta, abono.monto, abono.nota or None)
+            "INSERT INTO abonos (id_cuenta, monto, nota, id_tienda) VALUES (%s, %s, %s, %s)",
+            (abono.id_cuenta, abono.monto, abono.nota or None, user.id_tienda)
         )
-
-        # Registra en movimientos para que entre al corte del día
         cursor.execute("""
-            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario)
-            VALUES (%s, 'COBRO_FIADO', %s, 1, %s)
-        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto))
+            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda)
+            VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s)
+        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto, user.id_tienda))
 
-        # Verifica si el saldo quedó en cero para saldar la cuenta
         cursor.execute("""
-            SELECT
-                COALESCE(SUM(df.cantidad * df.precio), 0) AS total_fiado
-            FROM detalle_fiado df WHERE df.id_cuenta = %s
-        """, (abono.id_cuenta,))
+            SELECT COALESCE(SUM(df.cantidad * df.precio), 0) AS total_fiado
+            FROM detalle_fiado df WHERE df.id_cuenta = %s AND df.id_tienda = %s
+        """, (abono.id_cuenta, user.id_tienda))
         tf = cursor.fetchone()
+
         cursor.execute(
-            "SELECT COALESCE(SUM(monto), 0) AS total_abonos FROM abonos WHERE id_cuenta = %s",
-            (abono.id_cuenta,)
+            "SELECT COALESCE(SUM(monto), 0) AS total_abonos FROM abonos WHERE id_cuenta = %s AND id_tienda = %s",
+            (abono.id_cuenta, user.id_tienda)
         )
         ta = cursor.fetchone()
+
         saldo_nuevo = float(tf['total_fiado']) - float(ta['total_abonos'])
         if saldo_nuevo <= 0:
             cursor.execute(
-                "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s",
-                (abono.id_cuenta,)
+                "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s AND id_tienda = %s",
+                (abono.id_cuenta, user.id_tienda)
             )
-
         conexion.commit()
         return {"mensaje": "Abono registrado", "saldo_restante": max(0, saldo_nuevo)}
     finally:
@@ -872,25 +938,8 @@ def registrar_abono(abono: AbonoFiado):
         conexion.close()
 
 
-@app.get("/ping")
-def ping():
-    return {"status": "ok"}
-
-
-# ─── Venta en lote (todos los productos del carrito en una sola petición) ──────
-class ItemVenta(BaseModel):
-    producto: str
-    cantidad: float = 1.0
-    precio_unitario: float
-
-
-class VentaLote(BaseModel):
-    id_turno: int
-    items: list[ItemVenta]
-
-
 @app.post("/registrar_venta_lote")
-def registrar_venta_lote(venta: VentaLote):
+def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current_user)):
     if not venta.items:
         return {"error": "Sin items"}
     conexion = conectar_bd()
@@ -899,23 +948,23 @@ def registrar_venta_lote(venta: VentaLote):
         for i in venta.items:
             nombre_limpio = i.producto.strip() if i.producto else "Venta sin nombre"
             cursor.execute(
-                "INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario) VALUES (%s, 'VENTA', %s, %s, %s)",
-                (venta.id_turno, nombre_limpio, i.cantidad, i.precio_unitario)
+                "INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda) VALUES (%s, 'VENTA', %s, %s, %s, %s)",
+                (venta.id_turno, nombre_limpio, i.cantidad, i.precio_unitario, user.id_tienda)
             )
-            # Descuenta stock o crea producto nuevo igual que registrar_movimiento
-            cursor.execute("SELECT COUNT(*) FROM productos WHERE nombre_producto = %s", (nombre_limpio,))
+            cursor.execute("SELECT COUNT(*) FROM productos WHERE nombre_producto = %s AND id_tienda = %s",
+                           (nombre_limpio, user.id_tienda))
             existe = cursor.fetchone()[0] > 0
             if not existe:
                 cursor.execute(
-                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo) VALUES (%s, %s, 1)",
-                    (nombre_limpio, i.precio_unitario)
+                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo, id_tienda) VALUES (%s, %s, 1, %s)",
+                    (nombre_limpio, i.precio_unitario, user.id_tienda)
                 )
             else:
                 cursor.execute("""
                     UPDATE productos
                     SET stock_actual = stock_actual - %s
-                    WHERE nombre_producto = %s AND activo = 1
-                """, (int(i.cantidad), nombre_limpio))
+                    WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                """, (int(i.cantidad), nombre_limpio, user.id_tienda))
         conexion.commit()
         return {"ok": True, "registrados": len(venta.items)}
     finally:
