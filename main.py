@@ -185,11 +185,12 @@ def conectar_bd():
 
 def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
     cursor.execute(
-        "SELECT fecha_apertura FROM turnos WHERE id_turno = %s AND id_tienda = %s",
+        "SELECT fecha_apertura, fecha_cierre FROM turnos WHERE id_turno = %s AND id_tienda = %s",
         (id_turno, id_tienda)
     )
     res = cursor.fetchone()
     fecha_apertura = res['fecha_apertura'] if res else None
+    fecha_cierre = res['fecha_cierre'] if res else None
 
     cursor.execute("""
         SELECT
@@ -229,6 +230,7 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
         "total_helados": total_helados,
         "total_neto": total_en_caja - total_cigarros - total_helados,
         "fecha_apertura": fecha_apertura,
+        "fecha_cierre":   fecha_cierre,
     }
 
 
