@@ -974,3 +974,4 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
     finally:
         cursor.close()
         conexion.close()
+#proyecto caja rapida 1.0
