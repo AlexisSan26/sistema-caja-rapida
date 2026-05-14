@@ -273,7 +273,7 @@ def obtener_turno_actual(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id_turno, estado FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
+        cursor.execute("SELECT id_turno, estado, fecha_apertura FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
                        (user.id_tienda,))
         turno = cursor.fetchone()
         return turno if turno else {"estado": "CERRADO"}
@@ -409,7 +409,7 @@ def historial_turnos(user: TokenData = Depends(get_current_user)):
         cursor.execute("""
             SELECT id_turno, fecha_apertura, fecha_cierre
             FROM turnos WHERE estado = 'CERRADO' AND id_tienda = %s
-            ORDER BY id_turno DESC LIMIT 30
+            ORDER BY fecha_apertura DESC LIMIT 30
         """, (user.id_tienda,))
         return cursor.fetchall()
     finally:
