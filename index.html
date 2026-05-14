@@ -853,23 +853,42 @@
             debounceTimer = setTimeout(() => {
                 const val = document.getElementById("producto").value.trim();
                 if (!/^\d{4,}$/.test(val)) return;
+                const palabrasGranel = ['beriscan', 'gatina', 'jamon', 'jamón', 'hebra', 'añejo', 'granel'];
                 const local = todosLosProductos.find(p => p.codigo_barras === val);
                 if (local) {
-                    agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
-                    document.getElementById("producto").value = "";
-                    document.getElementById("precio").value = "";
-                    document.getElementById("cantidad").value = "1";
-                    document.getElementById("producto").focus();
+                    const esGranel = palabrasGranel.some(p => local.nombre_producto.toLowerCase().includes(p));
+                    if (esGranel) {
+                        document.getElementById("producto").value = local.nombre_producto;
+                        document.getElementById("precio").value = "";
+                        document.getElementById("cantidad").value = "1";
+                        document.getElementById("div-cantidad").style.visibility = "hidden";
+                        document.getElementById("precio").focus();
+                    } else {
+                        agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
+                        document.getElementById("producto").value = "";
+                        document.getElementById("precio").value = "";
+                        document.getElementById("cantidad").value = "1";
+                        document.getElementById("producto").focus();
+                    }
                 } else {
                     fetch(`${API_URL}/producto_por_codigo/${val}`)
                         .then(r => r.json())
                         .then(data => {
                             if (data.encontrado) {
-                                agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
-                                document.getElementById("producto").value = "";
-                                document.getElementById("precio").value = "";
-                                document.getElementById("cantidad").value = "1";
-                                document.getElementById("producto").focus();
+                                const esGranel = palabrasGranel.some(p => data.producto.nombre_producto.toLowerCase().includes(p));
+                                if (esGranel) {
+                                    document.getElementById("producto").value = data.producto.nombre_producto;
+                                    document.getElementById("precio").value = "";
+                                    document.getElementById("cantidad").value = "1";
+                                    document.getElementById("div-cantidad").style.visibility = "hidden";
+                                    document.getElementById("precio").focus();
+                                } else {
+                                    agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                                    document.getElementById("producto").value = "";
+                                    document.getElementById("precio").value = "";
+                                    document.getElementById("cantidad").value = "1";
+                                    document.getElementById("producto").focus();
+                                }
                             }
                         }).catch(() => mostrarError("Error al buscar por código."));
                 }
