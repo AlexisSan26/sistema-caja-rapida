@@ -708,7 +708,7 @@
                 diaOperativo = f.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
         }
         const fechaCierre = momentoCierre || (datos.fecha_cierre
-            ? `${fmtFecha(datos.fecha_cierre, { day:'2-digit', month:'short' })} ${fmtHora(datos.fecha_cierre)}`
+            ? `${fmtFecha(datos.fecha_cierre, { day:'2-digit', month:'long' })} ${fmtHora(datos.fecha_cierre)}`
             : null);
         const subtitulo = `
             <div class="d-flex justify-content-between mt-1" style="font-size:.8rem; color:#666;">
@@ -1578,11 +1578,15 @@
                 if (!/^\d{4,}$/.test(val)) return;
 
                 const local = todosLosProductos.find(p => p.codigo_barras === val);
-                if (!local) {
+                if (local) {
+                    document.getElementById("producto-resurtido").value = local.nombre_producto;
+                } else {
                     fetch(`${API_URL}/producto_por_codigo/${val}`)
                         .then(r => r.json())
                         .then(data => {
-                            if (!data.encontrado) {
+                            if (data.encontrado) {
+                                document.getElementById("producto-resurtido").value = data.producto.nombre_producto;
+                            } else {
                                 if(confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) {
                                     document.getElementById("nuevo-codigo").value = val;
                                     irAltaNueva();
