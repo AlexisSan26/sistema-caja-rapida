@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Superadmin · Caja Rápida</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ── Variables ─────────────────────────────────────────────── */
+:root {
+  --bg:        #0d0d0d;
+  --surface:   #161616;
+  --border:    #2a2a2a;
+  --accent:    #00e5a0;
+  --accent2:   #ff5c5c;
+  --text:      #f0f0f0;
+  --muted:     #888;
+  --mono:      'IBM Plex Mono', monospace;
+  --sans:      'DM Sans', sans-serif;
+  --radius:    10px;
+}
+
+/* ── Reset & base ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── Login screen ──────────────────────────────────────────── */
+#login-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 380px;
+}
+.login-logo {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  color: var(--accent);
+  letter-spacing: .05em;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+.login-logo span { color: var(--muted); }
+.login-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: .3rem;
+}
+.login-sub {
+  font-size: .85rem;
+  color: var(--muted);
+  margin-bottom: 1.75rem;
+}
+label {
+  display: block;
+  font-size: .78rem;
+  color: var(--muted);
+  margin-bottom: .35rem;
+  font-family: var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+input[type=text], input[type=password] {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 1rem;
+  padding: .75rem 1rem;
+  margin-bottom: 1.1rem;
+  outline: none;
+  transition: border-color .2s;
+}
+input:focus { border-color: var(--accent); }
+.btn-primary {
+  width: 100%;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: .8rem;
+  cursor: pointer;
+  transition: opacity .2s;
+}
+.btn-primary:hover { opacity: .88; }
+.btn-primary:disabled { opacity: .4; cursor: default; }
+#login-error {
+  color: var(--accent2);
+  font-size: .85rem;
+  margin-top: .75rem;
+  text-align: center;
+  display: none;
+}
+
+/* ── App shell ─────────────────────────────────────────────── */
+#app-shell { display: none; min-height: 100vh; }
+
+/* Header */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: .9rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-logo {
+  font-family: var(--mono);
+  font-size: .9rem;
+  color: var(--accent);
+  letter-spacing: .06em;
+}
+.header-logo span { color: var(--muted); }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+.badge-admin {
+  background: #1a1a1a;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: .7rem;
+  padding: .2rem .55rem;
+  border-radius: 4px;
+  letter-spacing: .08em;
+}
+.btn-logout {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius);
+  font-size: .8rem;
+  padding: .35rem .75rem;
+  cursor: pointer;
+  transition: all .2s;
+}
+.btn-logout:hover { border-color: var(--accent2); color: var(--accent2); }
+
+/* Nav tabs */
+nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  overflow-x: auto;
+  padding: 0 1rem;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: .875rem;
+  font-weight: 500;
+  padding: .85rem 1.1rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all .2s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.activo { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Main content */
+main {
+  padding: 1.25rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Sections */
+.section { display: none; }
+.section.activa { display: block; }
+
+/* Cards resumen */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: .9rem;
+  margin-bottom: 1.5rem;
+}
+.card-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+}
+.card-stat .stat-label {
+  font-family: var(--mono);
+  font-size: .7rem;
+  color: var(--muted);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: .4rem;
+}
+.card-stat .stat-val {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.card-stat .stat-val.rojo { color: var(--accent2); }
+
+/* Tables */
+.tbl-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .875rem;
+}
+thead tr {
+  background: #1e1e1e;
+}
+th {
+  padding: .7rem 1rem;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--muted);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+td {
+  padding: .75rem 1rem;
+  border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+tbody tr:hover { background: #1b1b1b; }
+
+/* Status pill */
+.pill {
+  display: inline-block;
+  padding: .18rem .55rem;
+  border-radius: 20px;
+  font-size: .72rem;
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.pill-ok   { background: #0d2e1f; color: var(--accent); }
+.pill-off  { background: #2a1a1a; color: var(--accent2); }
+.pill-adm  { background: #1a1a2e; color: #7b8cff; }
+.pill-caj  { background: #1e1e1e; color: var(--muted); }
+
+/* Botones de acción en tabla */
+.btn-tbl {
+  border: none;
+  border-radius: 6px;
+  font-size: .78rem;
+  padding: .3rem .65rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: opacity .15s;
+}
+.btn-tbl:hover { opacity: .8; }
+.btn-activar  { background: #0d2e1f; color: var(--accent); }
+.btn-desact   { background: #2a1a1a; color: var(--accent2); }
+.btn-reset    { background: #1e1e2e; color: #7b8cff; }
+.btn-del      { background: #2a1a1a; color: var(--accent2); }
+
+/* Formularios inline */
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.form-card h3 {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  color: var(--text);
+}
+.form-row {
+  display: flex;
+  gap: .75rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.form-row .form-group { flex: 1; min-width: 160px; }
+.form-group { margin-bottom: .75rem; }
+.form-control {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: .9rem;
+  padding: .6rem .9rem;
+  outline: none;
+  transition: border-color .2s;
+}
+.form-control:focus { border-color: var(--accent); }
+select.form-control option { background: var(--surface); }
+.btn-accion {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: .9rem;
+  padding: .65rem 1.2rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity .2s;
+}
+.btn-accion:hover { opacity: .87; }
+.btn-accion:disabled { opacity: .4; cursor: default; }
+
+/* Section title */
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.section-title .icon { font-size: 1.2rem; }
+
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .75rem 1.1rem;
+  font-size: .875rem;
+  z-index: 9999;
+  display: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5);
+  max-width: 320px;
+}
+#toast.ok    { border-color: var(--accent); color: var(--accent); }
+#toast.error { border-color: var(--accent2); color: var(--accent2); }
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.visible { display: flex; }
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 360px;
+  margin: 1rem;
+}
+.modal-box h3 { font-size: 1.05rem; margin-bottom: 1rem; }
+.modal-actions { display: flex; gap: .75rem; margin-top: 1rem; }
+.btn-cancel {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: .65rem;
+  cursor: pointer;
+  font-size: .9rem;
+}
+.btn-confirm {
+  flex: 1;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  padding: .65rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: .9rem;
+}
+.btn-confirm.danger { background: var(--accent2); color: #fff; }
+
+/* Loading spinner */
+.spinner {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Ventas del día — tienda card */
+.tienda-venta-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  margin-bottom: .75rem;
+}
+.tvc-nombre {
+  font-weight: 700;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .6rem;
+}
+.tvc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .5rem;
+}
+.tvc-item { text-align: center; }
+.tvc-label {
+  font-family: var(--mono);
+  font-size: .65rem;
+  color: var(--muted);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.tvc-val {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: .1rem;
+}
+.verde { color: var(--accent); }
+.rojo  { color: var(--accent2); }
+
+/* Responsive */
+@media (max-width: 480px) {
+  main { padding: 1rem .75rem; }
+  .tvc-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════
+     LOGIN
+═══════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">CAJA RÁPIDA <span>// ADMIN</span></div>
+    <div class="login-title">Acceso restringido</div>
+    <div class="login-sub">Solo usuarios con rol superadmin</div>
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" id="inp-user" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" id="inp-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="btn-login" onclick="hacerLogin()">Entrar</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════ -->
+<div id="app-shell">
+  <header>
+    <div class="header-logo">CAJA RÁPIDA <span>// SUPERADMIN</span></div>
+    <div class="header-right">
+      <span class="badge-admin">SUPERADMIN</span>
+      <button class="btn-logout" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab-btn activo" onclick="cambiarTab('ventas')" id="tab-ventas">📊 Ventas hoy</button>
+    <button class="tab-btn" onclick="cambiarTab('tiendas')" id="tab-tiendas">🏪 Tiendas</button>
+    <button class="tab-btn" onclick="cambiarTab('usuarios')" id="tab-usuarios">👤 Usuarios</button>
+  </nav>
+
+  <main>
+
+    <!-- ── TAB: Ventas hoy ──────────────────────── -->
+    <div class="section activa" id="sec-ventas">
+      <div class="section-title"><span class="icon">📊</span> Resumen del día</div>
+      <div class="cards-grid" id="totales-dia"></div>
+      <div id="ventas-tiendas"></div>
+    </div>
+
+    <!-- ── TAB: Tiendas ────────────────────────── -->
+    <div class="section" id="sec-tiendas">
+      <div class="section-title"><span class="icon">🏪</span> Tiendas</div>
+
+      <div class="form-card">
+        <h3>Nueva tienda</h3>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label>Nombre comercial</label>
+            <input type="text" class="form-control" id="nueva-tienda-nombre" placeholder="Ej: Tienda Norte">
+          </div>
+          <div>
+            <button class="btn-accion" onclick="crearTienda()">+ Crear</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Estado</th>
+              <th>Usuarios</th>
+              <th>Turnos hoy</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-tiendas"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── TAB: Usuarios ───────────────────────── -->
+    <div class="section" id="sec-usuarios">
+      <div class="section-title"><span class="icon">👤</span> Usuarios</div>
+
+      <div class="form-card">
+        <h3>Nuevo usuario</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" class="form-control" id="nu-username" placeholder="cajero1">
+          </div>
+          <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" class="form-control" id="nu-password" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label>Tienda</label>
+            <select class="form-control" id="nu-tienda"></select>
+          </div>
+          <div class="form-group">
+            <label>Rol</label>
+            <select class="form-control" id="nu-rol">
+              <option value="cajero">cajero</option>
+              <option value="superadmin">superadmin</option>
+            </select>
+          </div>
+          <div>
+            <button class="btn-accion" onclick="crearUsuario()">+ Crear</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Rol</th>
+              <th>Tienda</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-usuarios"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ════════════════════════════════════════
+     MODALES
+═══════════════════════════════════════════ -->
+
+<!-- Modal reset password -->
+<div class="modal-overlay" id="modal-reset">
+  <div class="modal-box">
+    <h3>🔑 Resetear contraseña</h3>
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" class="form-control" id="modal-reset-uname" disabled>
+    </div>
+    <div class="form-group">
+      <label>Nueva contraseña</label>
+      <input type="password" class="form-control" id="modal-reset-pass" placeholder="Mínimo 4 caracteres">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModal('modal-reset')">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarReset()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal eliminar usuario -->
+<div class="modal-overlay" id="modal-del-user">
+  <div class="modal-box">
+    <h3>🗑️ Eliminar usuario</h3>
+    <p style="color:var(--muted);font-size:.9rem;margin-bottom:.5rem">
+      ¿Eliminar a <strong id="modal-del-uname" style="color:var(--text)"></strong>?
+      Esta acción no se puede deshacer.
+    </p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModal('modal-del-user')">Cancelar</button>
+      <button class="btn-confirm danger" onclick="confirmarEliminarUsuario()">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────
+const API = 'https://sistema-caja-rapida.onrender.com';
+
+// ── Estado ───────────────────────────────────────────────────
+let TOKEN = null;
+let modalResetId = null;
+let modalDelId   = null;
+let tiendas = [];
+
+// ── Login ────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+    hacerLogin();
+  }
+});
+
+async function hacerLogin() {
+  const user = document.getElementById('inp-user').value.trim();
+  const pass = document.getElementById('inp-pass').value;
+  const btn  = document.getElementById('btn-login');
+  const err  = document.getElementById('login-error');
+
+  if (!user || !pass) { mostrarError('Completa los campos'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  err.style.display = 'none';
+
+  try {
+    const r = await fetch(`${API}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass })
+    });
+    const data = await r.json();
+
+    if (!r.ok) throw new Error(data.detail || 'Error de autenticación');
+    if (data.rol !== 'superadmin') throw new Error('Este usuario no tiene acceso de superadmin');
+
+    TOKEN = data.access_token;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'block';
+    iniciarApp();
+  } catch (e) {
+    mostrarError(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Entrar';
+  }
+}
+
+function mostrarError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function logout() {
+  TOKEN = null;
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('inp-pass').value = '';
+}
+
+// ── App init ─────────────────────────────────────────────────
+function iniciarApp() {
+  cargarVentasHoy();
+  cargarTiendas();
+  cargarUsuarios();
+}
+
+// ── Tabs ─────────────────────────────────────────────────────
+function cambiarTab(tab) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('activa'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('activo'));
+  document.getElementById(`sec-${tab}`).classList.add('activa');
+  document.getElementById(`tab-${tab}`).classList.add('activo');
+}
+
+// ── API helper ───────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${TOKEN}`
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(`${API}${path}`, opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+  return data;
+}
+
+// ── Toast ────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, tipo = 'ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = tipo;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.style.display = 'none', 3000);
+}
+
+// ── Modales ──────────────────────────────────────────────────
+function abrirModal(id) { document.getElementById(id).classList.add('visible'); }
+function cerrarModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+// ════════════════════════════════════════
+// VENTAS HOY
+// ════════════════════════════════════════
+async function cargarVentasHoy() {
+  try {
+    const rows = await api('GET', '/admin/ventas_hoy');
+    let totalVentas = 0, totalNeto = 0, totalTiendas = rows.length;
+    let tiendas_activas = 0;
+
+    rows.forEach(r => {
+      totalVentas += r.ventas_hoy;
+      totalNeto   += r.neto_hoy;
+      if (r.activa) tiendas_activas++;
+    });
+
+    document.getElementById('totales-dia').innerHTML = `
+      <div class="card-stat">
+        <div class="stat-label">Venta total hoy</div>
+        <div class="stat-val">$${fmt(totalVentas)}</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Neto total hoy</div>
+        <div class="stat-val">$${fmt(totalNeto)}</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Tiendas activas</div>
+        <div class="stat-val">${tiendas_activas} / ${totalTiendas}</div>
+      </div>
+    `;
+
+    document.getElementById('ventas-tiendas').innerHTML = rows.map(r => `
+      <div class="tienda-venta-card">
+        <div class="tvc-nombre">
+          <span class="pill ${r.activa ? 'pill-ok' : 'pill-off'}">${r.activa ? 'activa' : 'inactiva'}</span>
+          ${esc(r.nombre_comercial)}
+        </div>
+        <div class="tvc-grid">
+          <div class="tvc-item">
+            <div class="tvc-label">Ventas</div>
+            <div class="tvc-val verde">$${fmt(r.ventas_hoy)}</div>
+          </div>
+          <div class="tvc-item">
+            <div class="tvc-label">Retiros</div>
+            <div class="tvc-val rojo">$${fmt(r.retiros_hoy)}</div>
+          </div>
+          <div class="tvc-item">
+            <div class="tvc-label">Neto</div>
+            <div class="tvc-val">$${fmt(r.neto_hoy)}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    toast('Error cargando ventas: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// TIENDAS
+// ════════════════════════════════════════
+async function cargarTiendas() {
+  try {
+    tiendas = await api('GET', '/admin/tiendas');
+    renderTiendas();
+    poblarSelectTiendas();
+  } catch (e) {
+    toast('Error cargando tiendas: ' + e.message, 'error');
+  }
+}
+
+function renderTiendas() {
+  document.getElementById('tbl-tiendas').innerHTML = tiendas.map(t => `
+    <tr>
+      <td><span style="font-family:var(--mono);color:var(--muted)">#${t.id_tienda}</span></td>
+      <td><strong>${esc(t.nombre_comercial)}</strong></td>
+      <td><span class="pill ${t.activa ? 'pill-ok' : 'pill-off'}">${t.activa ? 'activa' : 'inactiva'}</span></td>
+      <td style="color:var(--muted)">${t.total_usuarios}</td>
+      <td style="color:var(--muted)">${t.turnos_hoy}</td>
+      <td>
+        ${t.activa
+          ? `<button class="btn-tbl btn-desact" onclick="toggleTienda(${t.id_tienda}, false)">Desactivar</button>`
+          : `<button class="btn-tbl btn-activar" onclick="toggleTienda(${t.id_tienda}, true)">Activar</button>`
+        }
+      </td>
+    </tr>
+  `).join('');
+}
+
+function poblarSelectTiendas() {
+  const sel = document.getElementById('nu-tienda');
+  sel.innerHTML = tiendas.filter(t => t.activa).map(t =>
+    `<option value="${t.id_tienda}">${esc(t.nombre_comercial)}</option>`
+  ).join('');
+}
+
+async function crearTienda() {
+  const nombre = document.getElementById('nueva-tienda-nombre').value.trim();
+  if (!nombre) { toast('Escribe un nombre', 'error'); return; }
+  try {
+    await api('POST', '/admin/tiendas', { nombre_comercial: nombre });
+    document.getElementById('nueva-tienda-nombre').value = '';
+    toast('✅ Tienda creada');
+    await cargarTiendas();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function toggleTienda(id, activar) {
+  const endpoint = activar ? 'activar' : 'desactivar';
+  try {
+    await api('PUT', `/admin/tiendas/${id}/${endpoint}`);
+    toast(`Tienda ${activar ? 'activada' : 'desactivada'}`);
+    await cargarTiendas();
+    await cargarVentasHoy();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// USUARIOS
+// ════════════════════════════════════════
+async function cargarUsuarios() {
+  try {
+    const usuarios = await api('GET', '/admin/usuarios');
+    document.getElementById('tbl-usuarios').innerHTML = usuarios.map(u => `
+      <tr>
+        <td><span style="font-family:var(--mono);color:var(--muted)">#${u.id_usuario}</span></td>
+        <td><strong>${esc(u.username)}</strong></td>
+        <td><span class="pill ${u.rol === 'superadmin' ? 'pill-adm' : 'pill-caj'}">${u.rol}</span></td>
+        <td style="color:var(--muted)">${esc(u.nombre_comercial)}</td>
+        <td style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <button class="btn-tbl btn-reset" onclick="abrirReset(${u.id_usuario}, '${esc(u.username)}')">🔑 Reset pw</button>
+          <button class="btn-tbl btn-del"   onclick="abrirEliminar(${u.id_usuario}, '${esc(u.username)}')">🗑️ Eliminar</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    toast('Error cargando usuarios: ' + e.message, 'error');
+  }
+}
+
+async function crearUsuario() {
+  const username = document.getElementById('nu-username').value.trim();
+  const password = document.getElementById('nu-password').value;
+  const id_tienda = parseInt(document.getElementById('nu-tienda').value);
+  const rol = document.getElementById('nu-rol').value;
+
+  if (!username || !password) { toast('Completa username y contraseña', 'error'); return; }
+  if (password.length < 4) { toast('Contraseña muy corta (mín 4 caracteres)', 'error'); return; }
+
+  try {
+    await api('POST', '/admin/usuarios', { username, password, id_tienda, rol });
+    document.getElementById('nu-username').value = '';
+    document.getElementById('nu-password').value = '';
+    toast('✅ Usuario creado');
+    cargarUsuarios();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// Reset password
+function abrirReset(id, uname) {
+  modalResetId = id;
+  document.getElementById('modal-reset-uname').value = uname;
+  document.getElementById('modal-reset-pass').value = '';
+  abrirModal('modal-reset');
+}
+
+async function confirmarReset() {
+  const pass = document.getElementById('modal-reset-pass').value;
+  if (!pass || pass.length < 4) { toast('Contraseña muy corta', 'error'); return; }
+  try {
+    await api('PUT', `/admin/usuarios/${modalResetId}/reset_password`, { nuevo_password: pass });
+    cerrarModal('modal-reset');
+    toast('✅ Contraseña actualizada');
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// Eliminar usuario
+function abrirEliminar(id, uname) {
+  modalDelId = id;
+  document.getElementById('modal-del-uname').textContent = uname;
+  abrirModal('modal-del-user');
+}
+
+async function confirmarEliminarUsuario() {
+  try {
+    await api('DELETE', `/admin/usuarios/${modalDelId}`);
+    cerrarModal('modal-del-user');
+    toast('Usuario eliminado');
+    cargarUsuarios();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Utils ────────────────────────────────────────────────────
+function fmt(n) { return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Cerrar modal con clic en overlay
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('visible'); });
+});
+</script>
+</body>
+</html>

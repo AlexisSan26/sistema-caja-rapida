@@ -53,6 +53,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 class TokenData(BaseModel):
     id_tienda: int
     id_usuario: int
+    rol: str = "cajero"
 
 
 class LoginRequest(BaseModel):
@@ -72,7 +73,8 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         id_usuario: int = payload.get("id_usuario")
         if id_tienda is None or id_usuario is None:
             raise credentials_exception
-        return TokenData(id_tienda=id_tienda, id_usuario=id_usuario)
+        rol: str = payload.get("rol", "cajero")
+        return TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
     except JWTError:
         raise credentials_exception
 
@@ -241,7 +243,7 @@ def login(datos: LoginRequest):
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
-            "SELECT id_usuario, id_tienda, password_hash FROM usuarios WHERE username = %s",
+            "SELECT id_usuario, id_tienda, password_hash, rol FROM usuarios WHERE username = %s",
             (datos.username,)
         )
         user = cursor.fetchone()
@@ -250,10 +252,11 @@ def login(datos: LoginRequest):
 
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         encoded_jwt = jwt.encode(
-            {"id_tienda": user['id_tienda'], "id_usuario": user['id_usuario'], "exp": expire},
+            {"id_tienda": user['id_tienda'], "id_usuario": user['id_usuario'],
+             "rol": user.get('rol', 'cajero'), "exp": expire},
             SECRET_KEY, algorithm=ALGORITHM
         )
-        return {"access_token": encoded_jwt, "token_type": "bearer"}
+        return {"access_token": encoded_jwt, "token_type": "bearer", "rol": user.get('rol', 'cajero')}
     finally:
         cursor.close()
         conexion.close()
@@ -975,3 +978,217 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
         cursor.close()
         conexion.close()
 #proyecto caja rapida 1.0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PANEL SUPERADMIN — Endpoints nuevos
+#  Todos requieren rol='superadmin'. No modifican lógica existente.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _require_superadmin(user: TokenData):
+    """Helper: lanza 403 si el usuario no es superadmin."""
+    if user.rol != "superadmin":
+        raise HTTPException(status_code=403, detail="Acceso restringido al superadmin")
+
+
+# ── Modelos nuevos ─────────────────────────────────────────────────────────────
+
+class TiendaNueva(BaseModel):
+    nombre_comercial: str
+
+class UsuarioNuevo(BaseModel):
+    username: str
+    password: str
+    id_tienda: int
+    rol: str = "cajero"
+
+class ResetPassword(BaseModel):
+    nuevo_password: str
+
+
+# ── Tiendas ───────────────────────────────────────────────────────────────────
+
+@app.get("/admin/tiendas")
+def admin_listar_tiendas(user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT t.id_tienda, t.nombre_comercial, t.activa,
+                   COUNT(DISTINCT u.id_usuario) AS total_usuarios,
+                   (SELECT COUNT(*) FROM turnos tr WHERE tr.id_tienda = t.id_tienda
+                    AND DATE(tr.fecha_apertura) = CURDATE()) AS turnos_hoy
+            FROM tiendas t
+            LEFT JOIN usuarios u ON u.id_tienda = t.id_tienda
+            GROUP BY t.id_tienda
+            ORDER BY t.id_tienda
+        """)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@app.post("/admin/tiendas")
+def admin_crear_tienda(t: TiendaNueva, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    nombre = t.nombre_comercial.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "INSERT INTO tiendas (nombre_comercial, activa) VALUES (%s, 1)", (nombre,)
+        )
+        conexion.commit()
+        return {"mensaje": "Tienda creada", "id_tienda": cursor.lastrowid}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@app.put("/admin/tiendas/{id_tienda}/activar")
+def admin_activar_tienda(id_tienda: int, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE tiendas SET activa = 1 WHERE id_tienda = %s", (id_tienda,))
+        conexion.commit()
+        return {"mensaje": "Tienda activada"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@app.put("/admin/tiendas/{id_tienda}/desactivar")
+def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE tiendas SET activa = 0 WHERE id_tienda = %s", (id_tienda,))
+        conexion.commit()
+        return {"mensaje": "Tienda desactivada"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ── Usuarios ──────────────────────────────────────────────────────────────────
+
+@app.get("/admin/usuarios")
+def admin_listar_usuarios(user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT u.id_usuario, u.username, u.rol, u.id_tienda, t.nombre_comercial
+            FROM usuarios u
+            JOIN tiendas t ON t.id_tienda = u.id_tienda
+            ORDER BY u.id_tienda, u.id_usuario
+        """)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@app.post("/admin/usuarios")
+def admin_crear_usuario(u: UsuarioNuevo, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    username = u.username.strip()
+    if not username or not u.password:
+        raise HTTPException(status_code=400, detail="username y password son obligatorios")
+    if u.rol not in ("superadmin", "cajero"):
+        raise HTTPException(status_code=400, detail="rol inválido")
+    hashed = pwd_context.hash(u.password)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "INSERT INTO usuarios (id_tienda, username, password_hash, rol) VALUES (%s, %s, %s, %s)",
+            (u.id_tienda, username, hashed, u.rol)
+        )
+        conexion.commit()
+        return {"mensaje": "Usuario creado", "id_usuario": cursor.lastrowid}
+    except mysql.connector.IntegrityError:
+        raise HTTPException(status_code=409, detail="El username ya existe")
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@app.put("/admin/usuarios/{id_usuario}/reset_password")
+def admin_reset_password(id_usuario: int, datos: ResetPassword, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    if not datos.nuevo_password:
+        raise HTTPException(status_code=400, detail="La contraseña no puede estar vacía")
+    hashed = pwd_context.hash(datos.nuevo_password)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "UPDATE usuarios SET password_hash = %s WHERE id_usuario = %s", (hashed, id_usuario)
+        )
+        conexion.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        return {"mensaje": "Contraseña actualizada"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+@app.delete("/admin/usuarios/{id_usuario}")
+def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    if id_usuario == user.id_usuario:
+        raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("DELETE FROM usuarios WHERE id_usuario = %s", (id_usuario,))
+        conexion.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        return {"mensaje": "Usuario eliminado"}
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ── Ventas del día por tienda ──────────────────────────────────────────────────
+
+@app.get("/admin/ventas_hoy")
+def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT t.id_tienda, t.nombre_comercial, t.activa,
+                   COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','FONDO_CAJA','COBRO_FIADO')
+                                     THEN m.total_movimiento ELSE 0 END), 0) AS ventas_hoy,
+                   COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'RETIRO'
+                                     THEN m.total_movimiento ELSE 0 END), 0) AS retiros_hoy,
+                   COUNT(DISTINCT tr.id_turno) AS turnos_hoy
+            FROM tiendas t
+            LEFT JOIN turnos tr ON tr.id_tienda = t.id_tienda
+                AND DATE(tr.fecha_apertura) = CURDATE()
+            LEFT JOIN movimientos m ON m.id_tienda = t.id_tienda
+                AND DATE(m.fecha_hora) = CURDATE()
+            GROUP BY t.id_tienda
+            ORDER BY t.id_tienda
+        """)
+        rows = cursor.fetchall()
+        for r in rows:
+            r['neto_hoy'] = float(r['ventas_hoy']) - float(r['retiros_hoy'])
+            r['ventas_hoy'] = float(r['ventas_hoy'])
+            r['retiros_hoy'] = float(r['retiros_hoy'])
+        return rows
+    finally:
+        cursor.close()
+        conexion.close()
