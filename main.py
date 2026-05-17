@@ -1169,8 +1169,8 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor(dictionary=True)
 
-        # Consulta optimizada con subconsultas para evitar el producto cartesiano
-        # y ajuste de zona horaria de UTC a UTC-6 (Hora del Centro de México)
+        # Usamos CURDATE() directamente aprovechando el time_zone de conectar_bd()
+        # Separamos los movimientos y turnos en bloques independientes para evitar duplicaciones
         cursor.execute("""
             SELECT 
                 t.id_tienda, 
@@ -1181,26 +1181,26 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
                 COALESCE(t_hoy.turnos, 0) AS turnos_hoy
             FROM tiendas t
 
-            -- Subconsulta 1: Totalizar movimientos de HOY por tienda sin multiplicar filas
+            -- Subconsulta 1: Sumar movimientos del día de forma aislada
             LEFT JOIN (
                 SELECT 
                     id_tienda,
                     SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ventas,
                     SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros
                 FROM movimientos
-                WHERE DATE(CONVERT_TZ(fecha_hora, '+00:00', '-06:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-06:00'))
+                WHERE DATE(fecha_hora) = CURDATE()
                 GROUP BY id_tienda
             ) m_hoy ON t.id_tienda = m_hoy.id_tienda
 
-            -- Subconsulta 2: Contar turnos de HOY por tienda de forma aislada
+            -- Subconsulta 2: Contar turnos del día de forma aislada
             LEFT JOIN (
                 SELECT 
                     id_tienda,
                     COUNT(id_turno) AS turnos
                 FROM turnos
-                WHERE DATE(CONVERT_TZ(fecha_apertura, '+00:00', '-06:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-06:00'))
+                WHERE DATE(fecha_apertura) = CURDATE()
                 GROUP BY id_tienda
-            ) t_hoy ON t.id_tienda = t_hoy.id_tienda
+            ) t_hoy ON t_hoy.id_tienda = t_hoy.id_tienda
 
             ORDER BY t.id_tienda;
         """)
@@ -1212,6 +1212,5 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
             r['retiros_hoy'] = float(r['retiros_hoy'])
         return rows
     finally:
-        if cursor:
-            cursor.close()
+        cursor.close()
         conexion.close()
