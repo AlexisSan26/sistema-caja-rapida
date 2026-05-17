@@ -105,6 +105,7 @@
         </button>
         <button class="menu-item" id="menu-fiados" onclick="irA('fiados')">💳 Fiados</button>
         <button class="menu-item" id="menu-historial" onclick="irA('historial')">📅 Historial</button>
+        <button class="menu-item" id="menu-config" onclick="irA('config')">⚙️ Configuración</button>
         <button class="menu-item text-danger mt-auto" onclick="logoutSaaS()">🚪 Cerrar Sesión</button>
     </div>
 </div>
@@ -266,6 +267,33 @@
     <div id="lista-historial" class="list-group mb-3"></div>
     <div id="detalle-historial"></div>
 </div>
+</div>
+
+<div id="pantalla-config" class="pantalla">
+<div class="container mt-4 pb-5" style="max-width:600px;">
+    <h4 class="text-center mb-3" style="margin-top:2.5rem;">⚙️ Configuración del Ticket</h4>
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-dark text-white">
+            <h6 class="mb-0">Grupos del resumen de caja</h6>
+        </div>
+        <div class="card-body">
+            <p class="text-muted" style="font-size:.88rem;">Crea grupos para desglosar ciertos productos en tu resumen. Puedes combinar palabras clave (para atrapar productos nuevos automáticamente) con productos específicos de tu catálogo.</p>
+            <div id="contenedor-reglas-config"></div>
+            <button class="btn btn-outline-primary w-100 mb-3 fw-bold" onclick="agregarFilaReglaConfig()">➕ Agregar grupo</button>
+            <button class="btn btn-success w-100 btn-lg shadow" onclick="guardarConfiguracionTicket()">💾 Guardar</button>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Modal selector de productos para regla -->
+<div id="modal-selector-productos" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9200;overflow-y:auto;">
+    <div style="background:white;margin:2rem auto;max-width:500px;border-radius:12px;padding:1.5rem;">
+        <h5 class="mb-3">Seleccionar productos para el grupo</h5>
+        <input type="text" id="buscador-selector-prod" class="form-control mb-3" placeholder="Buscar producto..." oninput="filtrarSelectorProductos()">
+        <div id="lista-selector-productos" style="max-height:350px;overflow-y:auto;"></div>
+        <button class="btn btn-success w-100 mt-3" onclick="cerrarSelectorProductos()">✓ Listo</button>
+    </div>
 </div>
 
 <div id="modal-resurtido" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9000;overflow-y:auto;">
@@ -559,6 +587,7 @@
         if (pantalla === 'alertas') cargarAlertas();
         if (pantalla === 'fiados') cargarClientes();
         if (pantalla === 'historial') cargarHistorial();
+        if (pantalla === 'config') cargarConfiguracionTicket();
     }
     function toggleMenu() {
         const m = document.getElementById('menu-lateral');
@@ -741,6 +770,18 @@
                 <span>🔴 Ci: ${fechaCierre || '—'}</span>
             </div>`;
         const encabezado = `${diaOperativo}`;
+
+        // Desglose dinámico según reglas configuradas por la tienda
+        let deduccionesHTML = "";
+        if (datos.reglas_resumen) {
+            for (const [nombre, total] of Object.entries(datos.reglas_resumen)) {
+                if (total > 0) {
+                    deduccionesHTML += `<p class="text-muted mb-1">Menos ${nombre}: <strong>-$${total.toFixed(2)}</strong></p>`;
+                }
+            }
+        }
+        const bloqueReglas = deduccionesHTML !== "" ? `<hr>${deduccionesHTML}` : "";
+
         return `<div class="card bg-light p-3 border-dark text-start shadow-sm mt-3">
             <div class="text-center mb-3 border-bottom pb-2">
                 <h6 class="mb-0 text-uppercase fw-bold text-primary">${encabezado}</h6>
@@ -749,16 +790,135 @@
             <p class="h6 mb-1">Ingresos del Día: <strong>$${(datos.total_ingresos || 0).toFixed(2)}</strong></p>
             <p class="h6 mb-1 text-danger">Retiros: <strong>-$${(datos.total_retiros || 0).toFixed(2)}</strong></p>
             <p class="h5 mt-2">Subtotal en Caja: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-            <hr>
-            <p class="text-muted mb-1">Menos Cigarros y Time: <strong>-$${datos.total_cigarros_time.toFixed(2)}</strong></p>
-            <p class="text-muted mb-1">Menos Helados: <strong>-$${(datos.total_helados || 0).toFixed(2)}</strong></p>
+            ${bloqueReglas}
             <hr style="border-top: 2px solid #000;">
             <p class="h5 mb-1">Efectivo Neto a Entregar:</p>
             <p class="h2 text-success fw-bold">$${datos.total_neto.toFixed(2)}</p>
         </div>`;
     }
 
-    // ─── Estado inicial ───────────────────────────────────────────────────────
+    // ─── Configuración del Ticket ─────────────────────────────────────────────
+    let reglasConfig = [];
+    let reglaActivaIdx = null;
+
+    async function cargarConfiguracionTicket() {
+        if (todosLosProductos.length === 0) {
+            try { const r = await fetch(`${API_URL}/productos`); todosLosProductos = await r.json(); } catch (_) {}
+        }
+        try {
+            const res = await fetch(`${API_URL}/configuracion_tienda`);
+            const data = await res.json();
+            reglasConfig = data.reglas || [];
+            renderReglasConfig();
+        } catch (e) { mostrarError("Error al cargar configuración"); }
+    }
+
+    function renderReglasConfig() {
+        const cont = document.getElementById("contenedor-reglas-config");
+        if (reglasConfig.length === 0) {
+            cont.innerHTML = "<p class='text-muted text-center py-2'>Sin grupos. Agrega uno.</p>";
+            return;
+        }
+        cont.innerHTML = reglasConfig.map((r, idx) => {
+            const numProds = (r.ids_productos || []).length;
+            return `<div class="border rounded p-3 mb-3 bg-white regla-bloque">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <input type="text" class="form-control fw-bold me-2 reg-nom-cfg" style="max-width:200px;"
+                        value="${r.nombre}" placeholder="Nombre del grupo">
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarReglaConfig(${idx})">✕</button>
+                </div>
+                <label class="fw-bold mb-1" style="font-size:.85rem;">Palabras clave <span class="text-muted fw-normal">(separadas por coma)</span></label>
+                <input type="text" class="form-control mb-2 reg-clav-cfg" placeholder="Ej: cigarro, time" value="${r.claves || ''}">
+                <button class="btn btn-sm btn-outline-secondary w-100" onclick="abrirSelectorProductos(${idx})">
+                    📦 Productos seleccionados: <strong>${numProds}</strong>
+                </button>
+            </div>`;
+        }).join("");
+    }
+
+    function agregarFilaReglaConfig() {
+        reglasConfig.push({ nombre: "", claves: "", ids_productos: [] });
+        renderReglasConfig();
+    }
+
+    function eliminarReglaConfig(idx) {
+        // Sincronizar antes de eliminar
+        _sincronizarInputsReglas();
+        reglasConfig.splice(idx, 1);
+        renderReglasConfig();
+    }
+
+    function _sincronizarInputsReglas() {
+        document.querySelectorAll(".regla-bloque").forEach((div, idx) => {
+            if (!reglasConfig[idx]) return;
+            const nom = div.querySelector(".reg-nom-cfg");
+            const clav = div.querySelector(".reg-clav-cfg");
+            if (nom) reglasConfig[idx].nombre = nom.value.trim();
+            if (clav) reglasConfig[idx].claves = clav.value.trim();
+        });
+    }
+
+    function abrirSelectorProductos(idx) {
+        _sincronizarInputsReglas();
+        reglaActivaIdx = idx;
+        document.getElementById("buscador-selector-prod").value = "";
+        renderListaSelectorProductos(todosLosProductos);
+        document.getElementById("modal-selector-productos").style.display = "block";
+    }
+
+    function cerrarSelectorProductos() {
+        document.getElementById("modal-selector-productos").style.display = "none";
+        renderReglasConfig();
+        reglaActivaIdx = null;
+    }
+
+    function filtrarSelectorProductos() {
+        const q = document.getElementById("buscador-selector-prod").value.toLowerCase();
+        const filtrados = todosLosProductos.filter(p => p.nombre_producto.toLowerCase().includes(q));
+        renderListaSelectorProductos(filtrados);
+    }
+
+    function renderListaSelectorProductos(productos) {
+        if (reglaActivaIdx === null) return;
+        const idsSeleccionados = reglasConfig[reglaActivaIdx].ids_productos || [];
+        const cont = document.getElementById("lista-selector-productos");
+        cont.innerHTML = productos.map(p => {
+            const sel = idsSeleccionados.includes(p.id_producto);
+            return `<div class="d-flex align-items-center p-2 border-bottom" style="cursor:pointer;" onclick="toggleProductoSelector(${p.id_producto})">
+                <span style="font-size:1.2rem;margin-right:.75rem;">${sel ? '✅' : '⬜'}</span>
+                <span style="font-size:.95rem;">${p.nombre_producto}</span>
+            </div>`;
+        }).join("");
+    }
+
+    function toggleProductoSelector(idProducto) {
+        if (reglaActivaIdx === null) return;
+        const ids = reglasConfig[reglaActivaIdx].ids_productos || [];
+        const pos = ids.indexOf(idProducto);
+        if (pos === -1) { ids.push(idProducto); } else { ids.splice(pos, 1); }
+        reglasConfig[reglaActivaIdx].ids_productos = ids;
+        const q = document.getElementById("buscador-selector-prod").value.toLowerCase();
+        const filtrados = todosLosProductos.filter(p => p.nombre_producto.toLowerCase().includes(q));
+        renderListaSelectorProductos(filtrados);
+    }
+
+    async function guardarConfiguracionTicket() {
+        _sincronizarInputsReglas();
+        const reglasFiltradas = reglasConfig.filter(r => r.nombre);
+        try {
+            const res = await fetch(`${API_URL}/configuracion_tienda`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reglas: reglasFiltradas })
+            });
+            const data = await res.json();
+            alert("✅ " + data.mensaje);
+            reglasConfig = reglasFiltradas;
+            renderReglasConfig();
+        } catch (e) { mostrarError("Error al guardar configuración"); }
+    }
+
+
     async function verificarEstadoInicial() {
         try {
             const res = await fetch(`${API_URL}/turno_actual`);
