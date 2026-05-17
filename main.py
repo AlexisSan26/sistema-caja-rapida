@@ -1168,41 +1168,29 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-
-        # Usamos CURDATE() directamente aprovechando el time_zone de conectar_bd()
-        # Separamos los movimientos y turnos en bloques independientes para evitar duplicaciones
+        # Sumamos los movimientos directamente desde el turno (igual que la caja)
+        # sin importar la fecha calendario del movimiento
         cursor.execute("""
             SELECT 
                 t.id_tienda, 
                 t.nombre_comercial, 
                 t.activa,
-                COALESCE(m_hoy.ventas, 0) AS ventas_hoy,
-                COALESCE(m_hoy.retiros, 0) AS retiros_hoy,
-                COALESCE(t_hoy.turnos, 0) AS turnos_hoy
+                COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','FONDO_CAJA','COBRO_FIADO') 
+                                  THEN m.total_movimiento ELSE 0 END), 0) AS ventas_hoy,
+                COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'RETIRO' 
+                                  THEN m.total_movimiento ELSE 0 END), 0) AS retiros_hoy,
+                COUNT(DISTINCT tr.id_turno) AS turnos_hoy
             FROM tiendas t
 
-            -- Subconsulta 1: Sumar movimientos del día de forma aislada
-            LEFT JOIN (
-                SELECT 
-                    id_tienda,
-                    SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ventas,
-                    SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros
-                FROM movimientos
-                WHERE DATE(fecha_hora) = CURDATE()
-                GROUP BY id_tienda
-            ) m_hoy ON t.id_tienda = m_hoy.id_tienda
+            -- 1. Buscamos los turnos de HOY o que sigan ABIERTOS (espejo del cajero)
+            LEFT JOIN turnos tr ON t.id_tienda = tr.id_tienda 
+                AND (DATE(tr.fecha_apertura) = CURDATE() OR tr.estado = 'ABIERTO')
 
-            -- Subconsulta 2: Contar turnos del día de forma aislada
-            LEFT JOIN (
-                SELECT 
-                    id_tienda,
-                    COUNT(id_turno) AS turnos
-                FROM turnos
-                WHERE DATE(fecha_apertura) = CURDATE()
-                GROUP BY id_tienda
-            ) t_hoy ON t_hoy.id_tienda = t_hoy.id_tienda
+            -- 2. Sumamos TODOS los movimientos de esos turnos exactos
+            LEFT JOIN movimientos m ON m.id_turno = tr.id_turno
 
-            ORDER BY t.id_tienda;
+            GROUP BY t.id_tienda
+            ORDER BY t.id_tienda
         """)
 
         rows = cursor.fetchall()
@@ -1210,6 +1198,7 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
             r['neto_hoy'] = float(r['ventas_hoy']) - float(r['retiros_hoy'])
             r['ventas_hoy'] = float(r['ventas_hoy'])
             r['retiros_hoy'] = float(r['retiros_hoy'])
+
         return rows
     finally:
         cursor.close()
