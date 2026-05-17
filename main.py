@@ -1168,21 +1168,43 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
+
+        # Consulta optimizada con subconsultas para evitar el producto cartesiano
+        # y ajuste de zona horaria de UTC a UTC-6 (Hora del Centro de México)
         cursor.execute("""
-            SELECT t.id_tienda, t.nombre_comercial, t.activa,
-                   COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','FONDO_CAJA','COBRO_FIADO')
-                                     THEN m.total_movimiento ELSE 0 END), 0) AS ventas_hoy,
-                   COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'RETIRO'
-                                     THEN m.total_movimiento ELSE 0 END), 0) AS retiros_hoy,
-                   COUNT(DISTINCT tr.id_turno) AS turnos_hoy
+            SELECT 
+                t.id_tienda, 
+                t.nombre_comercial, 
+                t.activa,
+                COALESCE(m_hoy.ventas, 0) AS ventas_hoy,
+                COALESCE(m_hoy.retiros, 0) AS retiros_hoy,
+                COALESCE(t_hoy.turnos, 0) AS turnos_hoy
             FROM tiendas t
-            LEFT JOIN turnos tr ON tr.id_tienda = t.id_tienda
-                AND DATE(tr.fecha_apertura) = CURDATE()
-            LEFT JOIN movimientos m ON m.id_tienda = t.id_tienda
-                AND DATE(m.fecha_hora) = CURDATE()
-            GROUP BY t.id_tienda
-            ORDER BY t.id_tienda
+
+            -- Subconsulta 1: Totalizar movimientos de HOY por tienda sin multiplicar filas
+            LEFT JOIN (
+                SELECT 
+                    id_tienda,
+                    SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ventas,
+                    SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros
+                FROM movimientos
+                WHERE DATE(CONVERT_TZ(fecha_hora, '+00:00', '-06:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-06:00'))
+                GROUP BY id_tienda
+            ) m_hoy ON t.id_tienda = m_hoy.id_tienda
+
+            -- Subconsulta 2: Contar turnos de HOY por tienda de forma aislada
+            LEFT JOIN (
+                SELECT 
+                    id_tienda,
+                    COUNT(id_turno) AS turnos
+                FROM turnos
+                WHERE DATE(CONVERT_TZ(fecha_apertura, '+00:00', '-06:00')) = DATE(CONVERT_TZ(NOW(), '+00:00', '-06:00'))
+                GROUP BY id_tienda
+            ) t_hoy ON t.id_tienda = t_hoy.id_tienda
+
+            ORDER BY t.id_tienda;
         """)
+
         rows = cursor.fetchall()
         for r in rows:
             r['neto_hoy'] = float(r['ventas_hoy']) - float(r['retiros_hoy'])
@@ -1190,5 +1212,6 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
             r['retiros_hoy'] = float(r['retiros_hoy'])
         return rows
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
