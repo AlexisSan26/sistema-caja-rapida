@@ -127,38 +127,40 @@ class ProductoNuevo(BaseModel):
     codigo_barras: str | None = None
     nombre_producto: str
     precio_sugerido: float
-    stock_actual: int = 0
-    stock_minimo: int = 5
+    stock_actual: float = 0
+    stock_minimo: float = 5
     proveedor: str | None = None
     fecha_caducidad: str | None = None
+    unidad_medida: str = "pieza"
 
 
 class ActualizacionProducto(BaseModel):
     nombre_producto: str
     precio_sugerido: float
-    stock_actual: int
-    stock_minimo: int
+    stock_actual: float
+    stock_minimo: float
     proveedor: str | None = None
     codigo_barras: str | None = None
     fecha_caducidad: str | None = None
+    unidad_medida: str = "pieza"
 
 
 class EntradaMercancia(BaseModel):
     id_producto: int
-    cantidad: int
+    cantidad: float
     fecha_caducidad: str | None = None
     notas: str | None = None
 
 
 class ResurtidoPorCodigo(BaseModel):
     codigo_barras: str
-    cantidad: int
+    cantidad: float
     fecha_caducidad: str | None = None
 
 
 class ItemEntradaLote(BaseModel):
     id_producto: int
-    cantidad: int
+    cantidad: float
     fecha_caducidad: str | None = None
 
 
@@ -364,7 +366,7 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
                     UPDATE productos
                     SET stock_actual = stock_actual - %s
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                """, (int(mov.cantidad), nombre_limpio, user.id_tienda))
+                """, (float(mov.cantidad), nombre_limpio, user.id_tienda))
 
         conexion.commit()
         return {"mensaje": "Registro guardado correctamente"}
@@ -393,7 +395,7 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
                 UPDATE productos
                 SET stock_actual = stock_actual + %s
                 WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-            """, (int(mov["cantidad"]), mov["producto"], user.id_tienda))
+            """, (float(mov["cantidad"]), mov["producto"], user.id_tienda))
         conexion.commit()
         return {"mensaje": "Movimiento cancelado"}
     finally:
@@ -528,7 +530,7 @@ def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
             SELECT id_producto, nombre_producto, precio_sugerido,
-                   stock_actual, stock_minimo, proveedor, fecha_caducidad, codigo_barras
+                   stock_actual, stock_minimo, proveedor, fecha_caducidad, codigo_barras, unidad_medida
             FROM productos WHERE codigo_barras = %s AND activo = 1 AND id_tienda = %s
         """, (codigo, user.id_tienda))
         producto = cursor.fetchone()
@@ -548,11 +550,11 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
         cursor.execute("""
             INSERT INTO productos
             (codigo_barras, nombre_producto, precio_sugerido,
-             stock_actual, stock_minimo, proveedor, fecha_caducidad, activo, id_tienda)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s)
+             stock_actual, stock_minimo, proveedor, fecha_caducidad, activo, id_tienda, unidad_medida)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s)
         """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido,
               p.stock_actual, p.stock_minimo, p.proveedor or None,
-              p.fecha_caducidad or None, user.id_tienda))
+              p.fecha_caducidad or None, user.id_tienda, p.unidad_medida))
         conexion.commit()
         return {"mensaje": "Producto registrado", "id_producto": cursor.lastrowid}
     finally:
@@ -573,13 +575,14 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
                 stock_minimo    = %s,
                 proveedor       = %s,
                 codigo_barras   = %s,
-                fecha_caducidad = %s
+                fecha_caducidad = %s,
+                unidad_medida   = %s
             WHERE id_producto = %s AND activo = 1 AND id_tienda = %s
         """, (
             datos.nombre_producto, datos.precio_sugerido,
             datos.stock_actual, datos.stock_minimo,
             datos.proveedor or None, datos.codigo_barras or None,
-            datos.fecha_caducidad or None, id_producto, user.id_tienda
+            datos.fecha_caducidad or None, datos.unidad_medida, id_producto, user.id_tienda
         ))
         conexion.commit()
         if cursor.rowcount > 0:
@@ -701,7 +704,7 @@ def listar_inventario(q: str = "", proveedor: str = "", user: TokenData = Depend
         cursor = conexion.cursor(dictionary=True)
         sql = """SELECT id_producto, codigo_barras, nombre_producto,
                         precio_sugerido, stock_actual, stock_minimo,
-                        proveedor, fecha_caducidad
+                        proveedor, fecha_caducidad, unidad_medida
                  FROM productos WHERE activo = 1 AND id_tienda = %s"""
         params = [user.id_tienda]
         if q:
@@ -764,7 +767,7 @@ def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Dep
         cursor = conexion.cursor()
         cursor.execute(
             "UPDATE productos SET stock_actual = stock_actual - %s WHERE id_producto = %s AND id_tienda = %s",
-            (int(cantidad), id_producto, user.id_tienda)
+            (float(cantidad), id_producto, user.id_tienda)
         )
         conexion.commit()
         return {"mensaje": "Stock actualizado"}
@@ -919,7 +922,7 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
         cursor.execute("""
             UPDATE productos SET stock_actual = stock_actual - %s
             WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-        """, (int(item.cantidad), item.producto.strip(), user.id_tienda))
+        """, (float(item.cantidad), item.producto.strip(), user.id_tienda))
         conexion.commit()
         return {"mensaje": "Fiado registrado correctamente"}
     finally:
@@ -1000,7 +1003,7 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                     UPDATE productos
                     SET stock_actual = stock_actual - %s
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                """, (int(i.cantidad), nombre_limpio, user.id_tienda))
+                """, (float(i.cantidad), nombre_limpio, user.id_tienda))
         conexion.commit()
         return {"ok": True, "registrados": len(venta.items)}
     finally:
