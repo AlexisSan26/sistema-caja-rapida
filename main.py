@@ -64,20 +64,42 @@ class LoginRequest(BaseModel):
 def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Credenciales inválidas o token expirado",
+        detail="Credenciales inválidas, token expirado o cuenta desactivada",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         id_tienda: int = payload.get("id_tienda")
         id_usuario: int = payload.get("id_usuario")
+
         if id_tienda is None or id_usuario is None:
             raise credentials_exception
+
         rol: str = payload.get("rol", "cajero")
+
+        # ─── MODIFICACIÓN QUIRÚRGICA ADAPTADA A TU MAIN.PY ───
+        # Usamos tu db_pool existente para no agotar las conexiones
+        conexion = db_pool.get_connection()
+        try:
+            cursor = conexion.cursor(dictionary=True)
+            cursor.execute("""
+                            SELECT t.activa, u.id_usuario 
+                            FROM tiendas t 
+                            LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1
+                            WHERE t.id_tienda = %s
+                        """, (id_usuario, id_tienda))
+            estado = cursor.fetchone()
+
+            if not estado or not estado['activa'] or not estado['id_usuario']:
+                raise credentials_exception
+        finally:
+            cursor.close()
+            conexion.close()
+        # ─────────────────────────────────────────────────────
+
         return TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
     except JWTError:
         raise credentials_exception
-
 
 # ─── Modelos Operativos ───────────────────────────────────────────────────────
 class TiposPermitidos(str, Enum):
@@ -242,15 +264,22 @@ def login(datos: LoginRequest):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT id_usuario, id_tienda, password_hash, rol FROM usuarios WHERE username = %s",
-            (datos.username,)
+        cursor.execute("""
+                    SELECT id_usuario, id_tienda, password_hash, rol 
+                    FROM usuarios 
+                    WHERE username = %s AND activo = 1
+                """, (datos.username,)
         )
         user = cursor.fetchone()
         if not user or not pwd_context.verify(datos.password, user['password_hash']):
             raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        if user.get('rol') == 'superadmin':
+            expire = datetime.utcnow() + timedelta(days=2)  # Admin dura estrictamente 2 días
+        else:
+            expire = datetime.utcnow() + timedelta(
+                minutes=ACCESS_TOKEN_EXPIRE_MINUTES)  # Cajero conserva sus 30 días
+        # ────────────────────────────────────────────────────────────
         encoded_jwt = jwt.encode(
             {"id_tienda": user['id_tienda'], "id_usuario": user['id_usuario'],
              "rol": user.get('rol', 'cajero'), "exp": expire},
@@ -1069,6 +1098,13 @@ def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_curren
     try:
         cursor = conexion.cursor()
         cursor.execute("UPDATE tiendas SET activa = 0 WHERE id_tienda = %s", (id_tienda,))
+        # Cierre forzado de cualquier turno abierto en la tienda
+        cursor.execute("""
+            UPDATE turnos 
+            SET estado = 'CERRADO', 
+                fecha_cierre = CURRENT_TIMESTAMP 
+            WHERE id_tienda = %s AND estado = 'ABIERTO'
+        """, (id_tienda,))
         conexion.commit()
         return {"mensaje": "Tienda desactivada"}
     finally:
@@ -1085,11 +1121,12 @@ def admin_listar_usuarios(user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
-            SELECT u.id_usuario, u.username, u.rol, u.id_tienda, t.nombre_comercial
-            FROM usuarios u
-            JOIN tiendas t ON t.id_tienda = u.id_tienda
-            ORDER BY u.id_tienda, u.id_usuario
-        """)
+                    SELECT u.id_usuario, u.username, u.rol, u.id_tienda, t.nombre_comercial
+                    FROM usuarios u
+                    JOIN tiendas t ON t.id_tienda = u.id_tienda
+                    WHERE u.activo = 1
+                    ORDER BY u.id_tienda, u.id_usuario
+                """)
         return cursor.fetchall()
     finally:
         cursor.close()
@@ -1142,6 +1179,7 @@ def admin_reset_password(id_usuario: int, datos: ResetPassword, user: TokenData 
         conexion.close()
 
 
+# Reemplaza por completo tu función admin_eliminar_usuario con esta:
 @app.delete("/admin/usuarios/{id_usuario}")
 def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
@@ -1150,15 +1188,15 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
-        cursor.execute("DELETE FROM usuarios WHERE id_usuario = %s", (id_usuario,))
+        # CAMBIO QUIRÚRGICO: Soft-delete en lugar de borrado físico
+        cursor.execute("UPDATE usuarios SET activo = 0 WHERE id_usuario = %s", (id_usuario,))
         conexion.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
-        return {"mensaje": "Usuario eliminado"}
+        return {"mensaje": "Usuario eliminado correctamente"}
     finally:
         cursor.close()
         conexion.close()
-
 
 # ── Ventas del día por tienda ──────────────────────────────────────────────────
 

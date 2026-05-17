@@ -649,7 +649,7 @@ select.form-control option { background: var(--surface); }
 const API = 'https://sistema-caja-rapida.onrender.com';
 
 // ── Estado ───────────────────────────────────────────────────
-let TOKEN = null;
+let TOKEN = localStorage.getItem('caja_rapida_admin_token') || null;
 let modalResetId = null;
 let modalDelId   = null;
 let tiendas = [];
@@ -685,6 +685,12 @@ async function hacerLogin() {
     if (data.rol !== 'superadmin') throw new Error('Este usuario no tiene acceso de superadmin');
 
     TOKEN = data.access_token;
+
+    // INYECCIÓN QUIRÚRGICA: Guarda token y tiempo límite (2 días en ms)
+    const tiempoExpiracion = Date.now() + (2 * 24 * 60 * 60 * 1000);
+    localStorage.setItem('caja_rapida_admin_token', TOKEN);
+    localStorage.setItem('caja_rapida_admin_expira', tiempoExpiracion);
+
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-shell').style.display = 'block';
     iniciarApp();
@@ -704,6 +710,8 @@ function mostrarError(msg) {
 
 function logout() {
   TOKEN = null;
+  localStorage.removeItem('caja_rapida_admin_token');
+  localStorage.removeItem('caja_rapida_admin_expira'); // <- INYECCIÓN QUIRÚRGICA
   document.getElementById('app-shell').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('inp-pass').value = '';
@@ -965,6 +973,20 @@ function esc(s) {
 // Cerrar modal con clic en overlay
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) m.classList.remove('visible'); });
+});
+
+// INYECCIÓN QUIRÚRGICA: Auto-login condicionado estrictamente a los 2 días
+document.addEventListener('DOMContentLoaded', () => {
+  const expira = localStorage.getItem('caja_rapida_admin_expira');
+
+  if (TOKEN && expira && Date.now() < parseInt(expira)) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = 'block';
+    iniciarApp();
+  } else {
+    // Si pasaron los 2 días o no hay token, limpia y manda al login
+    logout();
+  }
 });
 </script>
 </body>
