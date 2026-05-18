@@ -802,9 +802,8 @@
     let reglaActivaIdx = null;
 
     async function cargarConfiguracionTicket() {
-        if (todosLosProductos.length === 0) {
-            try { const r = await fetch(`${API_URL}/productos`); todosLosProductos = await r.json(); } catch (_) {}
-        }
+        // /inventario devuelve id_producto, necesario para el selector
+        try { const r = await fetch(`${API_URL}/inventario`); todosLosProductos = await r.json(); } catch (_) {}
         try {
             const res = await fetch(`${API_URL}/configuracion_tienda`);
             const data = await res.json();
@@ -883,6 +882,7 @@
         const idsSeleccionados = (reglasConfig[reglaActivaIdx].ids_productos || []).map(Number);
         const cont = document.getElementById("lista-selector-productos");
         cont.innerHTML = productos.map(p => {
+            if (!p.id_producto) return "";
             const sel = idsSeleccionados.includes(Number(p.id_producto));
             return `<div class="d-flex align-items-center p-2 border-bottom" style="cursor:pointer;" onclick="toggleProductoSelector(${p.id_producto})">
                 <span style="font-size:1.2rem;margin-right:.75rem;">${sel ? '✅' : '⬜'}</span>
@@ -957,7 +957,7 @@
 
     async function cargarProductosEnMemoria() {
         try {
-            const res = await fetch(`${API_URL}/productos`);
+            const res = await fetch(`${API_URL}/inventario`);
             todosLosProductos = await res.json();
         } catch (e) { console.warn("No se pudo cargar productos en memoria"); }
     }
