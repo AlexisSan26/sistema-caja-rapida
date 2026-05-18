@@ -507,6 +507,8 @@ select.form-control option { background: var(--surface); }
     <button class="tab-btn activo" onclick="cambiarTab('ventas')" id="tab-ventas">📊 Ventas hoy</button>
     <button class="tab-btn" onclick="cambiarTab('tiendas')" id="tab-tiendas">🏪 Tiendas</button>
     <button class="tab-btn" onclick="cambiarTab('usuarios')" id="tab-usuarios">👤 Usuarios</button>
+    <button class="tab-btn" onclick="cambiarTab('reporte')" id="tab-reporte">📅 Reporte</button>
+    <button class="tab-btn" onclick="cambiarTab('suscripciones')" id="tab-suscripciones">💳 Suscripciones</button>
   </nav>
 
   <main>
@@ -600,6 +602,35 @@ select.form-control option { background: var(--surface); }
       </div>
     </div>
 
+    <!-- ── TAB: Reporte por fechas ────────────────── -->
+    <div class="section" id="sec-reporte">
+      <div class="section-title"><span class="icon">📅</span> Reporte por fechas</div>
+      <div class="form-card">
+        <h3>Filtrar período</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fecha inicio</label>
+            <input type="date" class="form-control" id="rep-inicio">
+          </div>
+          <div class="form-group">
+            <label>Fecha fin</label>
+            <input type="date" class="form-control" id="rep-fin">
+          </div>
+          <div>
+            <button class="btn-accion" onclick="cargarReporte()">Consultar</button>
+          </div>
+        </div>
+      </div>
+      <div class="cards-grid" id="rep-totales"></div>
+      <div id="rep-tiendas"></div>
+    </div>
+
+    <!-- ── TAB: Suscripciones ─────────────────────── -->
+    <div class="section" id="sec-suscripciones">
+      <div class="section-title"><span class="icon">💳</span> Suscripciones</div>
+      <div id="tbl-suscripciones"></div>
+    </div>
+
   </main>
 </div>
 
@@ -641,6 +672,96 @@ select.form-control option { background: var(--surface); }
   </div>
 </div>
 
+<!-- Modal editar suscripción -->
+<div class="modal-overlay" id="modal-suscripcion">
+  <div class="modal-box">
+    <h3>💳 Editar suscripción</h3>
+    <div class="form-group">
+      <label>Día de corte (1–31)</label>
+      <input type="number" class="form-control" id="sus-dia" min="1" max="31" placeholder="1">
+    </div>
+    <div class="form-group">
+      <label>Mensualidad ($)</label>
+      <input type="number" class="form-control" id="sus-monto" min="0" step="0.01" placeholder="0.00">
+    </div>
+    <div class="form-group">
+      <label>Estado de pago</label>
+      <select class="form-control" id="sus-estado">
+        <option value="AL_DIA">Al día</option>
+        <option value="ATRASADO">Atrasado</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModal('modal-suscripcion')">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarEditarSuscripcion()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal inventario tienda (Módulo 4: Modo Dios) -->
+<div class="modal-overlay" id="modal-inventario">
+  <div class="modal-box" style="max-width:700px;width:95%;">
+    <h3 id="modal-inv-tienda-nombre" style="margin-bottom:1rem;"></h3>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+      <table style="font-size:.8rem;">
+        <thead>
+          <tr>
+            <th>Producto / Unidad</th>
+            <th>Cód. Barras</th>
+            <th>Precio</th>
+            <th>Stock</th>
+          </tr>
+        </thead>
+        <tbody id="modal-inv-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions" style="margin-top:1rem;">
+      <button class="btn-cancel" onclick="cerrarModal('modal-inventario')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal editar tienda -->
+<div class="modal-overlay" id="modal-editar-tienda">
+  <div class="modal-box">
+    <h3>✏️ Editar tienda</h3>
+    <div class="form-group">
+      <label>Nombre comercial</label>
+      <input type="text" class="form-control" id="et-nombre" placeholder="Nombre de la tienda">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModal('modal-editar-tienda')">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarEditarTienda()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal editar usuario -->
+<div class="modal-overlay" id="modal-editar-usuario">
+  <div class="modal-box">
+    <h3>✏️ Editar usuario</h3>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" class="form-control" id="eu-username" disabled>
+    </div>
+    <div class="form-group">
+      <label>Tienda</label>
+      <select class="form-control" id="eu-tienda"></select>
+    </div>
+    <div class="form-group">
+      <label>Rol</label>
+      <select class="form-control" id="eu-rol">
+        <option value="cajero">cajero</option>
+        <option value="superadmin">superadmin</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="cerrarModal('modal-editar-usuario')">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarEditarUsuario()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -653,6 +774,8 @@ let TOKEN = localStorage.getItem('caja_rapida_admin_token') || null;
 let modalResetId = null;
 let modalDelId   = null;
 let tiendas = [];
+let modalEditTiendaId = null;
+let modalEditUsuarioId = null;
 
 // ── Login ────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
@@ -722,6 +845,7 @@ function iniciarApp() {
   cargarVentasHoy();
   cargarTiendas();
   cargarUsuarios();
+  cargarSuscripciones();
 }
 
 // ── Tabs ─────────────────────────────────────────────────────
@@ -846,6 +970,8 @@ function renderTiendas() {
           ? `<button class="btn-tbl btn-desact" onclick="toggleTienda(${t.id_tienda}, false)">Desactivar</button>`
           : `<button class="btn-tbl btn-activar" onclick="toggleTienda(${t.id_tienda}, true)">Activar</button>`
         }
+        <button class="btn-tbl btn-reset" onclick="abrirEditarTienda(${t.id_tienda}, '${esc(t.nombre_comercial)}')">✏️ Editar</button>
+        <button class="btn-tbl btn-activar" onclick="verInventarioTienda(${t.id_tienda})">📦 Inventario</button>
       </td>
     </tr>
   `).join('');
@@ -897,6 +1023,7 @@ async function cargarUsuarios() {
         <td style="color:var(--muted)">${esc(u.nombre_comercial)}</td>
         <td style="display:flex;gap:.4rem;flex-wrap:wrap">
           <button class="btn-tbl btn-reset" onclick="abrirReset(${u.id_usuario}, '${esc(u.username)}')">🔑 Reset pw</button>
+          <button class="btn-tbl btn-reset" onclick="abrirEditarUsuario(${u.id_usuario}, '${esc(u.username)}', ${u.id_tienda}, '${esc(u.rol)}')">✏️ Editar</button>
           <button class="btn-tbl btn-del"   onclick="abrirEliminar(${u.id_usuario}, '${esc(u.username)}')">🗑️ Eliminar</button>
         </td>
       </tr>
@@ -961,6 +1088,195 @@ async function confirmarEliminarUsuario() {
     cargarUsuarios();
   } catch (e) {
     toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// MÓDULO 1: EDITAR TIENDA
+// ════════════════════════════════════════
+function abrirEditarTienda(id, nombre) {
+  modalEditTiendaId = id;
+  document.getElementById('et-nombre').value = nombre;
+  abrirModal('modal-editar-tienda');
+}
+
+async function confirmarEditarTienda() {
+  const nombre = document.getElementById('et-nombre').value.trim();
+  if (!nombre) { toast('El nombre no puede estar vacío', 'error'); return; }
+  try {
+    await api('PUT', `/admin/tiendas/${modalEditTiendaId}/editar`, { nombre_comercial: nombre });
+    cerrarModal('modal-editar-tienda');
+    toast('✅ Tienda actualizada');
+    await cargarTiendas();
+    await cargarSuscripciones();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// MÓDULO 1: EDITAR USUARIO
+// ════════════════════════════════════════
+function abrirEditarUsuario(id, username, idTienda, rol) {
+  modalEditUsuarioId = id;
+  document.getElementById('eu-username').value = username;
+  document.getElementById('eu-rol').value = rol;
+  const sel = document.getElementById('eu-tienda');
+  sel.innerHTML = tiendas.map(t =>
+    `<option value="${t.id_tienda}" ${t.id_tienda === idTienda ? 'selected' : ''}>${esc(t.nombre_comercial)}</option>`
+  ).join('');
+  abrirModal('modal-editar-usuario');
+}
+
+async function confirmarEditarUsuario() {
+  const id_tienda = parseInt(document.getElementById('eu-tienda').value);
+  const rol = document.getElementById('eu-rol').value;
+  try {
+    await api('PUT', `/admin/usuarios/${modalEditUsuarioId}/editar`, { id_tienda, rol });
+    cerrarModal('modal-editar-usuario');
+    toast('✅ Usuario actualizado');
+    cargarUsuarios();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// MÓDULO 2: REPORTE POR FECHAS
+// ════════════════════════════════════════
+async function cargarReporte() {
+  const inicio = document.getElementById('rep-inicio').value;
+  const fin    = document.getElementById('rep-fin').value;
+  if (!inicio || !fin) { toast('Selecciona fecha inicio y fin', 'error'); return; }
+  if (inicio > fin)    { toast('La fecha inicio no puede ser mayor que la fin', 'error'); return; }
+  try {
+    const data = await api('GET', `/admin/ventas_reporte?fecha_inicio=${inicio}&fecha_fin=${fin}`);
+    let sumVentas = 0, sumNeto = 0;
+    data.tiendas.forEach(r => { sumVentas += r.total_ventas; sumNeto += r.total_neto; });
+    document.getElementById('rep-totales').innerHTML = `
+      <div class="card-stat">
+        <div class="stat-label">Total ventas</div>
+        <div class="stat-val">$${fmt(sumVentas)}</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Neto total</div>
+        <div class="stat-val">$${fmt(sumNeto)}</div>
+      </div>
+      <div class="card-stat">
+        <div class="stat-label">Período</div>
+        <div class="stat-val" style="font-size:1rem;margin-top:.2rem;">${inicio} → ${fin}</div>
+      </div>
+    `;
+    document.getElementById('rep-tiendas').innerHTML = data.tiendas.map(r => `
+      <div class="tienda-venta-card">
+        <div class="tvc-nombre">
+          <span class="pill ${r.activa ? 'pill-ok' : 'pill-off'}">${r.activa ? 'activa' : 'inactiva'}</span>
+          ${esc(r.nombre_comercial)}
+        </div>
+        <div class="tvc-grid">
+          <div class="tvc-item"><div class="tvc-label">Ventas</div><div class="tvc-val verde">$${fmt(r.total_ventas)}</div></div>
+          <div class="tvc-item"><div class="tvc-label">Retiros</div><div class="tvc-val rojo">$${fmt(r.total_retiros)}</div></div>
+          <div class="tvc-item"><div class="tvc-label">Neto</div><div class="tvc-val">$${fmt(r.total_neto)}</div></div>
+          <div class="tvc-item"><div class="tvc-label">Turnos</div><div class="tvc-val">${r.total_turnos}</div></div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// MÓDULO 3: SUSCRIPCIONES
+// ════════════════════════════════════════
+async function cargarSuscripciones() {
+  try {
+    const rows = await api('GET', '/admin/tiendas');
+    const detalle = await Promise.all(
+      rows.map(t => api('GET', `/admin/tiendas/${t.id_tienda}/suscripcion`).catch(() => null))
+    );
+    document.getElementById('tbl-suscripciones').innerHTML = `
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tienda</th>
+              <th>Estado</th>
+              <th>Día corte</th>
+              <th>Mensualidad</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${detalle.filter(Boolean).map(s => `
+              <tr>
+                <td><strong>${esc(s.nombre_comercial)}</strong></td>
+                <td><span class="pill ${s.estado_pago === 'AL_DIA' ? 'pill-ok' : 'pill-off'}">${s.estado_pago === 'AL_DIA' ? 'Al día' : 'Atrasado'}</span></td>
+                <td style="color:var(--muted)">Día ${s.dia_corte}</td>
+                <td style="color:var(--accent)">$${fmt(s.monto_mensual)}</td>
+                <td><button class="btn-tbl btn-reset" onclick="abrirEditarSuscripcion(${s.id_tienda}, ${s.dia_corte}, ${s.monto_mensual}, '${s.estado_pago}')">✏️ Editar</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    toast('Error cargando suscripciones: ' + e.message, 'error');
+  }
+}
+
+let suscripcionTiendaId = null;
+
+function abrirEditarSuscripcion(id, diaCorte, monto, estado) {
+  suscripcionTiendaId = id;
+  document.getElementById('sus-dia').value    = diaCorte;
+  document.getElementById('sus-monto').value  = monto;
+  document.getElementById('sus-estado').value = estado;
+  abrirModal('modal-suscripcion');
+}
+
+async function confirmarEditarSuscripcion() {
+  const dia_corte      = parseInt(document.getElementById('sus-dia').value);
+  const monto_mensual  = parseFloat(document.getElementById('sus-monto').value);
+  const estado_pago    = document.getElementById('sus-estado').value;
+  if (isNaN(dia_corte) || dia_corte < 1 || dia_corte > 31) { toast('Día de corte debe ser entre 1 y 31', 'error'); return; }
+  if (isNaN(monto_mensual) || monto_mensual < 0) { toast('Monto inválido', 'error'); return; }
+  try {
+    await api('PUT', `/admin/tiendas/${suscripcionTiendaId}/suscripcion`, { dia_corte, monto_mensual, estado_pago });
+    cerrarModal('modal-suscripcion');
+    toast('✅ Suscripción actualizada');
+    cargarSuscripciones();
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// MÓDULO 4: INVENTARIO (MODO DIOS)
+// ════════════════════════════════════════
+async function verInventarioTienda(idTienda) {
+  document.getElementById('modal-inv-tienda-nombre').textContent = '📦 Cargando inventario...';
+  document.getElementById('modal-inv-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:1.5rem;">Cargando...</td></tr>';
+  abrirModal('modal-inventario');
+  try {
+    const data = await api('GET', `/admin/tienda/${idTienda}/inventario`);
+    document.getElementById('modal-inv-tienda-nombre').textContent = `📦 Inventario — ${data.nombre_comercial} (${data.total_productos} productos)`;
+    document.getElementById('modal-inv-tbody').innerHTML = data.productos.map(p => {
+      const stockBajo = p.stock_actual <= p.stock_minimo;
+      return `<tr>
+        <td>
+          <strong>${esc(p.nombre_producto)}</strong>
+          <span style="font-family:var(--mono);font-size:.7rem;color:var(--muted);margin-left:.4rem;">${esc(p.unidad_medida || 'pieza')}</span>
+        </td>
+        <td style="font-family:var(--mono);color:var(--muted);font-size:.75rem;">${esc(p.codigo_barras || '—')}</td>
+        <td style="color:var(--accent);">$${fmt(p.precio_sugerido)}</td>
+        <td style="color:${stockBajo ? 'var(--accent2)' : 'var(--text)'};font-weight:${stockBajo ? '700' : '400'};">${p.stock_actual}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('modal-inv-tienda-nombre').textContent = '📦 Inventario';
+    document.getElementById('modal-inv-tbody').innerHTML = `<tr><td colspan="4" style="color:var(--accent2);text-align:center;padding:1rem;">Error: ${esc(e.message)}</td></tr>`;
   }
 }
 
