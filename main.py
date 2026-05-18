@@ -1029,6 +1029,15 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
     finally:
         cursor.close()
         conexion.close()
+class ReglaResumen(BaseModel):
+    nombre: str
+    claves: str
+    ids_productos: List[int] = []
+
+class ConfiguracionTicket(BaseModel):
+    reglas: List[ReglaResumen] = []
+
+
 @app.get("/configuracion_tienda")
 def obtener_configuracion(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
@@ -1069,16 +1078,6 @@ def _require_superadmin(user: TokenData):
     if user.rol != "superadmin":
         raise HTTPException(status_code=403, detail="Acceso restringido al superadmin")
 
-
-# ── Modelos nuevos ─────────────────────────────────────────────────────────────
-
-class ReglaResumen(BaseModel):
-    nombre: str
-    claves: str
-    ids_productos: List[int] = []
-
-class ConfiguracionTicket(BaseModel):
-    reglas: List[ReglaResumen] = []
 
 class TiendaNueva(BaseModel):
     nombre_comercial: str

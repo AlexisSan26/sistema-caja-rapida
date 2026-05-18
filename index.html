@@ -880,10 +880,10 @@
 
     function renderListaSelectorProductos(productos) {
         if (reglaActivaIdx === null) return;
-        const idsSeleccionados = reglasConfig[reglaActivaIdx].ids_productos || [];
+        const idsSeleccionados = (reglasConfig[reglaActivaIdx].ids_productos || []).map(Number);
         const cont = document.getElementById("lista-selector-productos");
         cont.innerHTML = productos.map(p => {
-            const sel = idsSeleccionados.includes(p.id_producto);
+            const sel = idsSeleccionados.includes(Number(p.id_producto));
             return `<div class="d-flex align-items-center p-2 border-bottom" style="cursor:pointer;" onclick="toggleProductoSelector(${p.id_producto})">
                 <span style="font-size:1.2rem;margin-right:.75rem;">${sel ? '✅' : '⬜'}</span>
                 <span style="font-size:.95rem;">${p.nombre_producto}</span>
@@ -893,9 +893,9 @@
 
     function toggleProductoSelector(idProducto) {
         if (reglaActivaIdx === null) return;
-        const ids = reglasConfig[reglaActivaIdx].ids_productos || [];
-        const pos = ids.indexOf(idProducto);
-        if (pos === -1) { ids.push(idProducto); } else { ids.splice(pos, 1); }
+        const ids = (reglasConfig[reglaActivaIdx].ids_productos || []).map(Number);
+        const pos = ids.indexOf(Number(idProducto));
+        if (pos === -1) { ids.push(Number(idProducto)); } else { ids.splice(pos, 1); }
         reglasConfig[reglaActivaIdx].ids_productos = ids;
         const q = document.getElementById("buscador-selector-prod").value.toLowerCase();
         const filtrados = todosLosProductos.filter(p => p.nombre_producto.toLowerCase().includes(q));
