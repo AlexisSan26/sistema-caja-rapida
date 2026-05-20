@@ -104,6 +104,7 @@
             🔔 Alertas <span id="badge-alertas"></span>
         </button>
         <button class="menu-item" id="menu-fiados" onclick="irA('fiados')">💳 Fiados</button>
+        <button class="menu-item" id="menu-entradas" onclick="irA('entradas')">📥 Entradas</button>
         <button class="menu-item" id="menu-historial" onclick="irA('historial')">📅 Historial</button>
         <button class="menu-item" id="menu-config" onclick="irA('config')">⚙️ Configuración</button>
         <button class="menu-item text-danger mt-auto" onclick="logoutSaaS()">🚪 Cerrar Sesión</button>
@@ -114,6 +115,11 @@
 <button id="btn-flotante" onclick="abrirFlujoResurtido()" title="Agregar mercancía">➕</button>
 
 <div id="pantalla-caja" class="pantalla activa">
+<!-- Barra sticky de total -->
+<div id="barra-total-sticky" style="display:none;position:fixed;top:0;left:0;right:0;background:#198754;color:white;z-index:6500;padding:.4rem 1rem;display:none;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2);">
+    <span id="sticky-articulos" style="font-size:.9rem;font-weight:500;">0 artículos</span>
+    <span id="sticky-total" style="font-size:1.2rem;font-weight:700;">$0.00</span>
+</div>
 <div class="container mt-4" style="max-width:600px;">
     <h2 class="text-center mb-1" style="margin-top:2.5rem;">Caja Rápida</h2>
     <p id="fecha-actual" class="text-center text-secondary mb-2 text-capitalize"></p>
@@ -231,6 +237,7 @@
     <div class="input-group mb-2">
         <input type="text" id="buscador-inventario" class="form-control form-control-lg" placeholder="Buscar producto..." oninput="filtrarInventario()">
         <button class="btn btn-outline-secondary" onclick="abrirEscanerInventario()" title="Escanear">📷</button>
+        <button class="btn btn-outline-success" onclick="exportarInventarioCSV()" title="Exportar CSV">⬇️ CSV</button>
     </div>
     <div id="escaner-inv-container" style="display:none;" class="mb-2">
         <div id="lector-qr-inv"></div>
@@ -293,6 +300,48 @@
         <input type="text" id="buscador-selector-prod" class="form-control mb-3" placeholder="Buscar producto..." oninput="filtrarSelectorProductos()">
         <div id="lista-selector-productos" style="max-height:350px;overflow-y:auto;"></div>
         <button class="btn btn-success w-100 mt-3" onclick="cerrarSelectorProductos()">✓ Listo</button>
+    </div>
+</div>
+
+<!-- ═══ PANTALLA ENTRADAS ═══ -->
+<div id="pantalla-entradas" class="pantalla">
+<div class="container mt-4 pb-5" style="max-width:600px;">
+    <h4 class="text-center mb-3" style="margin-top:2.5rem;">📥 Historial de Entradas</h4>
+    <div class="mb-3">
+        <label class="fw-bold text-secondary" style="font-size:.85rem;">Filtrar por fecha</label>
+        <div class="input-group">
+            <input type="date" id="input-fecha-entradas" class="form-control form-control-lg" onchange="cargarEntradas()">
+            <button class="btn btn-outline-secondary" onclick="limpiarFiltroEntradas()">✕ Limpiar</button>
+        </div>
+    </div>
+    <div id="lista-entradas"><p class="text-center text-muted mt-4">Selecciona una fecha o carga todas las entradas.</p></div>
+</div>
+</div>
+
+<!-- ═══ MODAL MERMA ═══ -->
+<div id="modal-merma" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9300;overflow-y:auto;">
+    <div style="background:white;margin:4rem auto;max-width:420px;border-radius:12px;padding:1.5rem;">
+        <h5 class="mb-3">⚠️ Registrar Merma</h5>
+        <p id="merma-producto-nombre" class="fw-bold text-danger mb-3"></p>
+        <div class="mb-3">
+            <label class="fw-bold">Cantidad a descontar *</label>
+            <input type="number" id="merma-cantidad" class="form-control form-control-lg" placeholder="Ej. 2" min="0.01" step="any">
+        </div>
+        <div class="mb-3">
+            <label class="fw-bold">Motivo *</label>
+            <select id="merma-motivo" class="form-select form-select-lg">
+                <option value="merma">Merma general</option>
+                <option value="caducado">Producto caducado</option>
+                <option value="daño">Daño / rotura</option>
+                <option value="uso_personal">Uso personal</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="fw-bold">Nota <span class="text-muted fw-normal">(opcional)</span></label>
+            <input type="text" id="merma-nota" class="form-control" placeholder="Descripción adicional...">
+        </div>
+        <button class="btn btn-danger w-100 btn-lg mb-2" onclick="confirmarMerma()">⚠️ Confirmar Merma</button>
+        <button class="btn btn-outline-secondary w-100" onclick="cerrarMerma()">Cancelar</button>
     </div>
 </div>
 
@@ -458,6 +507,7 @@
             <div class="col-6"><div class="campo-lectura"><div class="etiqueta">Caducidad</div><div class="valor" id="sheet-caducidad"></div></div></div>
         </div>
         <button class="btn btn-primary w-100 btn-lg mt-2" onclick="activarModoEdicion()">✏️ Editar</button>
+        <button class="btn btn-warning w-100 btn-lg mt-2 fw-bold" onclick="abrirMerma()">⚠️ Registrar Merma</button>
         <button class="btn btn-danger w-100 btn-lg mt-2 fw-bold" onclick="eliminarProductoActual()">🗑️ Eliminar Producto</button>
         <button class="btn btn-outline-secondary w-100 mt-2" onclick="cerrarBottomSheet()">Cerrar</button>
     </div>
@@ -587,6 +637,7 @@
         if (pantalla === 'alertas') cargarAlertas();
         if (pantalla === 'fiados') cargarClientes();
         if (pantalla === 'historial') cargarHistorial();
+        if (pantalla === 'entradas') cargarEntradas();
         if (pantalla === 'config') cargarConfiguracionTicket();
     }
     function toggleMenu() {
@@ -947,6 +998,18 @@
         document.getElementById("tipo").value = "VENTA";
         document.getElementById("div-btn-agregar").style.display = "block";
         carritoItems = [];
+        // Recuperar borrador offline
+        try {
+            const borrador = localStorage.getItem('carrito_borrador');
+            if (borrador) {
+                const items = JSON.parse(borrador);
+                if (Array.isArray(items) && items.length > 0) {
+                    const recuperar = confirm(`📋 Hay un borrador con ${items.length} producto(s) sin guardar. ¿Deseas recuperarlo?`);
+                    if (recuperar) carritoItems = items;
+                    else localStorage.removeItem('carrito_borrador');
+                }
+            }
+        } catch(e) { localStorage.removeItem('carrito_borrador'); }
         renderCarrito();
         actualizarLista();
         cargarProductosEnMemoria();
@@ -1163,6 +1226,11 @@
         if (carritoItems.length === 0) {
             divCarrito.style.display = "none";
             totalEl.textContent = "$0.00";
+            // Ocultar barra sticky
+            const barraSticky = document.getElementById("barra-total-sticky");
+            if (barraSticky) barraSticky.style.display = "none";
+            // Limpiar borrador
+            localStorage.removeItem('carrito_borrador');
             return;
         }
         divCarrito.style.display = "block";
@@ -1185,6 +1253,18 @@
             </tr>`;
         }).join("");
         totalEl.textContent = `$${total.toFixed(2)}`;
+        // Actualizar barra sticky
+        const barraSticky = document.getElementById("barra-total-sticky");
+        const stickyArticulos = document.getElementById("sticky-articulos");
+        const stickyTotal = document.getElementById("sticky-total");
+        if (barraSticky && stickyArticulos && stickyTotal) {
+            const totalArticulos = carritoItems.reduce((acc, i) => acc + i.cantidad, 0);
+            stickyArticulos.textContent = `${totalArticulos} artículo${totalArticulos !== 1 ? 's' : ''}`;
+            stickyTotal.textContent = `$${total.toFixed(2)}`;
+            barraSticky.style.display = "flex";
+        }
+        // Guardar borrador en localStorage
+        try { localStorage.setItem('carrito_borrador', JSON.stringify(carritoItems)); } catch(e) {}
     }
 
     function actualizarCantidadCarrito(idx, val) {
@@ -1330,6 +1410,7 @@
             }
             carritoItems = [];
             renderCarrito();
+            localStorage.removeItem('carrito_borrador');
             document.getElementById("producto").value = "";
             document.getElementById("precio").value = "";
             document.getElementById("cantidad").value = "1";
@@ -1728,7 +1809,9 @@
                 cerrarEscanerCaja();
                 const res = await fetch(`${API_URL}/producto_por_codigo/${codigo}`);
                 const data = await res.json();
+
                 if (data.encontrado) {
+                    // CAMINO VERDE: producto con precio registrado → cobrar directo
                     const esGranel = unidadesFraccionales.includes((data.producto.unidad_medida || '').toLowerCase());
                     if (esGranel) {
                         document.getElementById("producto").value = data.producto.nombre_producto;
@@ -1739,9 +1822,45 @@
                     } else {
                         agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido, 1);
                     }
+                } else if (data.camino === "amarillo") {
+                    // CAMINO AMARILLO: está en catálogo global pero sin precio local → pedir precio y registrar
+                    const sug = data.sugerencia;
+                    const precioStr = prompt(`"${sug.nombre_producto}" encontrado en el catálogo global.\nEscribe el precio de venta para tu tienda:`);
+                    if (precioStr === null) return;
+                    const precio = parseFloat(precioStr);
+                    if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
+                    try {
+                        await fetch(`${API_URL}/registrar_producto`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                codigo_barras: codigo,
+                                nombre_producto: sug.nombre_producto,
+                                precio_sugerido: precio,
+                                stock_actual: 0,
+                                stock_minimo: 5,
+                                unidad_medida: sug.unidad_medida
+                            })
+                        });
+                        try { await cargarProductosEnMemoria(); } catch(e){}
+                        const esGranel = unidadesFraccionales.includes((sug.unidad_medida || '').toLowerCase());
+                        if (esGranel) {
+                            document.getElementById("producto").value = sug.nombre_producto;
+                            document.getElementById("precio").value = precio;
+                            document.getElementById("div-cantidad").style.visibility = "visible";
+                            document.getElementById("cantidad").focus();
+                            document.getElementById("cantidad").select();
+                        } else {
+                            agregarProductoAlCarrito(sug.nombre_producto, precio, 1);
+                        }
+                    } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
                 } else {
+                    // CAMINO ROJO: producto totalmente desconocido → dar de alta
                     document.getElementById("producto").value = codigo;
-                    if (confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) { irA('inventario'); abrirFlujoResurtido(codigo); }
+                    if (confirm("❌ Producto no encontrado.\n¿Deseas darlo de alta en el inventario ahora?")) {
+                        irA('inventario');
+                        abrirFlujoResurtido(codigo);
+                    }
                 }
             }, () => {}
         ).catch(() => mostrarError("No se pudo acceder a la cámara."));
@@ -2043,6 +2162,119 @@
     function cerrarEscanerResurtido() {
         if (scannerResurtido) { scannerResurtido.stop().catch(() => {}); scannerResurtido = null; }
         document.getElementById("escaner-resurtido-container").style.display = "none";
+    }
+
+   // ─── HISTORIAL DE ENTRADAS ────────────────────────────────────────────────
+    async function cargarEntradas() {
+        const fechaFiltro = document.getElementById("input-fecha-entradas").value;
+        document.getElementById("lista-entradas").innerHTML = "<p class='text-center text-muted mt-4'>Cargando entradas...</p>";
+        try {
+            let url = `${API_URL}/historial_entradas`;
+            if (fechaFiltro) url += `?fecha=${fechaFiltro}`;
+            const res = await fetch(url);
+            const entradas = await res.json();
+            if (!Array.isArray(entradas) || entradas.length === 0) {
+                document.getElementById("lista-entradas").innerHTML = "<p class='text-center text-muted mt-4'>No hay entradas para esta fecha.</p>";
+                return;
+            }
+            document.getElementById("lista-entradas").innerHTML = entradas.map(e => {
+                const fecha = e.fecha_entrada ? new Date(e.fecha_entrada.replace(' ', 'T')).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+                return `<div class="card mb-2 shadow-sm">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-bold">${e.nombre_producto || e.producto || '—'}</div>
+                                <small class="text-muted">${fecha}${e.nota ? ' · ' + e.nota : ''}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-success">+${e.cantidad} ${e.unidad_medida || 'pza'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join("");
+        } catch (e) {
+            document.getElementById("lista-entradas").innerHTML = "<p class='text-danger text-center mt-4'>Error al cargar entradas.</p>";
+        }
+    }
+
+    function limpiarFiltroEntradas() {
+        document.getElementById("input-fecha-entradas").value = "";
+        cargarEntradas();
+    }
+
+    // ─── MERMAS ───────────────────────────────────────────────────────────────
+    function abrirMerma() {
+        if (!productoEnEdicion) return;
+        document.getElementById("merma-producto-nombre").textContent = `Producto: ${productoEnEdicion.nombre_producto} (Stock: ${productoEnEdicion.stock_actual})`;
+        document.getElementById("merma-cantidad").value = "";
+        document.getElementById("merma-motivo").value = "merma";
+        document.getElementById("merma-nota").value = "";
+        document.getElementById("modal-merma").style.display = "block";
+    }
+
+    function cerrarMerma() {
+        document.getElementById("modal-merma").style.display = "none";
+    }
+
+    async function confirmarMerma() {
+        if (!productoEnEdicion) return;
+        const cantidad = parseFloat(document.getElementById("merma-cantidad").value);
+        const motivo = document.getElementById("merma-motivo").value;
+        const nota = document.getElementById("merma-nota").value.trim();
+        if (isNaN(cantidad) || cantidad <= 0) { alert("Escribe una cantidad válida mayor a 0."); return; }
+        if (cantidad > productoEnEdicion.stock_actual) {
+            if (!confirm(`⚠️ La cantidad (${cantidad}) supera el stock actual (${productoEnEdicion.stock_actual}). ¿Continuar de todas formas?`)) return;
+        }
+        try {
+            const res = await fetch(`${API_URL}/registrar_merma`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id_producto: productoEnEdicion.id_producto,
+                    cantidad: cantidad,
+                    motivo: motivo,
+                    nota: nota || null
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) { alert("❌ " + (data.detail || data.mensaje || "Error al registrar merma.")); return; }
+            alert("✅ " + (data.mensaje || "Merma registrada correctamente."));
+            cerrarMerma();
+            cerrarBottomSheet();
+            cargarInventario();
+        } catch (e) { mostrarError("Error al registrar la merma."); }
+    }
+
+    // ─── EXPORTAR CSV ─────────────────────────────────────────────────────────
+    function exportarInventarioCSV() {
+        if (!todosLosProductos || todosLosProductos.length === 0) {
+            alert("No hay productos en el inventario para exportar.");
+            return;
+        }
+        const cabecera = ["ID", "Nombre", "Precio", "Stock actual", "Stock mínimo", "Unidad", "Proveedor", "Código de barras", "Caducidad"];
+        const filas = todosLosProductos.map(p => [
+            p.id_producto || "",
+            `"${(p.nombre_producto || "").replace(/"/g, '""')}"`,
+            p.precio_sugerido || "0",
+            p.stock_actual || "0",
+            p.stock_minimo || "0",
+            p.unidad_medida || "pieza",
+            `"${(p.proveedor || "").replace(/"/g, '""')}"`,
+            p.codigo_barras || "",
+            p.fecha_caducidad || ""
+        ]);
+        const csv = "\uFEFF" + [cabecera.join(","), ...filas.map(f => f.join(","))].join("\r\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const hoy = new Date().toISOString().split("T")[0];
+        link.download = `inventario_${hoy}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 
    // ─── Init ─────────────────────────────────────────────────────────────────

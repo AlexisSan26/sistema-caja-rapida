@@ -106,7 +106,6 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
 # ─── Modelos Operativos ───────────────────────────────────────────────────────
 class TiposPermitidos(str, Enum):
     VENTA = "VENTA"
-    FIADO = "FIADO"
     RETIRO = "RETIRO"
     FONDO_CAJA = "FONDO_CAJA"
     COBRO_FIADO = "COBRO_FIADO"
@@ -202,6 +201,14 @@ class VentaLote(BaseModel):
     items: list[ItemVenta]
 
 
+# ─── NUEVO MODELO: Merma (Prioridad 2B) ───────────────────────────────────────
+class MermaProducto(BaseModel):
+    id_producto: int
+    cantidad: float
+    motivo: str = "merma"  # 'merma', 'caducado', 'uso_personal', 'daño'
+    nota: str | None = None
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def conectar_bd():
     conexion = db_pool.get_connection()
@@ -209,6 +216,14 @@ def conectar_bd():
     cursor.execute("SET time_zone = '-06:00';")
     cursor.close()
     return conexion
+
+
+# ─── NUEVO HELPER: Log de Auditoría (Prioridad 4A) ────────────────────────────
+def _log(cursor, id_tienda: int, id_usuario: int, accion: str, detalle: str):
+    cursor.execute(
+        "INSERT INTO log_auditoria (id_tienda, id_usuario, accion, detalle) VALUES (%s, %s, %s, %s)",
+        (id_tienda, id_usuario, accion, detalle)
+    )
 
 
 def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
@@ -364,6 +379,14 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
         nombre_limpio = mov.producto.strip() if mov.producto else "Venta sin nombre"
         if mov.cantidad <= 0:
             mov.cantidad = 1.0
+        # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
+        cursor.execute(
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            (mov.id_turno, user.id_tienda)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
+        # ──────────────────────────────────────────────────────────
 
         cursor.execute("""
             INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda)
@@ -416,6 +439,11 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
                 SET stock_actual = stock_actual + %s
                 WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
             """, (float(mov["cantidad"]), mov["producto"], user.id_tienda))
+
+        # ─── LOG DE AUDITORÍA (Prioridad 4A) ──────────────────────
+        _log(cursor, user.id_tienda, user.id_usuario, "BORRAR_MOVIMIENTO",
+             f"id={id_movimiento} tipo={mov['tipo_movimiento']} producto={mov['producto']} cantidad={mov['cantidad']}")
+
         conexion.commit()
         return {"mensaje": "Movimiento cancelado"}
     finally:
@@ -450,8 +478,10 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
             "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO' WHERE id_turno = %s AND id_tienda = %s",
             (id_turno, user.id_tienda)
         )
-        conexion.commit()
-        return _calcular_resumen(cursor, id_turno, user.id_tienda)
+        resumen = _calcular_resumen(cursor, id_turno, user.id_tienda)  # calcula primero
+        conexion.commit()                                               # cierra después, solo si no hubo error
+        return resumen
+
     finally:
         cursor.close()
         conexion.close()
@@ -509,7 +539,7 @@ def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
         cursor = conexion.cursor(dictionary=True)
         if q == "":
             cursor.execute("""
-                SELECT p.nombre_producto, p.precio_sugerido
+                SELECT p.id_producto, p.nombre_producto, p.precio_sugerido, p.codigo_barras, p.unidad_medida
                 FROM productos p
                 LEFT JOIN (
                     SELECT producto, COUNT(*) as ventas FROM movimientos WHERE id_tienda = %s GROUP BY producto
@@ -519,7 +549,7 @@ def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
             """, (user.id_tienda, user.id_tienda))
         else:
             cursor.execute(
-                "SELECT nombre_producto, precio_sugerido FROM productos WHERE nombre_producto LIKE %s AND activo = 1 AND id_tienda = %s LIMIT 10",
+                "SELECT id_producto, nombre_producto, precio_sugerido, codigo_barras, unidad_medida FROM productos WHERE nombre_producto LIKE %s AND activo = 1 AND id_tienda = %s LIMIT 10",
                 (f"%{q}%", user.id_tienda)
             )
         return cursor.fetchall()
@@ -534,7 +564,7 @@ def obtener_todos_productos(user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
-            "SELECT nombre_producto, precio_sugerido, codigo_barras FROM productos WHERE activo = 1 AND id_tienda = %s ORDER BY nombre_producto",
+            "SELECT id_producto, nombre_producto, precio_sugerido, codigo_barras, unidad_medida FROM productos WHERE activo = 1 AND id_tienda = %s ORDER BY nombre_producto",
             (user.id_tienda,)
         )
         return cursor.fetchall()
@@ -548,15 +578,37 @@ def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
+
+        # ── CAMINO VERDE: existe en la tienda ────────────────────────────────
         cursor.execute("""
             SELECT id_producto, nombre_producto, precio_sugerido,
-                   stock_actual, stock_minimo, proveedor, fecha_caducidad, codigo_barras, unidad_medida
+                   stock_actual, stock_minimo, proveedor, fecha_caducidad,
+                   codigo_barras, unidad_medida
             FROM productos WHERE codigo_barras = %s AND activo = 1 AND id_tienda = %s
         """, (codigo, user.id_tienda))
         producto = cursor.fetchone()
         if producto:
-            return {"encontrado": True, "producto": producto}
-        return {"encontrado": False}
+            return {"encontrado": True, "camino": "verde", "producto": producto}
+
+        # ── CAMINO AMARILLO: existe en el catálogo global ────────────────────
+        cursor.execute(
+            "SELECT * FROM productos_globales WHERE codigo_barras = %s",
+            (codigo,)
+        )
+        global_prod = cursor.fetchone()
+        if global_prod:
+            return {
+                "encontrado": False,
+                "camino": "amarillo",
+                "sugerencia": {
+                    "codigo_barras": global_prod["codigo_barras"],
+                    "nombre_producto": global_prod["nombre_producto"],
+                    "unidad_medida": global_prod["unidad_medida"]
+                }
+            }
+
+        # ── CAMINO ROJO: no existe en ningún lado ────────────────────────────
+        return {"encontrado": False, "camino": "rojo"}
     finally:
         cursor.close()
         conexion.close()
@@ -575,6 +627,14 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
         """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido,
               p.stock_actual, p.stock_minimo, p.proveedor or None,
               p.fecha_caducidad or None, user.id_tienda, p.unidad_medida))
+
+        # ─── CATÁLOGO GLOBAL: registrar si tiene código de barras (Prioridad 3) ──
+        if p.codigo_barras:
+            cursor.execute("""
+                INSERT IGNORE INTO productos_globales (codigo_barras, nombre_producto, unidad_medida)
+                VALUES (%s, %s, %s)
+            """, (p.codigo_barras, p.nombre_producto, p.unidad_medida))
+
         conexion.commit()
         return {"mensaje": "Producto registrado", "id_producto": cursor.lastrowid}
     finally:
@@ -859,7 +919,7 @@ def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user
             WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA' AND cf.id_tienda = %s
         """, (id_cliente, user.id_tienda))
         row = cursor.fetchone()
-        if row and float(row["saldo"]) > 0:
+        if row and float(row["saldo"]) != 0:
             return {"error": f"El cliente tiene saldo pendiente de ${float(row['saldo']):.2f}. Salda la cuenta antes."}
         cursor.execute("UPDATE clientes SET activo = 0 WHERE id_cliente = %s AND id_tienda = %s",
                        (id_cliente, user.id_tienda))
@@ -934,6 +994,17 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
+
+        # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
+        cursor.execute("""
+            SELECT cf.id_cuenta FROM cuentas_fiado cf
+            JOIN clientes c ON c.id_cliente = cf.id_cliente
+            WHERE cf.id_cuenta = %s AND c.id_tienda = %s AND cf.estado = 'ABIERTA'
+        """, (item.id_cuenta, user.id_tienda))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
+        # ──────────────────────────────────────────────────────────
+
         cursor.execute("""
             INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
             VALUES (%s, %s, %s, %s, %s)
@@ -955,13 +1026,16 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
+
         cursor.execute("""
             SELECT c.nombre FROM clientes c
             JOIN cuentas_fiado cf ON c.id_cliente = cf.id_cliente
             WHERE cf.id_cuenta = %s AND cf.id_tienda = %s
         """, (abono.id_cuenta, user.id_tienda))
         res = cursor.fetchone()
-        nombre_cliente = res['nombre'] if res else "Cliente"
+        if not res:
+            raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
+        nombre_cliente = res['nombre']
 
         cursor.execute(
             "INSERT INTO abonos (id_cuenta, monto, nota, id_tienda) VALUES (%s, %s, %s, %s)",
@@ -985,13 +1059,17 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         ta = cursor.fetchone()
 
         saldo_nuevo = float(tf['total_fiado']) - float(ta['total_abonos'])
-        if saldo_nuevo <= 0:
+        if saldo_nuevo == 0:
             cursor.execute(
                 "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s AND id_tienda = %s",
                 (abono.id_cuenta, user.id_tienda)
             )
         conexion.commit()
-        return {"mensaje": "Abono registrado", "saldo_restante": max(0, saldo_nuevo)}
+        return {
+            "mensaje": "Abono registrado",
+            "saldo_restante": max(0, saldo_nuevo),
+            "saldo_favor": abs(min(0, saldo_nuevo))  # 0 si pagó exacto, 30 si pagó de más
+        }
     finally:
         cursor.close()
         conexion.close()
@@ -1004,6 +1082,16 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
+
+        # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
+        cursor.execute(
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            (venta.id_turno, user.id_tienda)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
+        # ──────────────────────────────────────────────────────────
+
         for i in venta.items:
             nombre_limpio = i.producto.strip() if i.producto else "Venta sin nombre"
             cursor.execute(
@@ -1068,6 +1156,66 @@ def actualizar_configuracion(config: ConfiguracionTicket, user: TokenData = Depe
 
 
 #proyecto caja rapida 1.0
+
+# ─── NUEVO ENDPOINT: Historial de Entradas (Prioridad 2A) ─────────────────────
+@app.get("/historial_entradas")
+def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_user)):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        sql = """
+            SELECT e.id_entrada, p.nombre_producto, e.cantidad,
+                   DATE_FORMAT(e.fecha_entrada, '%d/%m/%Y') AS fecha,
+                   TIME_FORMAT(e.fecha_entrada, '%H:%i') AS hora,
+                   e.notas, e.fecha_caducidad
+            FROM entradas_mercancia e
+            JOIN productos p ON p.id_producto = e.id_producto
+            WHERE e.id_tienda = %s
+        """
+        params = [user.id_tienda]
+        if fecha:
+            sql += " AND DATE(e.fecha_entrada) = %s"
+            params.append(fecha)
+        sql += " ORDER BY e.fecha_entrada DESC LIMIT 200"
+        cursor.execute(sql, params)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ─── NUEVO ENDPOINT: Registrar Merma (Prioridad 2B) ───────────────────────────
+@app.post("/registrar_merma")
+def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user)):
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT nombre_producto, stock_actual FROM productos WHERE id_producto = %s AND activo = 1 AND id_tienda = %s",
+            (m.id_producto, user.id_tienda)
+        )
+        producto = cursor.fetchone()
+        if not producto:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
+        cursor.execute(
+            "UPDATE productos SET stock_actual = stock_actual - %s WHERE id_producto = %s AND id_tienda = %s",
+            (m.cantidad, m.id_producto, user.id_tienda)
+        )
+        cursor.execute("""
+            INSERT INTO entradas_mercancia (id_producto, cantidad, notas, id_tienda)
+            VALUES (%s, %s, %s, %s)
+        """, (m.id_producto, m.cantidad, f"[MERMA — {m.motivo}]", user.id_tienda))
+
+        # ─── LOG DE AUDITORÍA ──────────────────────────────────────
+        _log(cursor, user.id_tienda, user.id_usuario, "MERMA",
+             f"producto_id={m.id_producto} cantidad={m.cantidad} motivo={m.motivo}")
+
+        conexion.commit()
+        return {"mensaje": f"Merma de {m.cantidad} unidades registrada para {producto['nombre_producto']}"}
+    finally:
+        cursor.close()
+        conexion.close()
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  PANEL SUPERADMIN — Endpoints existentes
@@ -1497,6 +1645,27 @@ def admin_inventario_tienda(id_tienda: int, user: TokenData = Depends(get_curren
             "total_productos": len(productos),
             "productos": productos
         }
+    finally:
+        cursor.close()
+        conexion.close()
+
+
+# ─── NUEVO ENDPOINT: Log de Auditoría para Superadmin (Prioridad 4A) ──────────
+@app.get("/admin/log_auditoria/{id_tienda}")
+def admin_log_auditoria(id_tienda: int, user: TokenData = Depends(get_current_user)):
+    _require_superadmin(user)
+    conexion = conectar_bd()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT l.id_log, u.username, l.accion, l.detalle,
+                   DATE_FORMAT(l.fecha_hora, '%d/%m/%Y %H:%i') AS fecha_hora
+            FROM log_auditoria l
+            JOIN usuarios u ON u.id_usuario = l.id_usuario
+            WHERE l.id_tienda = %s
+            ORDER BY l.fecha_hora DESC LIMIT 100
+        """, (id_tienda,))
+        return cursor.fetchall()
     finally:
         cursor.close()
         conexion.close()
