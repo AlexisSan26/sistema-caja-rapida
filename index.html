@@ -626,6 +626,9 @@
 
     // ─── Navegación ───────────────────────────────────────────────────────────
     function irA(pantalla) {
+        cerrarEscanerCaja();
+        cerrarEscanerInventario();
+        cerrarEscanerResurtido();
         cerrarMenu();
         document.querySelectorAll('.pantalla').forEach(p => p.classList.remove('activa'));
         document.querySelectorAll('.menu-item').forEach(b => b.classList.remove('activo'));

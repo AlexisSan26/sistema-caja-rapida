@@ -1,7 +1,8 @@
 import os
 import json
-from typing import List
-from fastapi import FastAPI, Depends, HTTPException, status
+from typing import List, Literal
+from pydantic import Field
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -17,9 +18,19 @@ load_dotenv()
 
 app = FastAPI()
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://alexissan26.github.io/sistema-caja-rapida/").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,19 +43,21 @@ db_config = {
     'password': os.getenv('DB_PASSWORD'),
     'database': os.getenv('DB_NAME'),
     'ssl_disabled': False,
-
+    'time_zone': '-06:00',
 }
 
 # ─── RENDIMIENTO: Pool de conexiones a 8 ──────────────────────────────────────
 db_pool = mysql.connector.pooling.MySQLConnectionPool(
     pool_name="cajapool_saas",
-    pool_size=8,
+    pool_size=5,
     pool_reset_session=True,
     **db_config
 )
 
 # ─── SEGURIDAD: JWT y Bcrypt ──────────────────────────────────────────────────
-SECRET_KEY = os.getenv("SECRET_KEY", "super_secret_key_caja_rapida_saas")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY no definida. Agrégala en las variables de entorno de Render.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 días
 
@@ -115,8 +128,8 @@ class Movimiento(BaseModel):
     id_turno: int
     tipo_movimiento: TiposPermitidos
     producto: str = "Venta general"
-    cantidad: float = 1.0
-    precio_unitario: float
+    cantidad: float = Field(default=1.0, gt=0)
+    precio_unitario: float = Field(gt=0)
 
 
 class ActualizacionPrecio(BaseModel):
@@ -186,7 +199,7 @@ class ItemFiado(BaseModel):
 class AbonoFiado(BaseModel):
     id_cuenta: int
     id_turno: int
-    monto: float
+    monto: float = Field(gt=0)
     nota: str | None = None
 
 
@@ -204,18 +217,14 @@ class VentaLote(BaseModel):
 # ─── NUEVO MODELO: Merma (Prioridad 2B) ───────────────────────────────────────
 class MermaProducto(BaseModel):
     id_producto: int
-    cantidad: float
-    motivo: str = "merma"  # 'merma', 'caducado', 'uso_personal', 'daño'
+    cantidad: float = Field(gt=0)
+    motivo: Literal["merma", "caducado", "uso_personal", "daño"] = "merma"
     nota: str | None = None
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def conectar_bd():
-    conexion = db_pool.get_connection()
-    cursor = conexion.cursor()
-    cursor.execute("SET time_zone = '-06:00';")
-    cursor.close()
-    return conexion
+    return db_pool.get_connection()
 
 
 # ─── NUEVO HELPER: Log de Auditoría (Prioridad 4A) ────────────────────────────
@@ -297,7 +306,9 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
 
 # ─── Auth Endpoint ────────────────────────────────────────────────────────────
 @app.post("/login")
-def login(datos: LoginRequest):
+@limiter.limit("10/minute")
+def login(request: Request, datos: LoginRequest):
+
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
@@ -1036,6 +1047,14 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         if not res:
             raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
         nombre_cliente = res['nombre']
+
+        # Validar que el turno pertenece a esta tienda
+        cursor.execute(
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            (abono.id_turno, user.id_tienda)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
 
         cursor.execute(
             "INSERT INTO abonos (id_cuenta, monto, nota, id_tienda) VALUES (%s, %s, %s, %s)",
