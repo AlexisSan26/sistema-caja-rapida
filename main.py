@@ -86,35 +86,29 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         id_tienda: int = payload.get("id_tienda")
         id_usuario: int = payload.get("id_usuario")
-
         if id_tienda is None or id_usuario is None:
             raise credentials_exception
-
         rol: str = payload.get("rol", "cajero")
-
-        # ─── MODIFICACIÓN QUIRÚRGICA ADAPTADA A TU MAIN.PY ───
-        # Usamos tu db_pool existente para no agotar las conexiones
-        conexion = db_pool.get_connection()
-        try:
-            cursor = conexion.cursor(dictionary=True)
-            cursor.execute("""
-                            SELECT t.activa, u.id_usuario 
-                            FROM tiendas t 
-                            LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1
-                            WHERE t.id_tienda = %s
-                        """, (id_usuario, id_tienda))
-            estado = cursor.fetchone()
-
-            if not estado or not estado['activa'] or not estado['id_usuario']:
-                raise credentials_exception
-        finally:
-            cursor.close()
-            conexion.close()
-        # ─────────────────────────────────────────────────────
-
-        return TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
     except JWTError:
         raise credentials_exception
+
+    # La conexión SOLO se abre si el JWT es válido
+    conexion = db_pool.get_connection()
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT t.activa, u.id_usuario
+            FROM tiendas t
+            LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1
+            WHERE t.id_tienda = %s
+        """, (id_usuario, id_tienda))
+        estado = cursor.fetchone()
+        if not estado or not estado['activa'] or not estado['id_usuario']:
+            raise credentials_exception
+        return TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
+    finally:
+        cursor.close()
+        conexion.close()
 
 # ─── Modelos Operativos ───────────────────────────────────────────────────────
 class TiposPermitidos(str, Enum):
@@ -485,14 +479,29 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor(dictionary=True)
+        # 1. Verificar que el turno existe y está abierto
+        cursor.execute(
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            (id_turno, user.id_tienda)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Turno no encontrado o ya cerrado")
+
+        # 2. Calcular primero — si falla, no se cierra nada
+        resumen = _calcular_resumen(cursor, id_turno, user.id_tienda)
+
+        # 3. Cerrar solo si el cálculo fue exitoso
         cursor.execute(
             "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO' WHERE id_turno = %s AND id_tienda = %s",
             (id_turno, user.id_tienda)
         )
-        resumen = _calcular_resumen(cursor, id_turno, user.id_tienda)  # calcula primero
-        conexion.commit()                                               # cierra después, solo si no hubo error
+        conexion.commit()
         return resumen
-
+    except HTTPException:
+        raise
+    except Exception as e:
+        conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al hacer corte: {str(e)}")
     finally:
         cursor.close()
         conexion.close()
@@ -853,6 +862,8 @@ def listar_proveedores(user: TokenData = Depends(get_current_user)):
 
 @app.post("/descontar_stock/{id_producto}")
 def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Depends(get_current_user)):
+    if cantidad <= 0:
+        raise HTTPException(status_code=400, detail="La cantidad debe ser mayor a cero")
     conexion = conectar_bd()
     try:
         cursor = conexion.cursor()
@@ -861,6 +872,8 @@ def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Dep
             (float(cantidad), id_producto, user.id_tienda)
         )
         conexion.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Producto no encontrado")
         return {"mensaje": "Stock actualizado"}
     finally:
         cursor.close()
@@ -1174,7 +1187,6 @@ def actualizar_configuracion(config: ConfiguracionTicket, user: TokenData = Depe
         conexion.close()
 
 
-#proyecto caja rapida 1.0
 
 # ─── NUEVO ENDPOINT: Historial de Entradas (Prioridad 2A) ─────────────────────
 @app.get("/historial_entradas")
@@ -1227,7 +1239,7 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
 
         # ─── LOG DE AUDITORÍA ──────────────────────────────────────
         _log(cursor, user.id_tienda, user.id_usuario, "MERMA",
-             f"producto_id={m.id_producto} cantidad={m.cantidad} motivo={m.motivo}")
+             f"producto_id={m.id_producto} cantidad={-m.cantidad} motivo={m.motivo}")
 
         conexion.commit()
         return {"mensaje": f"Merma de {m.cantidad} unidades registrada para {producto['nombre_producto']}"}

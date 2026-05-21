@@ -562,7 +562,7 @@
             }
         }
         const res = await originalFetch(url, options);
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) {
             logoutSaaS();
         }
         return res;
@@ -2372,13 +2372,13 @@
                 return;
             }
             document.getElementById("lista-entradas").innerHTML = entradas.map(e => {
-                const fecha = e.fecha_entrada ? new Date(e.fecha_entrada.replace(' ', 'T')).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+                const fecha = (e.fecha && e.hora) ? `${e.fecha} ${e.hora}` : '—';
                 return `<div class="card mb-2 shadow-sm">
                     <div class="card-body py-2 px-3">
                         <div class="d-flex justify-content-between align-items-start">
                             <div>
                                 <div class="fw-bold">${e.nombre_producto || e.producto || '—'}</div>
-                                <small class="text-muted">${fecha}${e.nota ? ' · ' + e.nota : ''}</small>
+                                <small class="text-muted">${fecha}${e.notas ? ' · ' + e.notas : ''}</small>
                             </div>
                             <div class="text-end">
                                 <span class="badge bg-success">+${e.cantidad} ${e.unidad_medida || 'pza'}</span>
@@ -2488,5 +2488,3 @@
 </script>
 </body>
 </html>
-
-//proyecto caja rapida 1.0
