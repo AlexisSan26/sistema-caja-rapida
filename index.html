@@ -1122,8 +1122,9 @@
                 } else {
                     fetch(`${API_URL}/producto_por_codigo/${val}`)
                         .then(r => r.json())
-                        .then(data => {
+                        .then(async (data) => {
                             if (data.encontrado) {
+                                // CAMINO VERDE
                                 const esGranel = unidadesFraccionales.includes((data.producto.unidad_medida || '').toLowerCase());
                                 if (esGranel) {
                                     document.getElementById("producto").value = data.producto.nombre_producto;
@@ -1138,6 +1139,70 @@
                                     document.getElementById("cantidad").value = "1";
                                     document.getElementById("producto").focus();
                                 }
+                            } else if (data.camino === "amarillo") {
+                                // CAMINO AMARILLO
+                                const sug = data.sugerencia;
+                                const precioStr = prompt(`"${sug.nombre_producto}" encontrado en el catálogo global.\nEscribe el precio de venta para tu tienda:`);
+                                if (precioStr === null) return;
+                                const precio = parseFloat(precioStr);
+                                if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
+                                try {
+                                    await fetch(`${API_URL}/registrar_producto`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            codigo_barras: val,
+                                            nombre_producto: sug.nombre_producto,
+                                            precio_sugerido: precio,
+                                            stock_actual: 0,
+                                            stock_minimo: 5,
+                                            unidad_medida: sug.unidad_medida
+                                        })
+                                    });
+                                    try { await cargarProductosEnMemoria(); } catch(e) {}
+                                    const esGranel = unidadesFraccionales.includes((sug.unidad_medida || '').toLowerCase());
+                                    if (esGranel) {
+                                        document.getElementById("producto").value = sug.nombre_producto;
+                                        document.getElementById("precio").value = precio;
+                                        document.getElementById("div-cantidad").style.visibility = "visible";
+                                        document.getElementById("cantidad").focus();
+                                        document.getElementById("cantidad").select();
+                                    } else {
+                                        agregarProductoAlCarrito(sug.nombre_producto, precio, 1);
+                                        document.getElementById("producto").value = "";
+                                        document.getElementById("precio").value = "";
+                                        document.getElementById("cantidad").value = "1";
+                                        document.getElementById("producto").focus();
+                                    }
+                                } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
+                            } else {
+                                // CAMINO ROJO
+                                const nombre = prompt(`Código ${val} no encontrado.\nNombre del producto:`);
+                                if (!nombre || !nombre.trim()) { mostrarError("Registro cancelado."); return; }
+                                const precioStr = prompt(`Precio de venta de "${nombre.trim()}":`);
+                                if (precioStr === null) { mostrarError("Registro cancelado."); return; }
+                                const precio = parseFloat(precioStr);
+                                if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
+                                try {
+                                    await fetch(`${API_URL}/registrar_producto`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            codigo_barras: val,
+                                            nombre_producto: nombre.trim(),
+                                            precio_sugerido: precio,
+                                            stock_actual: 0,
+                                            stock_minimo: 5,
+                                            unidad_medida: "pieza"
+                                        })
+                                    });
+                                    try { await cargarProductosEnMemoria(); } catch(e) {}
+                                    agregarProductoAlCarrito(nombre.trim(), precio);
+                                    document.getElementById("producto").value = "";
+                                    document.getElementById("precio").value = "";
+                                    document.getElementById("cantidad").value = "1";
+                                    document.getElementById("producto").focus();
+                                } catch(e) { mostrarError("Error al registrar el producto."); }
                             }
                         }).catch(() => mostrarError("Error al buscar por código."));
                 }
