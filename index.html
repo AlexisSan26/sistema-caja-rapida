@@ -116,9 +116,9 @@
 
 <div id="pantalla-caja" class="pantalla activa">
 <!-- Barra sticky de total -->
-<div id="barra-total-sticky" style="display:none;position:fixed;top:0;left:0;right:0;background:#198754;color:white;z-index:6500;padding:.4rem 1rem;display:none;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2);">
-    <span id="sticky-articulos" style="font-size:.9rem;font-weight:500;">0 artículos</span>
-    <span id="sticky-total" style="font-size:1.2rem;font-weight:700;">$0.00</span>
+<div id="barra-total-sticky" style="display: none !important;">
+    <span id="sticky-articulos" style="display: none !important;"></span>
+    <span id="sticky-total" style="display: none !important;"></span>
 </div>
 <div class="container mt-4" style="max-width:600px;">
     <h2 class="text-center mb-1" style="margin-top:2.5rem;">Caja Rápida</h2>
@@ -1181,11 +1181,120 @@
         if (event.key === "Enter") {
             event.preventDefault();
             const tipo = document.getElementById("tipo").value;
-            if (["VENTA","FIADO"].includes(tipo)) {
-                const texto = document.getElementById("producto").value.trim();
-                if (/^\d{4,}$/.test(texto)) return;
-                agregarALista();
+            if (!["VENTA","FIADO"].includes(tipo)) return;
+
+            const texto = document.getElementById("producto").value.trim();
+
+            if (/^\d{4,}$/.test(texto)) {
+                clearTimeout(debounceTimer);
+                const unidadesFraccionales = ['kg', 'g', 'litro', 'ml', 'metro'];
+
+                const local = todosLosProductos.find(p => p.codigo_barras === texto);
+                if (local) {
+                    const esGranel = unidadesFraccionales.includes((local.unidad_medida || '').toLowerCase());
+                    if (esGranel) {
+                        document.getElementById("producto").value = local.nombre_producto;
+                        document.getElementById("precio").value = local.precio_sugerido;
+                        document.getElementById("div-cantidad").style.visibility = "visible";
+                        document.getElementById("cantidad").focus();
+                        document.getElementById("cantidad").select();
+                    } else {
+                        agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
+                        document.getElementById("producto").value = "";
+                        document.getElementById("precio").value = "";
+                        document.getElementById("cantidad").value = "1";
+                        document.getElementById("producto").focus();
+                    }
+                    return;
+                }
+
+                fetch(`${API_URL}/producto_por_codigo/${texto}`)
+                    .then(r => r.json())
+                    .then(async (data) => {
+                        if (data.encontrado) {
+                            const esGranel = unidadesFraccionales.includes((data.producto.unidad_medida || '').toLowerCase());
+                            if (esGranel) {
+                                document.getElementById("producto").value = data.producto.nombre_producto;
+                                document.getElementById("precio").value = data.producto.precio_sugerido;
+                                document.getElementById("div-cantidad").style.visibility = "visible";
+                                document.getElementById("cantidad").focus();
+                                document.getElementById("cantidad").select();
+                            } else {
+                                agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                                document.getElementById("producto").value = "";
+                                document.getElementById("precio").value = "";
+                                document.getElementById("cantidad").value = "1";
+                                document.getElementById("producto").focus();
+                            }
+                        } else if (data.camino === "amarillo") {
+                            const sug = data.sugerencia;
+                            const precioStr = prompt(`"${sug.nombre_producto}" encontrado en el catálogo global.\nEscribe el precio de venta para tu tienda:`);
+                            if (precioStr === null) return;
+                            const precio = parseFloat(precioStr);
+                            if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
+                            try {
+                                await fetch(`${API_URL}/registrar_producto`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        codigo_barras: texto,
+                                        nombre_producto: sug.nombre_producto,
+                                        precio_sugerido: precio,
+                                        stock_actual: 0,
+                                        stock_minimo: 5,
+                                        unidad_medida: sug.unidad_medida
+                                    })
+                                });
+                                try { await cargarProductosEnMemoria(); } catch(e) {}
+                                const esGranel = unidadesFraccionales.includes((sug.unidad_medida || '').toLowerCase());
+                                if (esGranel) {
+                                    document.getElementById("producto").value = sug.nombre_producto;
+                                    document.getElementById("precio").value = precio;
+                                    document.getElementById("div-cantidad").style.visibility = "visible";
+                                    document.getElementById("cantidad").focus();
+                                    document.getElementById("cantidad").select();
+                                } else {
+                                    agregarProductoAlCarrito(sug.nombre_producto, precio, 1);
+                                    document.getElementById("producto").value = "";
+                                    document.getElementById("precio").value = "";
+                                    document.getElementById("cantidad").value = "1";
+                                    document.getElementById("producto").focus();
+                                }
+                            } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
+                        } else {
+                            const nombre = prompt(`Código ${texto} no encontrado.\nNombre del producto:`);
+                            if (!nombre || !nombre.trim()) { mostrarError("Registro cancelado."); return; }
+                            const precioStr = prompt(`Precio de venta de "${nombre.trim()}":`);
+                            if (precioStr === null) { mostrarError("Registro cancelado."); return; }
+                            const precio = parseFloat(precioStr);
+                            if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
+                            try {
+                                await fetch(`${API_URL}/registrar_producto`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        codigo_barras: texto,
+                                        nombre_producto: nombre.trim(),
+                                        precio_sugerido: precio,
+                                        stock_actual: 0,
+                                        stock_minimo: 5,
+                                        unidad_medida: "pieza"
+                                    })
+                                });
+                                try { await cargarProductosEnMemoria(); } catch(e) {}
+                                agregarProductoAlCarrito(nombre.trim(), precio);
+                                document.getElementById("producto").value = "";
+                                document.getElementById("precio").value = "";
+                                document.getElementById("cantidad").value = "1";
+                                document.getElementById("producto").focus();
+                            } catch(e) { mostrarError("Error al registrar el producto."); }
+                        }
+                    })
+                    .catch(() => mostrarError("Error al buscar por código."));
+                return;
             }
+
+            agregarALista();
         }
     }
 
@@ -1855,12 +1964,29 @@
                         }
                     } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
                 } else {
-                    // CAMINO ROJO: producto totalmente desconocido → dar de alta
-                    document.getElementById("producto").value = codigo;
-                    if (confirm("❌ Producto no encontrado.\n¿Deseas darlo de alta en el inventario ahora?")) {
-                        irA('inventario');
-                        abrirFlujoResurtido(codigo);
-                    }
+                    // CAMINO ROJO: producto totalmente desconocido → registrar sin salir de la caja
+                    const nombre = prompt(`Código ${codigo} no encontrado.\nNombre del producto:`);
+                    if (!nombre || !nombre.trim()) { mostrarError("Registro cancelado."); return; }
+                    const precioStr = prompt(`Precio de venta de "${nombre.trim()}":`);
+                    if (precioStr === null) { mostrarError("Registro cancelado."); return; }
+                    const precio = parseFloat(precioStr);
+                    if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
+                    try {
+                        await fetch(`${API_URL}/registrar_producto`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                codigo_barras: codigo,
+                                nombre_producto: nombre.trim(),
+                                precio_sugerido: precio,
+                                stock_actual: 0,
+                                stock_minimo: 5,
+                                unidad_medida: "pieza"
+                            })
+                        });
+                        try { await cargarProductosEnMemoria(); } catch(e) {}
+                        agregarProductoAlCarrito(nombre.trim(), precio);
+                    } catch(e) { mostrarError("Error al registrar el producto."); }
                 }
             }, () => {}
         ).catch(() => mostrarError("No se pudo acceder a la cámara."));
