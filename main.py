@@ -1,5 +1,6 @@
 import os
 import json
+import threading
 from typing import List, Literal
 from pydantic import Field
 from fastapi import FastAPI, Depends, HTTPException, status, Request
@@ -10,9 +11,10 @@ from enum import Enum
 import mysql.connector
 from dotenv import load_dotenv
 import mysql.connector.pooling
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from cachetools import TTLCache
 
 load_dotenv()
 
@@ -21,6 +23,8 @@ app = FastAPI()
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+
 
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
@@ -35,6 +39,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 db_config = {
     'host': os.getenv('DB_HOST'),
@@ -49,8 +55,9 @@ db_config = {
 # ─── RENDIMIENTO: Pool de conexiones a 8 ──────────────────────────────────────
 db_pool = mysql.connector.pooling.MySQLConnectionPool(
     pool_name="cajapool_saas",
-    pool_size=5,
+    pool_size=8,
     pool_reset_session=True,
+    connection_timeout=10,
     **db_config
 )
 
@@ -64,6 +71,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 días
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+# Cache de autenticación: máx 500 tokens activos, expiran a los 5 minutos
+_auth_cache = TTLCache(maxsize=500, ttl=300)
+_cache_lock = threading.Lock()
 
 class TokenData(BaseModel):
     id_tienda: int
@@ -92,22 +102,33 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
     except JWTError:
         raise credentials_exception
 
-    # La conexión SOLO se abre si el JWT es válido
+    # ── CACHE HIT: evita el round-trip a la BD ────────────────────────────
+    cache_key = f"{id_tienda}:{id_usuario}"
+    with _cache_lock:
+        if cache_key in _auth_cache:
+            return _auth_cache[cache_key]
+
+    # ── CACHE MISS: consulta la BD y almacena el resultado ────────────────
     conexion = db_pool.get_connection()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
             SELECT t.activa, u.id_usuario
             FROM tiendas t
-            LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1
+            LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1 AND u.id_tienda = t.id_tienda
             WHERE t.id_tienda = %s
         """, (id_usuario, id_tienda))
         estado = cursor.fetchone()
         if not estado or not estado['activa'] or not estado['id_usuario']:
             raise credentials_exception
-        return TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
+        token_data = TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
+        with _cache_lock:
+            _auth_cache[cache_key] = token_data
+        return token_data
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
         conexion.close()
 
 # ─── Modelos Operativos ───────────────────────────────────────────────────────
@@ -304,6 +325,7 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
 def login(request: Request, datos: LoginRequest):
 
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -313,14 +335,15 @@ def login(request: Request, datos: LoginRequest):
                 """, (datos.username,)
         )
         user = cursor.fetchone()
-        if not user or not pwd_context.verify(datos.password, user['password_hash']):
+        password_hash = user[
+            'password_hash'] if user else "$2b$12$KIXnotarealhashjustpaddingtomakeittakesametime00000000000"
+        if not user or not pwd_context.verify(datos.password, password_hash):
             raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
         if user.get('rol') == 'superadmin':
-            expire = datetime.utcnow() + timedelta(days=2)  # Admin dura estrictamente 2 días
+            expire = datetime.now(tz=timezone.utc) + timedelta(days=2)
         else:
-            expire = datetime.utcnow() + timedelta(
-                minutes=ACCESS_TOKEN_EXPIRE_MINUTES)  # Cajero conserva sus 30 días
+            expire = datetime.now(tz=timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         # ────────────────────────────────────────────────────────────
         encoded_jwt = jwt.encode(
             {"id_tienda": user['id_tienda'], "id_usuario": user['id_usuario'],
@@ -329,7 +352,8 @@ def login(request: Request, datos: LoginRequest):
         )
         return {"access_token": encoded_jwt, "token_type": "bearer", "rol": user.get('rol', 'cajero')}
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
         conexion.close()
 
 
@@ -347,6 +371,7 @@ def inicio():
 @app.get("/turno_actual")
 def obtener_turno_actual(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("SELECT id_turno, estado, fecha_apertura FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
@@ -354,13 +379,15 @@ def obtener_turno_actual(user: TokenData = Depends(get_current_user)):
         turno = cursor.fetchone()
         return turno if turno else {"estado": "CERRADO"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/abrir_turno")
 def abrir_turno(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("SELECT id_turno FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
@@ -368,17 +395,26 @@ def abrir_turno(user: TokenData = Depends(get_current_user)):
         existente = cursor.fetchone()
         if existente:
             return {"mensaje": "Ya hay un turno abierto", "id_turno": existente['id_turno']}
-        cursor.execute("INSERT INTO turnos (estado, id_tienda) VALUES ('ABIERTO', %s)", (user.id_tienda,))
+        cursor.execute("INSERT INTO turnos (estado, id_tienda, turno_activo) VALUES ('ABIERTO', %s, 1)",
+                       (user.id_tienda,))
         conexion.commit()
         return {"mensaje": "Turno abierto con éxito", "id_turno": cursor.lastrowid}
+    except mysql.connector.IntegrityError:
+        conexion.rollback()
+        cursor.execute("SELECT id_turno FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
+                       (user.id_tienda,))
+        existente = cursor.fetchone()
+        return {"mensaje": "Ya hay un turno abierto", "id_turno": existente['id_turno']}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/registrar_movimiento")
 def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         nombre_limpio = mov.producto.strip() if mov.producto else "Venta sin nombre"
@@ -418,14 +454,22 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
 
         conexion.commit()
         return {"mensaje": "Registro guardado correctamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar movimiento: {str(e)}")
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
         conexion.close()
 
 
 @app.delete("/borrar_movimiento/{id_movimiento}")
 def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
@@ -440,25 +484,30 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
 
         if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:
             cursor.execute("""
-                UPDATE productos
-                SET stock_actual = stock_actual + %s
-                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-            """, (float(mov["cantidad"]), mov["producto"], user.id_tienda))
+                    UPDATE productos
+                    SET stock_actual = stock_actual + %s
+                    WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                """, (float(mov["cantidad"]), mov["producto"], user.id_tienda))
 
-        # ─── LOG DE AUDITORÍA (Prioridad 4A) ──────────────────────
         _log(cursor, user.id_tienda, user.id_usuario, "BORRAR_MOVIMIENTO",
              f"id={id_movimiento} tipo={mov['tipo_movimiento']} producto={mov['producto']} cantidad={mov['cantidad']}")
 
         conexion.commit()
         return {"mensaje": "Movimiento cancelado"}
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al cancelar movimiento: {str(e)}")
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
         conexion.close()
 
 
 @app.put("/actualizar_precio")
 def actualizar_precio(datos: ActualizacionPrecio, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -470,13 +519,15 @@ def actualizar_precio(datos: ActualizacionPrecio, user: TokenData = Depends(get_
             return {"mensaje": "Precio actualizado correctamente"}
         return {"mensaje": "No se encontró el producto en el catálogo"}
     finally:
-        cursor.close()
+        if cursor is not None:  # ← proteger el close
+            cursor.close()
         conexion.close()
 
 
 @app.post("/corte_caja/{id_turno}")
 def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         # 1. Verificar que el turno existe y está abierto
@@ -492,7 +543,7 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
 
         # 3. Cerrar solo si el cálculo fue exitoso
         cursor.execute(
-            "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO' WHERE id_turno = %s AND id_tienda = %s",
+            "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO', turno_activo = NULL WHERE id_turno = %s AND id_tienda = %s",
             (id_turno, user.id_tienda)
         )
         conexion.commit()
@@ -503,13 +554,15 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
         conexion.rollback()
         raise HTTPException(status_code=500, detail=f"Error al hacer corte: {str(e)}")
     finally:
-        cursor.close()
+        if cursor is not None:  # ← proteger el close
+            cursor.close()
         conexion.close()
 
 
 @app.get("/historial_turnos")
 def historial_turnos(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -519,24 +572,28 @@ def historial_turnos(user: TokenData = Depends(get_current_user)):
         """, (user.id_tienda,))
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/resumen_turno/{id_turno}")
 def resumen_turno(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         return _calcular_resumen(cursor, id_turno, user.id_tienda)
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/movimientos_turno/{id_turno}")
 def obtener_movimientos(id_turno: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -548,13 +605,15 @@ def obtener_movimientos(id_turno: int, user: TokenData = Depends(get_current_use
         """, (id_turno, user.id_tienda))
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/buscar_productos")
 def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         if q == "":
@@ -574,13 +633,15 @@ def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
             )
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/productos")
 def obtener_todos_productos(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
@@ -589,13 +650,15 @@ def obtener_todos_productos(user: TokenData = Depends(get_current_user)):
         )
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/producto_por_codigo/{codigo}")
 def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
 
@@ -630,13 +693,15 @@ def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)
         # ── CAMINO ROJO: no existe en ningún lado ────────────────────────────
         return {"encontrado": False, "camino": "rojo"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/registrar_producto")
 def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute("""
@@ -658,13 +723,15 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
         conexion.commit()
         return {"mensaje": "Producto registrado", "id_producto": cursor.lastrowid}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.put("/actualizar_producto/{id_producto}")
 def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute("""
@@ -689,13 +756,15 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
             return {"mensaje": "Producto actualizado correctamente"}
         return {"mensaje": "No se encontró el producto"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.delete("/eliminar_producto/{id_producto}")
 def eliminar_producto(id_producto: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -707,13 +776,15 @@ def eliminar_producto(id_producto: int, user: TokenData = Depends(get_current_us
             return {"mensaje": "Producto eliminado del sistema (archivado)"}
         return {"mensaje": "No se encontró el producto o ya estaba inactivo"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/entrada_mercancia")
 def entrada_mercancia(e: EntradaMercancia, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -731,8 +802,15 @@ def entrada_mercancia(e: EntradaMercancia, user: TokenData = Depends(get_current
         """, (e.id_producto, e.cantidad, e.fecha_caducidad or None, e.notas or None, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Entrada registrada correctamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar entrada: {str(e)}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -741,6 +819,7 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
     if not lote.items:
         return {"error": "El lote está vacío"}
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         for item in lote.items:
@@ -760,14 +839,22 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
             item.id_producto, item.cantidad, item.fecha_caducidad or None, lote.nota_general or None, user.id_tienda))
         conexion.commit()
         return {"mensaje": f"Se registraron {len(lote.items)} productos correctamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar lote: {str(e)}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/resurtir_por_codigo")
 def resurtir_por_codigo(r: ResurtidoPorCodigo, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
@@ -793,13 +880,15 @@ def resurtir_por_codigo(r: ResurtidoPorCodigo, user: TokenData = Depends(get_cur
         conexion.commit()
         return {"encontrado": True, "mensaje": f"Stock de {producto['nombre_producto']} actualizado"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/inventario")
 def listar_inventario(q: str = "", proveedor: str = "", user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         sql = """SELECT id_producto, codigo_barras, nombre_producto,
@@ -817,13 +906,15 @@ def listar_inventario(q: str = "", proveedor: str = "", user: TokenData = Depend
         cursor.execute(sql, params)
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/alertas")
 def obtener_alertas(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -841,13 +932,15 @@ def obtener_alertas(user: TokenData = Depends(get_current_user)):
         """, (user.id_tienda,))
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/proveedores")
 def listar_proveedores(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -856,7 +949,8 @@ def listar_proveedores(user: TokenData = Depends(get_current_user)):
         )
         return [row[0] for row in cursor.fetchall()]
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -865,6 +959,7 @@ def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Dep
     if cantidad <= 0:
         raise HTTPException(status_code=400, detail="La cantidad debe ser mayor a cero")
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -876,13 +971,15 @@ def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Dep
             raise HTTPException(status_code=404, detail="Producto no encontrado")
         return {"mensaje": "Stock actualizado"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/clientes")
 def listar_clientes(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -905,13 +1002,15 @@ def listar_clientes(user: TokenData = Depends(get_current_user)):
         """, (user.id_tienda, user.id_tienda, user.id_tienda))
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/clientes")
 def crear_cliente(c: ClienteNuevo, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -925,14 +1024,21 @@ def crear_cliente(c: ClienteNuevo, user: TokenData = Depends(get_current_user)):
         )
         conexion.commit()
         return {"mensaje": "Cliente registrado", "id_cliente": id_cliente}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al crear cliente: {str(e)}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
-
 
 @app.delete("/clientes/{id_cliente}")
 def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -950,13 +1056,15 @@ def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user
         conexion.commit()
         return {"mensaje": "Cliente eliminado"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.get("/cuenta_fiado/{id_cliente}")
 def obtener_cuenta(id_cliente: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
@@ -1009,13 +1117,15 @@ def obtener_cuenta(id_cliente: int, user: TokenData = Depends(get_current_user))
             "saldo": saldo
         }
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/agregar_fiado")
 def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
 
@@ -1040,14 +1150,22 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
         """, (float(item.cantidad), item.producto.strip(), user.id_tienda))
         conexion.commit()
         return {"mensaje": "Fiado registrado correctamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar fiado: {str(e)}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.post("/registrar_abono")
 def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
 
@@ -1100,10 +1218,17 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         return {
             "mensaje": "Abono registrado",
             "saldo_restante": max(0, saldo_nuevo),
-            "saldo_favor": abs(min(0, saldo_nuevo))  # 0 si pagó exacto, 30 si pagó de más
+            "saldo_favor": abs(min(0, saldo_nuevo))
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar abono: {str(e)}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1112,6 +1237,7 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
     if not venta.items:
         return {"error": "Sin items"}
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
 
@@ -1146,8 +1272,15 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                 """, (float(i.cantidad), nombre_limpio, user.id_tienda))
         conexion.commit()
         return {"ok": True, "registrados": len(venta.items)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar venta: {str(e)}")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 class ReglaResumen(BaseModel):
@@ -1162,6 +1295,7 @@ class ConfiguracionTicket(BaseModel):
 @app.get("/configuracion_tienda")
 def obtener_configuracion(user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("SELECT config_resumen FROM tiendas WHERE id_tienda = %s", (user.id_tienda,))
@@ -1169,21 +1303,24 @@ def obtener_configuracion(user: TokenData = Depends(get_current_user)):
         reglas = json.loads(row['config_resumen']) if row and row['config_resumen'] else []
         return {"reglas": reglas}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
 @app.put("/configuracion_tienda")
 def actualizar_configuracion(config: ConfiguracionTicket, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
-        json_str = json.dumps([r.dict() for r in config.reglas])
+        json_str = json.dumps([r.model_dump() for r in config.reglas])
         cursor.execute("UPDATE tiendas SET config_resumen = %s WHERE id_tienda = %s", (json_str, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Configuración del ticket actualizada correctamente"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1192,6 +1329,7 @@ def actualizar_configuracion(config: ConfiguracionTicket, user: TokenData = Depe
 @app.get("/historial_entradas")
 def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         sql = """
@@ -1211,7 +1349,8 @@ def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_us
         cursor.execute(sql, params)
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1219,6 +1358,7 @@ def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_us
 @app.post("/registrar_merma")
 def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
@@ -1228,6 +1368,9 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
         producto = cursor.fetchone()
         if not producto:
             raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+        stock_resultante = producto['stock_actual'] - m.cantidad
+
         cursor.execute(
             "UPDATE productos SET stock_actual = stock_actual - %s WHERE id_producto = %s AND id_tienda = %s",
             (m.cantidad, m.id_producto, user.id_tienda)
@@ -1235,16 +1378,26 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
         cursor.execute("""
             INSERT INTO entradas_mercancia (id_producto, cantidad, notas, id_tienda)
             VALUES (%s, %s, %s, %s)
-        """, (m.id_producto, m.cantidad, f"[MERMA — {m.motivo}]", user.id_tienda))
+        """, (m.id_producto, -m.cantidad, f"[MERMA — {m.motivo}]", user.id_tienda))
 
         # ─── LOG DE AUDITORÍA ──────────────────────────────────────
         _log(cursor, user.id_tienda, user.id_usuario, "MERMA",
              f"producto_id={m.id_producto} cantidad={-m.cantidad} motivo={m.motivo}")
 
         conexion.commit()
-        return {"mensaje": f"Merma de {m.cantidad} unidades registrada para {producto['nombre_producto']}"}
+        return {
+            "mensaje": f"Merma de {m.cantidad} unidades registrada para {producto['nombre_producto']}",
+            "advertencia": "Stock quedó en negativo, recuerda registrar la entrada pendiente" if stock_resultante < 0 else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar merma: {str(e)}")
     finally:
-        cursor.close()
+        if cursor is not None:
+            cursor.close()
         conexion.close()
 
 
@@ -1278,6 +1431,7 @@ class ResetPassword(BaseModel):
 def admin_listar_tiendas(user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -1292,7 +1446,8 @@ def admin_listar_tiendas(user: TokenData = Depends(get_current_user)):
         """)
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1303,6 +1458,7 @@ def admin_crear_tienda(t: TiendaNueva, user: TokenData = Depends(get_current_use
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -1311,7 +1467,8 @@ def admin_crear_tienda(t: TiendaNueva, user: TokenData = Depends(get_current_use
         conexion.commit()
         return {"mensaje": "Tienda creada", "id_tienda": cursor.lastrowid}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1319,13 +1476,15 @@ def admin_crear_tienda(t: TiendaNueva, user: TokenData = Depends(get_current_use
 def admin_activar_tienda(id_tienda: int, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute("UPDATE tiendas SET activa = 1 WHERE id_tienda = %s", (id_tienda,))
         conexion.commit()
         return {"mensaje": "Tienda activada"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1333,6 +1492,7 @@ def admin_activar_tienda(id_tienda: int, user: TokenData = Depends(get_current_u
 def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute("UPDATE tiendas SET activa = 0 WHERE id_tienda = %s", (id_tienda,))
@@ -1346,7 +1506,8 @@ def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_curren
         conexion.commit()
         return {"mensaje": "Tienda desactivada"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1356,6 +1517,7 @@ def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_curren
 def admin_listar_usuarios(user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -1367,7 +1529,8 @@ def admin_listar_usuarios(user: TokenData = Depends(get_current_user)):
                 """)
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1381,6 +1544,7 @@ def admin_crear_usuario(u: UsuarioNuevo, user: TokenData = Depends(get_current_u
         raise HTTPException(status_code=400, detail="rol inválido")
     hashed = pwd_context.hash(u.password)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -1392,7 +1556,8 @@ def admin_crear_usuario(u: UsuarioNuevo, user: TokenData = Depends(get_current_u
     except mysql.connector.IntegrityError:
         raise HTTPException(status_code=409, detail="El username ya existe")
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1403,6 +1568,7 @@ def admin_reset_password(id_usuario: int, datos: ResetPassword, user: TokenData 
         raise HTTPException(status_code=400, detail="La contraseña no puede estar vacía")
     hashed = pwd_context.hash(datos.nuevo_password)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -1413,7 +1579,8 @@ def admin_reset_password(id_usuario: int, datos: ResetPassword, user: TokenData 
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         return {"mensaje": "Contraseña actualizada"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1424,6 +1591,7 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
     if id_usuario == user.id_usuario:
         raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         # CAMBIO QUIRÚRGICO: Soft-delete en lugar de borrado físico
@@ -1433,7 +1601,8 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         return {"mensaje": "Usuario eliminado correctamente"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 # ── Ventas del día por tienda ──────────────────────────────────────────────────
@@ -1442,6 +1611,7 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
 def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         # Sumamos los movimientos directamente desde el turno (igual que la caja)
@@ -1477,7 +1647,8 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
 
         return rows
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1502,6 +1673,7 @@ def admin_editar_tienda(id_tienda: int, datos: ActualizacionNombreTienda, user: 
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -1513,7 +1685,8 @@ def admin_editar_tienda(id_tienda: int, datos: ActualizacionNombreTienda, user: 
             raise HTTPException(status_code=404, detail="Tienda no encontrada")
         return {"mensaje": "Nombre de tienda actualizado correctamente"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1523,6 +1696,7 @@ def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: Tok
     if datos.rol not in ("superadmin", "cajero"):
         raise HTTPException(status_code=400, detail="rol inválido")
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         # Verificar que la tienda destino existe
@@ -1538,7 +1712,8 @@ def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: Tok
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         return {"mensaje": "Usuario actualizado correctamente"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1559,6 +1734,7 @@ def admin_ventas_reporte(
         raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD")
 
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -1591,7 +1767,8 @@ def admin_ventas_reporte(
             "tiendas": rows
         }
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1607,6 +1784,7 @@ class SuscripcionTienda(BaseModel):
 def admin_obtener_suscripcion(id_tienda: int, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
@@ -1619,7 +1797,8 @@ def admin_obtener_suscripcion(id_tienda: int, user: TokenData = Depends(get_curr
         row['monto_mensual'] = float(row['monto_mensual'])
         return row
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1633,6 +1812,7 @@ def admin_actualizar_suscripcion(id_tienda: int, datos: SuscripcionTienda, user:
     if datos.monto_mensual < 0:
         raise HTTPException(status_code=400, detail="monto_mensual no puede ser negativo")
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor()
         cursor.execute(
@@ -1644,7 +1824,8 @@ def admin_actualizar_suscripcion(id_tienda: int, datos: SuscripcionTienda, user:
             raise HTTPException(status_code=404, detail="Tienda no encontrada")
         return {"mensaje": "Suscripción actualizada correctamente"}
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1654,6 +1835,7 @@ def admin_actualizar_suscripcion(id_tienda: int, datos: SuscripcionTienda, user:
 def admin_inventario_tienda(id_tienda: int, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         # Verificar que la tienda existe
@@ -1677,7 +1859,8 @@ def admin_inventario_tienda(id_tienda: int, user: TokenData = Depends(get_curren
             "productos": productos
         }
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()
 
 
@@ -1686,6 +1869,7 @@ def admin_inventario_tienda(id_tienda: int, user: TokenData = Depends(get_curren
 def admin_log_auditoria(id_tienda: int, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
     conexion = conectar_bd()
+    cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
@@ -1698,5 +1882,6 @@ def admin_log_auditoria(id_tienda: int, user: TokenData = Depends(get_current_us
         """, (id_tienda,))
         return cursor.fetchall()
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
         conexion.close()

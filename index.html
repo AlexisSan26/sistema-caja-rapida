@@ -319,7 +319,7 @@
 </div>
 
 <!-- ═══ MODAL MERMA ═══ -->
-<div id="modal-merma" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9300;overflow-y:auto;">
+<div id="modal-merma" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:9700;overflow-y:auto;">
     <div style="background:white;margin:4rem auto;max-width:420px;border-radius:12px;padding:1.5rem;">
         <h5 class="mb-3">⚠️ Registrar Merma</h5>
         <p id="merma-producto-nombre" class="fw-bold text-danger mb-3"></p>
@@ -564,6 +564,7 @@
         const res = await originalFetch(url, options);
         if (res.status === 401) {
             logoutSaaS();
+            throw new Error('Sesión expirada');
         }
         return res;
     };
@@ -1644,6 +1645,7 @@
         try {
             const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`, { method: "POST" });
             const datos = await res.json();
+            if (!res.ok) { mostrarError(datos.detail || "Error al cerrar la caja."); return; }
             mostrarTicket(datos);
             alert("Turno Cerrado Correctamente");
             resetearInterfazCerrada();
