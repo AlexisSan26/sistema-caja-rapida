@@ -98,23 +98,20 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         id_usuario: int = payload.get("id_usuario")
         if id_tienda is None or id_usuario is None:
             raise credentials_exception
-        rol: str = payload.get("rol", "cajero")
     except JWTError:
         raise credentials_exception
 
-    # ── CACHE HIT: evita el round-trip a la BD ────────────────────────────
     cache_key = f"{id_tienda}:{id_usuario}"
     with _cache_lock:
         if cache_key in _auth_cache:
             return _auth_cache[cache_key]
 
-    # ── CACHE MISS: consulta la BD y almacena el resultado ────────────────
     conexion = db_pool.get_connection()
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
-            SELECT t.activa, u.id_usuario
+            SELECT t.activa, u.id_usuario, u.rol
             FROM tiendas t
             LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1 AND u.id_tienda = t.id_tienda
             WHERE t.id_tienda = %s
@@ -122,7 +119,11 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         estado = cursor.fetchone()
         if not estado or not estado['activa'] or not estado['id_usuario']:
             raise credentials_exception
-        token_data = TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol)
+
+        # ← CORRECCIÓN CRÍTICA: el rol viene de la BD, no del token
+        rol_verificado = estado['rol']
+
+        token_data = TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol_verificado)
         with _cache_lock:
             _auth_cache[cache_key] = token_data
         return token_data
@@ -390,21 +391,21 @@ def abrir_turno(user: TokenData = Depends(get_current_user)):
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
-        cursor.execute("SELECT id_turno FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
-                       (user.id_tienda,))
-        existente = cursor.fetchone()
-        if existente:
-            return {"mensaje": "Ya hay un turno abierto", "id_turno": existente['id_turno']}
-        cursor.execute("INSERT INTO turnos (estado, id_tienda, turno_activo) VALUES ('ABIERTO', %s, 1)",
-                       (user.id_tienda,))
-        conexion.commit()
-        return {"mensaje": "Turno abierto con éxito", "id_turno": cursor.lastrowid}
-    except mysql.connector.IntegrityError:
-        conexion.rollback()
-        cursor.execute("SELECT id_turno FROM turnos WHERE estado = 'ABIERTO' AND id_tienda = %s LIMIT 1",
-                       (user.id_tienda,))
-        existente = cursor.fetchone()
-        return {"mensaje": "Ya hay un turno abierto", "id_turno": existente['id_turno']}
+        try:
+            cursor.execute(
+                "INSERT INTO turnos (estado, id_tienda, turno_activo) VALUES ('ABIERTO', %s, 1)",
+                (user.id_tienda,)
+            )
+            conexion.commit()
+            return {"mensaje": "Turno abierto con éxito", "id_turno": cursor.lastrowid}
+        except mysql.connector.IntegrityError:
+            conexion.rollback()
+            cursor.execute(
+                "SELECT id_turno FROM turnos WHERE estado='ABIERTO' AND id_tienda=%s LIMIT 1",
+                (user.id_tienda,)
+            )
+            existente = cursor.fetchone()
+            return {"mensaje": "Ya hay un turno abierto", "id_turno": existente['id_turno'] if existente else None}
     finally:
         if cursor:
             cursor.close()
@@ -420,6 +421,8 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
         nombre_limpio = mov.producto.strip() if mov.producto else "Venta sin nombre"
         if mov.cantidad <= 0:
             mov.cantidad = 1.0
+
+        conexion.start_transaction()
         # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
         cursor.execute(
             "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
@@ -436,16 +439,16 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
 
         if mov.tipo_movimiento == 'VENTA' and nombre_limpio not in ("", "Venta sin nombre"):
             cursor.execute(
-                "SELECT COUNT(*) FROM productos WHERE nombre_producto = %s AND id_tienda = %s",
-                (nombre_limpio, user.id_tienda)
+                "INSERT IGNORE INTO productos (nombre_producto, precio_sugerido, activo, id_tienda) VALUES (%s, %s, 1, %s)",
+                (nombre_limpio, mov.precio_unitario, user.id_tienda)
             )
-            existe = cursor.fetchone()[0] > 0
-            if not existe:
-                cursor.execute(
-                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo, id_tienda) VALUES (%s, %s, 1, %s)",
-                    (nombre_limpio, mov.precio_unitario, user.id_tienda)
-                )
-            else:
+            # ← CORRECCIÓN: bloquear la fila ANTES de modificarla
+            cursor.execute("""
+                SELECT id_producto FROM productos
+                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                FOR UPDATE
+            """, (nombre_limpio, user.id_tienda))
+            if cursor.fetchone():  # solo descontar si el producto existe en catálogo
                 cursor.execute("""
                     UPDATE productos
                     SET stock_actual = stock_actual - %s
@@ -472,6 +475,7 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
+        conexion.start_transaction()
         cursor.execute(
             "SELECT tipo_movimiento, producto, cantidad FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
             (id_movimiento, user.id_tienda)
@@ -479,6 +483,8 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
         mov = cursor.fetchone()
         if not mov:
             return {"mensaje": "Movimiento no encontrado"}
+
+
         cursor.execute("DELETE FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
                        (id_movimiento, user.id_tienda))
 
@@ -530,9 +536,11 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
+
+        conexion.start_transaction()
         # 1. Verificar que el turno existe y está abierto
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR UPDATE",
             (id_turno, user.id_tienda)
         )
         if not cursor.fetchone():
@@ -674,21 +682,22 @@ def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)
             return {"encontrado": True, "camino": "verde", "producto": producto}
 
         # ── CAMINO AMARILLO: existe en el catálogo global ────────────────────
-        cursor.execute(
-            "SELECT * FROM productos_globales WHERE codigo_barras = %s",
-            (codigo,)
-        )
-        global_prod = cursor.fetchone()
-        if global_prod:
-            return {
-                "encontrado": False,
-                "camino": "amarillo",
-                "sugerencia": {
-                    "codigo_barras": global_prod["codigo_barras"],
-                    "nombre_producto": global_prod["nombre_producto"],
-                    "unidad_medida": global_prod["unidad_medida"]
+        if len(codigo) > 4:
+            cursor.execute(
+                "SELECT * FROM productos_globales WHERE codigo_barras = %s",
+                (codigo,)
+            )
+            global_prod = cursor.fetchone()
+            if global_prod:
+                return {
+                    "encontrado": False,
+                    "camino": "amarillo",
+                    "sugerencia": {
+                        "codigo_barras": global_prod["codigo_barras"],
+                        "nombre_producto": global_prod["nombre_producto"],
+                        "unidad_medida": global_prod["unidad_medida"]
+                    }
                 }
-            }
 
         # ── CAMINO ROJO: no existe en ningún lado ────────────────────────────
         return {"encontrado": False, "camino": "rojo"}
@@ -1129,15 +1138,19 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor()
 
-        # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
+        # ── Transacción explícita + lock de fila ──────────────────────────────
+        # FOR UPDATE en cuentas_fiado evita que dos requests simultáneos
+        # descuenten stock y agreguen detalle sobre la misma cuenta al mismo tiempo.
+        conexion.start_transaction()
+
         cursor.execute("""
             SELECT cf.id_cuenta FROM cuentas_fiado cf
             JOIN clientes c ON c.id_cliente = cf.id_cliente
             WHERE cf.id_cuenta = %s AND c.id_tienda = %s AND cf.estado = 'ABIERTA'
+            FOR UPDATE
         """, (item.id_cuenta, user.id_tienda))
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
-        # ──────────────────────────────────────────────────────────
 
         cursor.execute("""
             INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
@@ -1148,16 +1161,19 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
             UPDATE productos SET stock_actual = stock_actual - %s
             WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
         """, (float(item.cantidad), item.producto.strip(), user.id_tienda))
-        conexion.commit()
+
+        conexion.commit()  # ← libera el FOR UPDATE lock
         return {"mensaje": "Fiado registrado correctamente"}
     except HTTPException:
+        if conexion:
+            conexion.rollback()
         raise
     except Exception as e:
         if conexion:
             conexion.rollback()
         raise HTTPException(status_code=500, detail=f"Error al registrar fiado: {str(e)}")
     finally:
-        if cursor:
+        if cursor is not None:
             cursor.close()
         conexion.close()
 
@@ -1169,10 +1185,17 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
     try:
         cursor = conexion.cursor(dictionary=True)
 
+        # ── Transacción explícita + lock de fila ──────────────────────────────
+        # SELECT FOR UPDATE bloquea esta cuenta_fiado específica hasta el commit.
+        # Si dos cajeros intentan abonar a la misma cuenta al mismo tiempo,
+        # el segundo esperará en esta línea hasta que el primero haga commit.
+        conexion.start_transaction()
+
         cursor.execute("""
-            SELECT c.nombre FROM clientes c
-            JOIN cuentas_fiado cf ON c.id_cliente = cf.id_cliente
+            SELECT cf.id_cuenta, c.nombre FROM cuentas_fiado cf
+            JOIN clientes c ON c.id_cliente = cf.id_cliente
             WHERE cf.id_cuenta = %s AND cf.id_tienda = %s
+            FOR UPDATE
         """, (abono.id_cuenta, user.id_tienda))
         res = cursor.fetchone()
         if not res:
@@ -1196,6 +1219,8 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
             VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s)
         """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto, user.id_tienda))
 
+        # Estos SELECTs ahora son seguros: nadie más puede modificar esta
+        # cuenta hasta que el commit de abajo libere el FOR UPDATE lock.
         cursor.execute("""
             SELECT COALESCE(SUM(df.cantidad * df.precio), 0) AS total_fiado
             FROM detalle_fiado df WHERE df.id_cuenta = %s AND df.id_tienda = %s
@@ -1209,25 +1234,27 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         ta = cursor.fetchone()
 
         saldo_nuevo = float(tf['total_fiado']) - float(ta['total_abonos'])
-        if saldo_nuevo == 0:
+        if saldo_nuevo <= 0:  # <= 0 cubre también el caso de pago con cambio
             cursor.execute(
                 "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s AND id_tienda = %s",
                 (abono.id_cuenta, user.id_tienda)
             )
-        conexion.commit()
+        conexion.commit()  # ← libera el FOR UPDATE lock
         return {
             "mensaje": "Abono registrado",
-            "saldo_restante": max(0, saldo_nuevo),
-            "saldo_favor": abs(min(0, saldo_nuevo))
+            "saldo_restante": max(0.0, saldo_nuevo),
+            "saldo_favor": abs(min(0.0, saldo_nuevo))
         }
     except HTTPException:
+        if conexion:
+            conexion.rollback()
         raise
     except Exception as e:
         if conexion:
             conexion.rollback()
         raise HTTPException(status_code=500, detail=f"Error al registrar abono: {str(e)}")
     finally:
-        if cursor:
+        if cursor is not None:
             cursor.close()
         conexion.close()
 
@@ -1241,35 +1268,51 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
     try:
         cursor = conexion.cursor()
 
-        # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
+        conexion.start_transaction()
+
+        # Validación del turno (ya la tienes ✅)
         cursor.execute(
             "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
             (venta.id_turno, user.id_tienda)
         )
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
-        # ──────────────────────────────────────────────────────────
+
 
         for i in venta.items:
             nombre_limpio = i.producto.strip() if i.producto else "Venta sin nombre"
-            cursor.execute(
-                "INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda) VALUES (%s, 'VENTA', %s, %s, %s, %s)",
-                (venta.id_turno, nombre_limpio, i.cantidad, i.precio_unitario, user.id_tienda)
-            )
-            cursor.execute("SELECT COUNT(*) FROM productos WHERE nombre_producto = %s AND id_tienda = %s",
-                           (nombre_limpio, user.id_tienda))
-            existe = cursor.fetchone()[0] > 0
-            if not existe:
-                cursor.execute(
-                    "INSERT INTO productos (nombre_producto, precio_sugerido, activo, id_tienda) VALUES (%s, %s, 1, %s)",
-                    (nombre_limpio, i.precio_unitario, user.id_tienda)
-                )
-            else:
+
+            # ── NUEVA VALIDACIÓN: solo actualizar stock si el producto existe y pertenece a esta tienda
+            cursor.execute("""
+                INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda)
+                VALUES (%s, 'VENTA', %s, %s, %s, %s)
+            """, (venta.id_turno, nombre_limpio, i.cantidad, i.precio_unitario, user.id_tienda))
+
+            # Solo descontar stock si el producto existe en el catálogo de ESTA tienda
+            cursor.execute("""
+                SELECT id_producto FROM productos
+                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                FOR UPDATE
+            """, (nombre_limpio, user.id_tienda))
+            if cursor.fetchone():
+                # Solo descontar si el producto existe en el catálogo de ESTA tienda
                 cursor.execute("""
                     UPDATE productos
                     SET stock_actual = stock_actual - %s
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
                 """, (float(i.cantidad), nombre_limpio, user.id_tienda))
+
+            # INSERT IGNORE solo si el producto NO existe ya (evitar fantasmas)
+            cursor.execute("""
+                INSERT IGNORE INTO productos (nombre_producto, precio_sugerido, activo, id_tienda)
+                SELECT %s, %s, 1, %s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM productos
+                    WHERE nombre_producto = %s AND id_tienda = %s AND activo = 1
+                )
+            """, (nombre_limpio, i.precio_unitario, user.id_tienda,
+                  nombre_limpio, user.id_tienda))
+
         conexion.commit()
         return {"ok": True, "registrados": len(venta.items)}
     except HTTPException:
@@ -1361,26 +1404,34 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
+        conexion.start_transaction()
+        # Verificar que el producto existe y pertenece a esta tienda
         cursor.execute(
-            "SELECT nombre_producto, stock_actual FROM productos WHERE id_producto = %s AND activo = 1 AND id_tienda = %s",
+            "SELECT nombre_producto FROM productos WHERE id_producto = %s AND activo = 1 AND id_tienda = %s FOR UPDATE",
             (m.id_producto, user.id_tienda)
         )
         producto = cursor.fetchone()
         if not producto:
+            conexion.rollback()
             raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-        stock_resultante = producto['stock_actual'] - m.cantidad
 
         cursor.execute(
             "UPDATE productos SET stock_actual = stock_actual - %s WHERE id_producto = %s AND id_tienda = %s",
             (m.cantidad, m.id_producto, user.id_tienda)
         )
+        # Leer el stock RESULTANTE en el mismo contexto transaccional
+        cursor.execute(
+            "SELECT stock_actual FROM productos WHERE id_producto = %s AND id_tienda = %s",
+            (m.id_producto, user.id_tienda)
+        )
+        stock_resultante = float(cursor.fetchone()['stock_actual'])
+
         cursor.execute("""
             INSERT INTO entradas_mercancia (id_producto, cantidad, notas, id_tienda)
             VALUES (%s, %s, %s, %s)
         """, (m.id_producto, -m.cantidad, f"[MERMA — {m.motivo}]", user.id_tienda))
 
-        # ─── LOG DE AUDITORÍA ──────────────────────────────────────
         _log(cursor, user.id_tienda, user.id_usuario, "MERMA",
              f"producto_id={m.id_producto} cantidad={-m.cantidad} motivo={m.motivo}")
 
@@ -1405,6 +1456,13 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
 #  PANEL SUPERADMIN — Endpoints existentes
 #  Todos requieren rol='superadmin'. No modifican lógica existente.
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def _invalidar_cache_tienda(id_tienda: int):
+    """Borra del cache todos los tokens de usuarios de una tienda."""
+    with _cache_lock:
+        claves_a_borrar = [k for k in _auth_cache.keys() if k.startswith(f"{id_tienda}:")]
+        for k in claves_a_borrar:
+            del _auth_cache[k]
 
 def _require_superadmin(user: TokenData):
     """Helper: lanza 403 si el usuario no es superadmin."""
@@ -1504,6 +1562,7 @@ def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_curren
             WHERE id_tienda = %s AND estado = 'ABIERTO'
         """, (id_tienda,))
         conexion.commit()
+        _invalidar_cache_tienda(id_tienda)
         return {"mensaje": "Tienda desactivada"}
     finally:
         if cursor:
