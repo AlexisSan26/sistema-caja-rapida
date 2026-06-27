@@ -498,6 +498,7 @@ async function manejarInputProducto() {
 function manejarEnterProducto(event) {
     if (event.key === "Enter") {
         event.preventDefault();
+        event.stopPropagation();
         const tipo = document.getElementById("tipo").value;
         if (!["VENTA","FIADO"].includes(tipo)) return;
 
