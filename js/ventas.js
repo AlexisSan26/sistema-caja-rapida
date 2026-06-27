@@ -206,6 +206,33 @@ async function hacerCorte() {
     } catch (e) { mostrarError("Error al cerrar la caja."); }
 }
 
+function clasificarUnidad(unidad) {
+    const u = (unidad || '').toLowerCase();
+    if (['kg', 'g'].includes(u)) return 'peso';
+    if (['litro', 'ml', 'metro'].includes(u)) return 'liquido';
+    return 'pieza';
+}
+
+function enfocarSegunUnidad(tipo_unidad, precio_sugerido) {
+    const inputPrecio = document.getElementById("precio");
+    const inputCantidad = document.getElementById("cantidad");
+    const labelMonto = document.getElementById("label-monto");
+
+    if (tipo_unidad === 'peso') {
+        labelMonto.innerText = "¿Cuánto pidió ($):";
+        inputPrecio.value = "";
+        inputPrecio.placeholder = "Ej. 20.00";
+        inputPrecio.focus();
+        inputPrecio.select();
+    } else if (tipo_unidad === 'liquido') {
+        labelMonto.innerText = "Precio Unitario ($):";
+        inputPrecio.value = precio_sugerido;
+        inputCantidad.value = "";
+        inputCantidad.focus();
+        inputCantidad.select();
+    }
+}
+
 function agregarProductoAlCarrito(nombre, precio, cantidad = 1) {
     const existente = carritoItems.find(i => i.nombre === nombre);
     if (existente) {
@@ -221,13 +248,31 @@ function agregarALista() {
     if (!["VENTA","FIADO"].includes(tipo)) return;
     const nombre = document.getElementById("producto").value.trim();
     const precio = parseFloat(document.getElementById("precio").value);
-    const cantidad = parseFloat(document.getElementById("cantidad").value) || 1;
+    const cantidadRaw = parseFloat(document.getElementById("cantidad").value) || 1;
     if (!nombre) { mostrarError("Escribe el nombre del producto."); return; }
     if (isNaN(precio) || precio < 0) { mostrarError("Escribe un precio válido."); return; }
-    agregarProductoAlCarrito(nombre, precio, cantidad);
+
+    // Detectar si es producto por peso en memoria
+    const prod = todosLosProductos.find(p => p.nombre_producto === nombre);
+    const tipoUnidad = prod ? clasificarUnidad(prod.unidad_medida) : 'pieza';
+
+    let cantidadFinal, precioFinal;
+    if (tipoUnidad === 'peso') {
+        // precio = dinero que pidió el cliente, precio_sugerido = precio por kg
+        const precioPorKg = prod ? parseFloat(prod.precio_sugerido) : 1;
+        if (precioPorKg <= 0) { mostrarError("El producto no tiene precio por kg definido."); return; }
+        cantidadFinal = parseFloat((precio / precioPorKg).toFixed(4)); // kg que se vendieron
+        precioFinal = precioPorKg;
+    } else {
+        cantidadFinal = cantidadRaw;
+        precioFinal = precio;
+    }
+
+    agregarProductoAlCarrito(nombre, precioFinal, cantidadFinal);
     document.getElementById("producto").value = "";
     document.getElementById("precio").value = "";
     document.getElementById("cantidad").value = "1";
+    document.getElementById("label-monto").innerText = "Precio Unitario ($):";
     document.getElementById("producto").focus();
 }
 
@@ -316,19 +361,16 @@ async function manejarInputProducto() {
             if (!/^\d{4,}$/.test(val)) return;
             const local = todosLosProductos.find(p => p.codigo_barras === val);
             if (local) {
-                const esGranel = unidadesFraccionales.includes((local.unidad_medida || '').toLowerCase());
-                if (esGranel) {
-                    document.getElementById("producto").value = local.nombre_producto;
-                    document.getElementById("precio").value = local.precio_sugerido;
-                    document.getElementById("div-cantidad").style.visibility = "visible";
-                    document.getElementById("cantidad").focus();
-                    document.getElementById("cantidad").select();
-                } else {
+                const tipoUnidad = clasificarUnidad(local.unidad_medida);
+                if (tipoUnidad === 'pieza') {
                     agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
                     document.getElementById("producto").value = "";
                     document.getElementById("precio").value = "";
                     document.getElementById("cantidad").value = "1";
                     document.getElementById("producto").focus();
+                } else {
+                    document.getElementById("producto").value = local.nombre_producto;
+                    enfocarSegunUnidad(tipoUnidad, local.precio_sugerido);
                 }
             } else {
                 fetch(`${API_URL}/producto_por_codigo/${val}`)
@@ -336,19 +378,17 @@ async function manejarInputProducto() {
                     .then(async (data) => {
                         if (data.encontrado) {
                             // CAMINO VERDE
-                            const esGranel = unidadesFraccionales.includes((data.producto.unidad_medida || '').toLowerCase());
-                            if (esGranel) {
-                                document.getElementById("producto").value = data.producto.nombre_producto;
-                                document.getElementById("precio").value = data.producto.precio_sugerido;
-                                document.getElementById("div-cantidad").style.visibility = "visible";
-                                document.getElementById("cantidad").focus();
-                                document.getElementById("cantidad").select();
-                            } else {
+                            const tipoUnidad = clasificarUnidad(data.producto.unidad_medida);
+                            if (tipoUnidad === 'pieza') {
                                 agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
                                 document.getElementById("producto").value = "";
                                 document.getElementById("precio").value = "";
                                 document.getElementById("cantidad").value = "1";
                                 document.getElementById("producto").focus();
+                            } else {
+                                document.getElementById("producto").value = data.producto.nombre_producto;
+                                document.getElementById("precio").value = data.producto.precio_sugerido;
+                                enfocarSegunUnidad(tipoUnidad, data.producto.precio_sugerido);
                             }
                         } else if (data.camino === "amarillo") {
                             // CAMINO AMARILLO
@@ -375,19 +415,16 @@ async function manejarInputProducto() {
                                     })
                                 });
                                 try { await cargarProductosEnMemoria(); } catch(e) {}
-                                const esGranel = unidadesFraccionales.includes((sug.unidad_medida || '').toLowerCase());
-                                if (esGranel) {
-                                    document.getElementById("producto").value = sug.nombre_producto;
-                                    document.getElementById("precio").value = precio;
-                                    document.getElementById("div-cantidad").style.visibility = "visible";
-                                    document.getElementById("cantidad").focus();
-                                    document.getElementById("cantidad").select();
-                                } else {
+                                const tipoUnidadSug = clasificarUnidad(sug.unidad_medida);
+                                if (tipoUnidadSug === 'pieza') {
                                     agregarProductoAlCarrito(sug.nombre_producto, precio, 1);
                                     document.getElementById("producto").value = "";
                                     document.getElementById("precio").value = "";
                                     document.getElementById("cantidad").value = "1";
                                     document.getElementById("producto").focus();
+                                } else {
+                                    document.getElementById("producto").value = sug.nombre_producto;
+                                    enfocarSegunUnidad(tipoUnidadSug, precio);
                                 }
                             } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
                         } else {
@@ -445,18 +482,15 @@ async function manejarInputProducto() {
 
         const coincidencia = resultados.find(p => p.nombre_producto === textoActual.trim());
         if (coincidencia) {
-            const esGranel = unidadesFraccionales.includes((coincidencia.unidad_medida || '').toLowerCase());
-            if (esGranel) {
-                document.getElementById("precio").value = coincidencia.precio_sugerido;
-                divCantidad.style.visibility = "visible";
-                document.getElementById("cantidad").focus();
-                document.getElementById("cantidad").select();
+            const tipoUnidad = clasificarUnidad(coincidencia.unidad_medida);
+            if (tipoUnidad === 'peso') {
+                document.getElementById("precio").value = "";
+                enfocarSegunUnidad('peso', coincidencia.precio_sugerido);
+            } else if (tipoUnidad === 'liquido') {
+                enfocarSegunUnidad('liquido', coincidencia.precio_sugerido);
             } else {
                 document.getElementById("precio").value = coincidencia.precio_sugerido;
-                divCantidad.style.visibility = "visible";
             }
-        } else {
-            divCantidad.style.visibility = "visible";
         }
     }, 80);
 }
@@ -475,19 +509,16 @@ function manejarEnterProducto(event) {
 
             const local = todosLosProductos.find(p => p.codigo_barras === texto);
             if (local) {
-                const esGranel = unidadesFraccionales.includes((local.unidad_medida || '').toLowerCase());
-                if (esGranel) {
-                    document.getElementById("producto").value = local.nombre_producto;
-                    document.getElementById("precio").value = local.precio_sugerido;
-                    document.getElementById("div-cantidad").style.visibility = "visible";
-                    document.getElementById("cantidad").focus();
-                    document.getElementById("cantidad").select();
-                } else {
+                const tipoUnidad = clasificarUnidad(local.unidad_medida);
+                if (tipoUnidad === 'pieza') {
                     agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
                     document.getElementById("producto").value = "";
                     document.getElementById("precio").value = "";
                     document.getElementById("cantidad").value = "1";
                     document.getElementById("producto").focus();
+                } else {
+                    document.getElementById("producto").value = local.nombre_producto;
+                    enfocarSegunUnidad(tipoUnidad, local.precio_sugerido);
                 }
                 return;
             }
@@ -496,19 +527,16 @@ function manejarEnterProducto(event) {
                 .then(r => r.json())
                 .then(async (data) => {
                     if (data.encontrado) {
-                        const esGranel = unidadesFraccionales.includes((data.producto.unidad_medida || '').toLowerCase());
-                        if (esGranel) {
-                            document.getElementById("producto").value = data.producto.nombre_producto;
-                            document.getElementById("precio").value = data.producto.precio_sugerido;
-                            document.getElementById("div-cantidad").style.visibility = "visible";
-                            document.getElementById("cantidad").focus();
-                            document.getElementById("cantidad").select();
-                        } else {
+                        const tipoUnidad = clasificarUnidad(data.producto.unidad_medida);
+                        if (tipoUnidad === 'pieza') {
                             agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
                             document.getElementById("producto").value = "";
                             document.getElementById("precio").value = "";
                             document.getElementById("cantidad").value = "1";
                             document.getElementById("producto").focus();
+                        } else {
+                            document.getElementById("producto").value = data.producto.nombre_producto;
+                            enfocarSegunUnidad(tipoUnidad, data.producto.precio_sugerido);
                         }
                     } else if (data.camino === "amarillo") {
                         const sug = data.sugerencia;
@@ -534,19 +562,16 @@ function manejarEnterProducto(event) {
                                 })
                             });
                             try { await cargarProductosEnMemoria(); } catch(e) {}
-                            const esGranel = unidadesFraccionales.includes((sug.unidad_medida || '').toLowerCase());
-                            if (esGranel) {
-                                document.getElementById("producto").value = sug.nombre_producto;
-                                document.getElementById("precio").value = precio;
-                                document.getElementById("div-cantidad").style.visibility = "visible";
-                                document.getElementById("cantidad").focus();
-                                document.getElementById("cantidad").select();
-                            } else {
+                            const tipoUnidadSug = clasificarUnidad(sug.unidad_medida);
+                            if (tipoUnidadSug === 'pieza') {
                                 agregarProductoAlCarrito(sug.nombre_producto, precio, 1);
                                 document.getElementById("producto").value = "";
                                 document.getElementById("precio").value = "";
                                 document.getElementById("cantidad").value = "1";
                                 document.getElementById("producto").focus();
+                            } else {
+                                document.getElementById("producto").value = sug.nombre_producto;
+                                enfocarSegunUnidad(tipoUnidadSug, precio);
                             }
                         } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
                     } else {
