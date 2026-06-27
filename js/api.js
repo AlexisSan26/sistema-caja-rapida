@@ -1,4 +1,6 @@
-const API_URL = "https://sistema-caja-rapida.onrender.com";
+const API_URL = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+    ? "http://127.0.0.1:8000"
+    : "https://sistema-caja-rapida.onrender.com";
 
 const originalFetch = window.fetch;
 window.fetch = async (url, options = {}) => {

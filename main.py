@@ -18,6 +18,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://alexissan26.github.io/sistema-caja-rapida/").split(",")
+ALLOWED_ORIGINS += ["http://localhost:63342", "http://127.0.0.1:63342", "http://localhost:5500", "http://127.0.0.1:5500"]
 
 app.add_middleware(
     CORSMiddleware,

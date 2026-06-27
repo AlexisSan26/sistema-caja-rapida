@@ -268,6 +268,11 @@ function renderCarrito() {
         </tr>`;
     }).join("");
     totalEl.textContent = `$${total.toFixed(2)}`;
+    const contadorEl = document.getElementById("contador-productos-carrito");
+    if (contadorEl) {
+        const totalUnidades = carritoItems.reduce((acc, i) => acc + i.cantidad, 0);
+        contadorEl.textContent = totalUnidades % 1 === 0 ? totalUnidades : totalUnidades.toFixed(2);
+    }
     const barraSticky = document.getElementById("barra-total-sticky");
     const stickyArticulos = document.getElementById("sticky-articulos");
     const stickyTotal = document.getElementById("sticky-total");
@@ -288,11 +293,18 @@ function actualizarCantidadCarrito(idx, val) {
 }
 
 let debounceTimer = null;
+let codigoRechazado = false;
+
 async function manejarInputProducto() {
     if (!["VENTA","FIADO"].includes(document.getElementById("tipo").value)) return;
     const texto = document.getElementById("producto").value;
     const divCantidad = document.getElementById("div-cantidad");
-    if (!texto) { divCantidad.style.visibility = "visible"; return; }
+    if (!texto) {
+        codigoRechazado = false;
+        divCantidad.style.visibility = "visible";
+        return;
+    }
+    if (codigoRechazado) return;
 
     const unidadesFraccionales = ['kg', 'g', 'litro', 'ml', 'metro'];
 
@@ -341,8 +353,12 @@ async function manejarInputProducto() {
                         } else if (data.camino === "amarillo") {
                             // CAMINO AMARILLO
                             const sug = data.sugerencia;
-                            const precioStr = prompt(`"${sug.nombre_producto}" encontrado en el catálogo global.\nEscribe el precio de venta para tu tienda:`);
-                            if (precioStr === null) return;
+                            const precioStr = prompt(`"${sug.nombre_producto}" encontrado en el catálogo global.\\nEscribe el precio de venta para tu tienda:`);
+                            if (precioStr === null) {
+                                codigoRechazado = true;
+                                mostrarError("Borra el código del input para continuar.");
+                                return;
+                            }
                             const precio = parseFloat(precioStr);
                             if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                             try {
@@ -376,8 +392,12 @@ async function manejarInputProducto() {
                             } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
                         } else {
                             // CAMINO ROJO
-                            const nombre = prompt(`Código ${val} no encontrado.\nNombre del producto:`);
-                            if (!nombre || !nombre.trim()) { mostrarError("Registro cancelado."); return; }
+                            const nombre = prompt(`Código ${val} no encontrado.\\nNombre del producto:`);
+                            if (!nombre || !nombre.trim()) {
+                                codigoRechazado = true;
+                                mostrarError("Borra el código del input para continuar.");
+                                return;
+                            }
                             const precioStr = prompt(`Precio de venta de "${nombre.trim()}":`);
                             if (precioStr === null) { mostrarError("Registro cancelado."); return; }
                             const precio = parseFloat(precioStr);
@@ -493,7 +513,11 @@ function manejarEnterProducto(event) {
                     } else if (data.camino === "amarillo") {
                         const sug = data.sugerencia;
                         const precioStr = prompt(`"${sug.nombre_producto}" encontrado en el catálogo global.\nEscribe el precio de venta para tu tienda:`);
-                        if (precioStr === null) return;
+                        if (precioStr === null) {
+                            codigoRechazado = true;
+                            mostrarError("Borra el código del input para continuar.");
+                            return;
+                        }
                         const precio = parseFloat(precioStr);
                         if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                         try {
@@ -526,8 +550,12 @@ function manejarEnterProducto(event) {
                             }
                         } catch(e) { mostrarError("Error al registrar el producto del catálogo."); }
                     } else {
-                        const nombre = prompt(`Código ${texto} no encontrado.\nNombre del producto:`);
-                        if (!nombre || !nombre.trim()) { mostrarError("Registro cancelado."); return; }
+                        const nombre = prompt(`Código ${texto} no encontrado.\\nNombre del producto:`);
+                        if (!nombre || !nombre.trim()) {
+                            codigoRechazado = true;
+                            mostrarError("Borra el código del input para continuar.");
+                            return;
+                        }
                         const precioStr = prompt(`Precio de venta de "${nombre.trim()}":`);
                         if (precioStr === null) { mostrarError("Registro cancelado."); return; }
                         const precio = parseFloat(precioStr);
