@@ -106,6 +106,28 @@
                     </div>
                 </div>
             </div>
+            <div id="div-pago" class="mb-3" style="display:none;">
+                <div class="d-flex gap-2 mb-2">
+                    <button id="btn-efectivo" class="btn btn-success flex-fill fw-bold" onclick="seleccionarMetodo('efectivo')">Efectivo</button>
+                    <button id="btn-tarjeta" class="btn btn-outline-success flex-fill fw-bold" onclick="seleccionarMetodo('tarjeta')">Tarjeta</button>
+                    <button id="btn-transferencia" class="btn btn-outline-success flex-fill fw-bold" onclick="seleccionarMetodo('transferencia')">Transfer</button>
+                </div>
+                <div id="div-billetes" class="mb-2">
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button class="btn btn-outline-secondary fw-bold" onclick="agregarBillete(20)">$20</button>
+                        <button class="btn btn-outline-secondary fw-bold" onclick="agregarBillete(50)">$50</button>
+                        <button class="btn btn-outline-secondary fw-bold" onclick="agregarBillete(100)">$100</button>
+                        <button class="btn btn-outline-secondary fw-bold" onclick="agregarBillete(200)">$200</button>
+                        <button class="btn btn-outline-secondary fw-bold" onclick="agregarBillete(500)">$500</button>
+                    </div>
+                    <label class="fw-bold">Recibido ($):</label>
+                    <input type="number" id="monto-recibido" class="form-control form-control-lg" placeholder="0.00" oninput="actualizarCambio()">
+                </div>
+                <div id="div-cambio" class="text-center mt-2" style="display:none;">
+                    <span class="text-muted" style="font-size:.9rem;">Cambio a entregar:</span>
+                    <div id="monto-cambio" class="fw-bold text-success" style="font-size:2rem;">$0.00</div>
+                </div>
+            </div>
             <div class="mb-3" id="div-producto">
                 <label id="label-producto" class="fw-bold">Producto:</label>
                 <div class="input-group">
@@ -134,7 +156,7 @@
                 <div id="lector-qr-caja"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerCaja()">Cerrar cámara</button>
             </div>
-            <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">💾 Guardar Registro</button>
+            <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">💾 Guardar y Cobrar</button>
         </div>
     </div>
     <div id="panel-lista" class="card mb-4 shadow-sm" style="display:none;">

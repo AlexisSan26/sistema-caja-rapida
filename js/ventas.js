@@ -122,6 +122,11 @@ async function registrar() {
             } catch (e) { mostrarError("Error al registrar el fiado."); return; }
         } else {
             try {
+                let metodoPago = "efectivo";
+                if (document.getElementById("btn-tarjeta").classList.contains("btn-success")) metodoPago = "tarjeta";
+                if (document.getElementById("btn-transferencia").classList.contains("btn-success")) metodoPago = "transferencia";
+                const montoRecibido = parseFloat(document.getElementById("monto-recibido").value) || null;
+                const totalVenta = carritoItems.reduce((acc, i) => acc + i.cantidad * i.precio, 0);
                 const res = await fetch(`${API_URL}/registrar_venta_lote`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -136,6 +141,8 @@ async function registrar() {
                     })
                 });
                 if (!res.ok) { mostrarError("Error al guardar la venta."); return; }
+                const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
+                imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
             } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
         }
         carritoItems = [];
@@ -289,12 +296,16 @@ function renderCarrito() {
     if (carritoItems.length === 0) {
         divCarrito.style.display = "none";
         totalEl.textContent = "$0.00";
+        document.getElementById("div-pago").style.display = "none";
+        document.getElementById("div-cambio").style.display = "none";
         const barraSticky = document.getElementById("barra-total-sticky");
         if (barraSticky) barraSticky.style.display = "none";
         localStorage.removeItem('carrito_borrador');
         return;
     }
     divCarrito.style.display = "block";
+    document.getElementById("div-pago").style.display = "block";
+
     let total = 0;
     cuerpo.innerHTML = carritoItems.map((item, idx) => {
         const subtotal = item.cantidad * item.precio;
@@ -615,4 +626,89 @@ function manejarEnterProducto(event) {
 
         agregarALista();
     }
+}
+
+function seleccionarMetodo(metodo) {
+    ["efectivo","tarjeta","transferencia"].forEach(m => {
+        const btn = document.getElementById("btn-" + m);
+        btn.className = m === metodo
+            ? "btn btn-success flex-fill fw-bold"
+            : "btn btn-outline-success flex-fill fw-bold";
+    });
+    document.getElementById("div-billetes").style.display = metodo === "efectivo" ? "block" : "none";
+    document.getElementById("div-cambio").style.display = "none";
+    document.getElementById("monto-recibido").value = "";
+}
+
+function agregarBillete(valor) {
+    const input = document.getElementById("monto-recibido");
+    const actual = parseFloat(input.value) || 0;
+    input.value = (actual + valor).toFixed(2);
+    actualizarCambio();
+}
+
+function actualizarCambio() {
+    const total = carritoItems.reduce((acc, i) => acc + i.cantidad * i.precio, 0);
+    const recibido = parseFloat(document.getElementById("monto-recibido").value) || 0;
+    const cambio = recibido - total;
+    const divCambio = document.getElementById("div-cambio");
+
+    if (recibido > 0) {
+        divCambio.style.display = "block";
+        document.getElementById("monto-cambio").textContent = `$${cambio.toFixed(2)}`;
+        document.getElementById("monto-cambio").className = cambio >= 0
+            ? "fw-bold text-success" : "fw-bold text-danger";
+    } else {
+        divCambio.style.display = "none";
+    }
+}
+
+function imprimirTicketVenta(items, total, metodo, recibido, cambio) {
+/*
+    const iconos = { efectivo: "💵", tarjeta: "💳", transferencia: "📲" };
+    const ahora = new Date().toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    const renglones = items.map(i =>
+        `<tr>
+            <td style="padding:2px 4px;">${esc(i.nombre)}</td>
+            <td style="text-align:center;padding:2px 4px;">${i.cantidad}</td>
+            <td style="text-align:right;padding:2px 4px;">$${(i.cantidad * i.precio).toFixed(2)}</td>
+        </tr>`
+    ).join("");
+
+    const ventana = window.open("", "_blank", "width=320,height=550");
+    ventana.document.write(`<!DOCTYPE html><html><head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: monospace; font-size: 13px; margin: 16px; }
+            h3 { text-align:center; margin:0 0 2px; font-size:15px; }
+            .sub { text-align:center; color:#666; font-size:11px; margin-bottom:8px; }
+            table { width:100%; border-collapse:collapse; }
+            th { border-bottom:1px solid #000; padding:2px 4px; font-size:12px; }
+            .sep { border-top:1px dashed #000; margin:8px 0; }
+            .total { font-size:17px; font-weight:bold; margin:4px 0; }
+            .pie { text-align:center; font-size:11px; color:#888; margin-top:8px; }
+        </style>
+    </head><body>
+        <h3>${esc(nombreTienda) || "Caja Rápida"}</h3>
+        <div class="sub">👤 ${esc(nombreUsuario)} &nbsp;·&nbsp; ${ahora}</div>
+        <div class="sep"></div>
+        <table>
+            <thead><tr>
+                <th style="text-align:left;">Producto</th>
+                <th style="text-align:center;">Cant</th>
+                <th style="text-align:right;">Subtotal</th>
+            </tr></thead>
+            <tbody>${renglones}</tbody>
+        </table>
+        <div class="sep"></div>
+        <div class="total">Total: $${total.toFixed(2)}</div>
+        <div>${iconos[metodo] || ""} ${metodo.charAt(0).toUpperCase() + metodo.slice(1)}</div>
+        ${recibido && metodo === "efectivo" ? `<div>Recibido: $${recibido.toFixed(2)}</div><div>Cambio: $${(cambio || 0).toFixed(2)}</div>` : ""}
+        <div class="sep"></div>
+        <div class="pie">¡Gracias por su compra!</div>
+        <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>`);
+    ventana.document.close();
+*/
+    seleccionarMetodo("efectivo");
 }
