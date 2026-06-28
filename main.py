@@ -7,7 +7,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from auth import register_auth_routes, limiter
+from auth import register_auth_routes, register_yo_route, limiter
 from routers import turnos, ventas, inventario, entradas, fiados, config, admin
 
 load_dotenv()
@@ -31,6 +31,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ─── Registro de rutas ────────────────────────────────────────────────────────
 register_auth_routes(app)
+register_yo_route(app)
 
 app.include_router(turnos.router)
 app.include_router(ventas.router)

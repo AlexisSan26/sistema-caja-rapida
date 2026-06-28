@@ -111,3 +111,26 @@ def register_auth_routes(app):
             if cursor is not None:
                 cursor.close()
             conexion.close()
+
+def register_yo_route(app):
+    @app.get("/yo")
+    def obtener_yo(user: TokenData = Depends(get_current_user)):
+        conexion = conectar_bd()
+        cursor = None
+        try:
+            cursor = conexion.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT u.username, t.nombre_comercial
+                FROM usuarios u
+                JOIN tiendas t ON t.id_tienda = u.id_tienda
+                WHERE u.id_usuario = %s AND u.id_tienda = %s
+            """, (user.id_usuario, user.id_tienda))
+            fila = cursor.fetchone()
+            return {
+                "username": fila["username"] if fila else "—",
+                "nombre_tienda": fila["nombre_comercial"] if fila else "—"
+            }
+        finally:
+            if cursor:
+                cursor.close()
+            conexion.close()

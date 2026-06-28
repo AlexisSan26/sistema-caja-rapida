@@ -13,6 +13,8 @@ let clienteFiadoActual = null;
 let carritoItems = [];
 let loteResurtido = [];
 let timeoutError = null;
+let nombreTienda = "";
+let nombreUsuario = "";
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 window.onload = function () {
@@ -21,7 +23,19 @@ window.onload = function () {
     } else {
         document.getElementById('modal-login-saas').style.display = 'none';
         mostrarFechaDelDia();
+        cargarDatosUsuario();
         verificarEstadoInicial();
         setTimeout(cargarAlertas, 2000);
     }
 };
+
+async function cargarDatosUsuario() {
+    try {
+        const res = await fetch(`${API_URL}/yo`);
+        const data = await res.json();
+        nombreTienda = data.nombre_tienda || "";
+        nombreUsuario = data.username || "";
+        const el = document.getElementById("info-tienda-usuario");
+        if (el) el.textContent = `${nombreTienda} · ${nombreUsuario}`;
+    } catch(e) {}
+}
