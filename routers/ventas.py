@@ -178,16 +178,17 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                         WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
                     """, (float(i.cantidad), nombre_limpio, user.id_tienda))
 
-            # INSERT IGNORE solo si el producto NO existe ya (evitar fantasmas)
-            cursor.execute("""
-                INSERT IGNORE INTO productos (nombre_producto, precio_sugerido, activo, id_tienda)
-                SELECT %s, %s, 1, %s
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM productos
-                    WHERE nombre_producto = %s AND id_tienda = %s AND activo = 1
-                )
-            """, (nombre_limpio, i.precio_unitario, user.id_tienda,
-                  nombre_limpio, user.id_tienda))
+            # Solo crear producto nuevo si NO viene id_producto (producto sin código escrito a mano)
+            if not i.id_producto:
+                cursor.execute("""
+                    INSERT IGNORE INTO productos (nombre_producto, precio_sugerido, activo, id_tienda)
+                    SELECT %s, %s, 1, %s
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM productos
+                        WHERE nombre_producto = %s AND id_tienda = %s AND activo = 1
+                    )
+                """, (nombre_limpio, i.precio_unitario, user.id_tienda,
+                      nombre_limpio, user.id_tienda))
 
         conexion.commit()
         return {"ok": True, "registrados": len(venta.items)}

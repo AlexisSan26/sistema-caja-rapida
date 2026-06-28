@@ -269,7 +269,7 @@ function agregarALista() {
         precioFinal = precio;
     }
 
-    agregarProductoAlCarrito(nombre, precioFinal, cantidadFinal);
+    agregarProductoAlCarrito(nombre, precioFinal, cantidadFinal, prod ? prod.id_producto : null);
     document.getElementById("producto").value = "";
     document.getElementById("precio").value = "";
     document.getElementById("cantidad").value = "1";
