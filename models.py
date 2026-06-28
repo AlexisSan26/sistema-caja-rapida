@@ -106,6 +106,7 @@ class ItemVenta(BaseModel):
     producto: str
     cantidad: float = 1.0
     precio_unitario: float
+    id_producto: int | None = None
 
 
 class VentaLote(BaseModel):

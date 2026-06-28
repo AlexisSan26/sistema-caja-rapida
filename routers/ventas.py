@@ -152,19 +152,31 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                 VALUES (%s, 'VENTA', %s, %s, %s, %s)
             """, (venta.id_turno, nombre_limpio, i.cantidad, i.precio_unitario, user.id_tienda))
 
-            # Solo descontar stock si el producto existe en el catálogo de ESTA tienda
-            cursor.execute("""
-                SELECT id_producto FROM productos
-                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                FOR UPDATE
-            """, (nombre_limpio, user.id_tienda))
-            if cursor.fetchone():
-                # Solo descontar si el producto existe en el catálogo de ESTA tienda
+            # Descontar stock: por id_producto si viene, si no por nombre
+            if i.id_producto:
                 cursor.execute("""
-                    UPDATE productos
-                    SET stock_actual = stock_actual - %s
+                    SELECT id_producto FROM productos
+                    WHERE id_producto = %s AND activo = 1 AND id_tienda = %s
+                    FOR UPDATE
+                """, (i.id_producto, user.id_tienda))
+                if cursor.fetchone():
+                    cursor.execute("""
+                        UPDATE productos
+                        SET stock_actual = stock_actual - %s
+                        WHERE id_producto = %s AND id_tienda = %s
+                    """, (float(i.cantidad), i.id_producto, user.id_tienda))
+            else:
+                cursor.execute("""
+                    SELECT id_producto FROM productos
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                """, (float(i.cantidad), nombre_limpio, user.id_tienda))
+                    FOR UPDATE
+                """, (nombre_limpio, user.id_tienda))
+                if cursor.fetchone():
+                    cursor.execute("""
+                        UPDATE productos
+                        SET stock_actual = stock_actual - %s
+                        WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                    """, (float(i.cantidad), nombre_limpio, user.id_tienda))
 
             # INSERT IGNORE solo si el producto NO existe ya (evitar fantasmas)
             cursor.execute("""

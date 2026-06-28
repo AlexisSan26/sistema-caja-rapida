@@ -130,7 +130,8 @@ async function registrar() {
                         items: carritoItems.map(i => ({
                             producto: i.nombre,
                             cantidad: i.cantidad,
-                            precio_unitario: i.precio
+                            precio_unitario: i.precio,
+                            id_producto: i.id_producto || null
                         }))
                     })
                 });
@@ -233,12 +234,12 @@ function enfocarSegunUnidad(tipo_unidad, precio_sugerido) {
     }
 }
 
-function agregarProductoAlCarrito(nombre, precio, cantidad = 1) {
+function agregarProductoAlCarrito(nombre, precio, cantidad = 1, id_producto = null) {
     const existente = carritoItems.find(i => i.nombre === nombre);
     if (existente) {
         existente.cantidad += cantidad;
     } else {
-        carritoItems.push({ nombre, cantidad, precio: parseFloat(precio) });
+        carritoItems.push({ nombre, cantidad, precio: parseFloat(precio), id_producto });
     }
     renderCarrito();
 }
@@ -363,7 +364,7 @@ async function manejarInputProducto() {
             if (local) {
                 const tipoUnidad = clasificarUnidad(local.unidad_medida);
                 if (tipoUnidad === 'pieza') {
-                    agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
+                    agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido, 1, local.id_producto);
                     document.getElementById("producto").value = "";
                     document.getElementById("precio").value = "";
                     document.getElementById("cantidad").value = "1";
@@ -380,7 +381,7 @@ async function manejarInputProducto() {
                             // CAMINO VERDE
                             const tipoUnidad = clasificarUnidad(data.producto.unidad_medida);
                             if (tipoUnidad === 'pieza') {
-                                agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                                agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido, 1, data.producto.id_producto);
                                 document.getElementById("producto").value = "";
                                 document.getElementById("precio").value = "";
                                 document.getElementById("cantidad").value = "1";
@@ -512,7 +513,7 @@ function manejarEnterProducto(event) {
             if (local) {
                 const tipoUnidad = clasificarUnidad(local.unidad_medida);
                 if (tipoUnidad === 'pieza') {
-                    agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido);
+                    agregarProductoAlCarrito(local.nombre_producto, local.precio_sugerido, 1, local.id_producto);
                     document.getElementById("producto").value = "";
                     document.getElementById("precio").value = "";
                     document.getElementById("cantidad").value = "1";
@@ -530,7 +531,7 @@ function manejarEnterProducto(event) {
                     if (data.encontrado) {
                         const tipoUnidad = clasificarUnidad(data.producto.unidad_medida);
                         if (tipoUnidad === 'pieza') {
-                            agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido);
+                            agregarProductoAlCarrito(data.producto.nombre_producto, data.producto.precio_sugerido, 1, data.producto.id_producto);
                             document.getElementById("producto").value = "";
                             document.getElementById("precio").value = "";
                             document.getElementById("cantidad").value = "1";
