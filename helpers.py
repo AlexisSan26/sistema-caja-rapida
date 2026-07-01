@@ -38,15 +38,17 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
 
     cursor.execute("""
         SELECT
-            SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'FONDO_CAJA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ingresos,
-            SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros
+            SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ingresos,
+            SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros,
+            SUM(CASE WHEN tipo_movimiento = 'FONDO_CAJA' THEN total_movimiento ELSE 0 END) AS fondo
         FROM movimientos WHERE id_turno = %s AND id_tienda = %s
     """, (id_turno, id_tienda))
     res_total = cursor.fetchone()
 
     total_ingresos = float(res_total['ingresos']) if res_total and res_total['ingresos'] else 0.0
     total_retiros = float(res_total['retiros']) if res_total and res_total['retiros'] else 0.0
-    total_en_caja = total_ingresos - total_retiros
+    total_fondo = float(res_total['fondo']) if res_total and res_total['fondo'] else 0.0
+    total_en_caja = total_ingresos + total_fondo - total_retiros
 
     # ── Aplicar reglas dinámicas (claves + ids_productos) ─────
     resultados_reglas = {r['nombre']: 0.0 for r in reglas}
@@ -77,6 +79,7 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
 
     return {
         "total_ingresos": total_ingresos,
+        "total_fondo": total_fondo,
         "total_retiros": total_retiros,
         "total_en_caja": total_en_caja,
         "reglas_resumen": resultados_reglas,

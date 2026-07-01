@@ -179,10 +179,18 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
             VALUES (%s, %s, %s, %s, %s)
         """, (item.id_cuenta, item.producto.strip(), item.cantidad, item.precio, user.id_tienda))
 
+        # Buscar id_producto para evitar ambigüedad con nombres duplicados
         cursor.execute("""
-            UPDATE productos SET stock_actual = stock_actual - %s
+            SELECT id_producto FROM productos
             WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-        """, (float(item.cantidad), item.producto.strip(), user.id_tienda))
+            LIMIT 1
+        """, (item.producto.strip(), user.id_tienda))
+        prod = cursor.fetchone()
+        if prod:
+            cursor.execute("""
+                UPDATE productos SET stock_actual = stock_actual - %s
+                WHERE id_producto = %s AND id_tienda = %s
+            """, (float(item.cantidad), prod[0], user.id_tienda))
 
         conexion.commit()  # ← libera el FOR UPDATE lock
         return {"mensaje": "Fiado registrado correctamente"}
