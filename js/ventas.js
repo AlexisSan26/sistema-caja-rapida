@@ -126,7 +126,7 @@ async function registrar() {
                 if (document.getElementById("btn-tarjeta").classList.contains("btn-success")) metodoPago = "tarjeta";
                 if (document.getElementById("btn-transferencia").classList.contains("btn-success")) metodoPago = "transferencia";
                 const montoRecibido = parseFloat(document.getElementById("monto-recibido").value) || null;
-                const totalVenta = carritoItems.reduce((acc, i) => acc + i.cantidad * i.precio, 0);
+                const totalVenta = carritoItems.reduce((acc, i) => acc + (i.monto_cliente != null ? i.monto_cliente : i.cantidad * i.precio), 0);
                 const res = await fetch(`${API_URL}/registrar_venta_lote`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -241,12 +241,13 @@ function enfocarSegunUnidad(tipo_unidad, precio_sugerido) {
     }
 }
 
-function agregarProductoAlCarrito(nombre, precio, cantidad = 1, id_producto = null) {
+function agregarProductoAlCarrito(nombre, precio, cantidad = 1, id_producto = null, monto_cliente = null) {
     const existente = carritoItems.find(i => i.nombre === nombre);
     if (existente) {
         existente.cantidad += cantidad;
+        if (monto_cliente != null) existente.monto_cliente = (existente.monto_cliente || 0) + monto_cliente;
     } else {
-        carritoItems.push({ nombre, cantidad, precio: parseFloat(precio), id_producto });
+        carritoItems.push({ nombre, cantidad, precio: parseFloat(precio), id_producto, monto_cliente });
     }
     renderCarrito();
 }
@@ -269,14 +270,16 @@ function agregarALista() {
         // precio = dinero que pidió el cliente, precio_sugerido = precio por kg
         const precioPorKg = prod ? parseFloat(prod.precio_sugerido) : 1;
         if (precioPorKg <= 0) { mostrarError("El producto no tiene precio por kg definido."); return; }
-        cantidadFinal = parseFloat((precio / precioPorKg).toFixed(4)); // kg que se vendieron
+        const kgVendidos = parseFloat((precio / precioPorKg).toFixed(4));
+        // Guardamos cantidad=kgVendidos para el stock, precio=precio/kg, monto_cliente=lo que pagó
+        cantidadFinal = kgVendidos;
         precioFinal = precioPorKg;
+        agregarProductoAlCarrito(nombre, precioFinal, cantidadFinal, prod ? prod.id_producto : null, precio);
     } else {
         cantidadFinal = cantidadRaw;
         precioFinal = precio;
+        agregarProductoAlCarrito(nombre, precioFinal, cantidadFinal, prod ? prod.id_producto : null, null);
     }
-
-    agregarProductoAlCarrito(nombre, precioFinal, cantidadFinal, prod ? prod.id_producto : null);
     document.getElementById("producto").value = "";
     document.getElementById("precio").value = "";
     document.getElementById("cantidad").value = "1";
@@ -298,6 +301,8 @@ function renderCarrito() {
         totalEl.textContent = "$0.00";
         document.getElementById("div-pago").style.display = "none";
         document.getElementById("div-cambio").style.display = "none";
+        const bf = document.getElementById("barra-flotante-acciones");
+        if (bf) bf.style.display = "none";
         const barraSticky = document.getElementById("barra-total-sticky");
         if (barraSticky) barraSticky.style.display = "none";
         localStorage.removeItem('carrito_borrador');
@@ -305,20 +310,23 @@ function renderCarrito() {
     }
     divCarrito.style.display = "block";
     document.getElementById("div-pago").style.display = "block";
+    const bf = document.getElementById("barra-flotante-acciones");
+    if (bf) bf.style.display = "block";
 
     let total = 0;
     cuerpo.innerHTML = carritoItems.map((item, idx) => {
-        const subtotal = item.cantidad * item.precio;
+        const subtotal = item.monto_cliente != null ? item.monto_cliente : item.cantidad * item.precio;
         total += subtotal;
+        const esPeso = item.monto_cliente != null;
         return `<tr>
             <td style="font-size:.9rem;vertical-align:middle;">${esc(item.nombre)}</td>
-            <td class="text-center" style="vertical-align:middle;">
-                <input type="number" class="form-control form-control-sm text-center p-1"
+            <td class="text-center" style="vertical-align:middle;font-size:.9rem;">
+                ${esPeso ? '1' : `<input type="number" class="form-control form-control-sm text-center p-1"
                     style="width:56px;display:inline-block;"
                     value="${item.cantidad}" min="0.01" step="any"
-                    onchange="actualizarCantidadCarrito(${idx}, this.value)">
+                    onchange="actualizarCantidadCarrito(${idx}, this.value)">`}
             </td>
-            <td class="text-center" style="vertical-align:middle;font-size:.9rem;">$${item.precio.toFixed(2)}</td>
+            <td class="text-center" style="vertical-align:middle;font-size:.9rem;">$${esPeso ? item.monto_cliente.toFixed(2) : item.precio.toFixed(2)}</td>
             <td class="text-center" style="vertical-align:middle;">
                 <button class="btn btn-sm btn-outline-danger py-0 px-1 lh-1" onclick="quitarDelCarrito(${idx})">✕</button>
             </td>
@@ -326,10 +334,7 @@ function renderCarrito() {
     }).join("");
     totalEl.textContent = `$${total.toFixed(2)}`;
     const contadorEl = document.getElementById("contador-productos-carrito");
-    if (contadorEl) {
-        const totalUnidades = carritoItems.reduce((acc, i) => acc + i.cantidad, 0);
-        contadorEl.textContent = totalUnidades % 1 === 0 ? totalUnidades : totalUnidades.toFixed(2);
-    }
+    if (contadorEl) contadorEl.textContent = carritoItems.length;
     const barraSticky = document.getElementById("barra-total-sticky");
     const stickyArticulos = document.getElementById("sticky-articulos");
     const stickyTotal = document.getElementById("sticky-total");
@@ -339,6 +344,8 @@ function renderCarrito() {
         stickyTotal.textContent = `$${total.toFixed(2)}`;
         barraSticky.style.display = "flex";
     }
+    const montoRecibido = parseFloat(document.getElementById("monto-recibido")?.value) || 0;
+    if (montoRecibido > 0) actualizarCambio();
     try { localStorage.setItem('carrito_borrador', JSON.stringify(carritoItems)); } catch(e) {}
 }
 
@@ -648,7 +655,7 @@ function agregarBillete(valor) {
 }
 
 function actualizarCambio() {
-    const total = carritoItems.reduce((acc, i) => acc + i.cantidad * i.precio, 0);
+    const total = carritoItems.reduce((acc, i) => acc + (i.monto_cliente != null ? i.monto_cliente : i.cantidad * i.precio), 0);
     const recibido = parseFloat(document.getElementById("monto-recibido").value) || 0;
     const cambio = recibido - total;
     const divCambio = document.getElementById("div-cambio");

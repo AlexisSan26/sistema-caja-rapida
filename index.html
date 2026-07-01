@@ -152,6 +152,12 @@
             <div id="div-btn-agregar" class="mb-3" style="display:none;">
                 <button class="btn btn-outline-success w-100 btn-lg" onclick="agregarALista()">➕ Agregar a lista</button>
             </div>
+            <div id="barra-flotante-acciones" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:1050;background:white;border-top:2px solid #198754;padding:.6rem 1rem;box-shadow:0 -2px 10px rgba(0,0,0,.15);">
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-success flex-fill btn-lg fw-bold" onclick="agregarALista()">➕ Agregar</button>
+                    <button class="btn btn-success flex-fill btn-lg fw-bold" onclick="registrar()">💾 Cobrar</button>
+                </div>
+            </div>
             <div id="escaner-caja-container" style="display:none;" class="mb-3">
                 <div id="lector-qr-caja"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerCaja()">Cerrar cámara</button>
