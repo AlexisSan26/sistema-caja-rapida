@@ -72,7 +72,7 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
         cursor = conexion.cursor(dictionary=True)
         conexion.start_transaction()
         cursor.execute(
-            "SELECT tipo_movimiento, producto, cantidad, cantidad_real FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
+            "SELECT tipo_movimiento, producto, cantidad, cantidad_real FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
             (id_movimiento, user.id_tienda)
         )
         mov = cursor.fetchone()
