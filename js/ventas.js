@@ -140,7 +140,7 @@ async function registrar() {
                             cantidad_real: i.monto_cliente != null ? i.cantidad : null
                         }))
                     })
-                }); 
+                });
                 if (!res.ok) { mostrarError("Error al guardar la venta."); return; }
                 const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
                 imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
