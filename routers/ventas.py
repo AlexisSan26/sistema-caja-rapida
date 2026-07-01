@@ -164,7 +164,7 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                         UPDATE productos
                         SET stock_actual = stock_actual - %s
                         WHERE id_producto = %s AND id_tienda = %s
-                    """, (float(i.cantidad), i.id_producto, user.id_tienda))
+                    """, (float(i.cantidad_real if i.cantidad_real is not None else i.cantidad), i.id_producto, user.id_tienda))
             else:
                 cursor.execute("""
                     SELECT id_producto FROM productos
@@ -176,7 +176,7 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                         UPDATE productos
                         SET stock_actual = stock_actual - %s
                         WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                    """, (float(i.cantidad), nombre_limpio, user.id_tienda))
+                    """, (float(i.cantidad_real if i.cantidad_real is not None else i.cantidad), nombre_limpio, user.id_tienda))
 
             # Solo crear producto nuevo si NO viene id_producto (producto sin código escrito a mano)
             if not i.id_producto:

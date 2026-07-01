@@ -134,12 +134,13 @@ async function registrar() {
                         id_turno: idTurnoActual,
                         items: carritoItems.map(i => ({
                             producto: i.nombre,
-                            cantidad: i.cantidad,
-                            precio_unitario: i.precio,
-                            id_producto: i.id_producto || null
+                            cantidad: i.monto_cliente != null ? 1 : i.cantidad,
+                            precio_unitario: i.monto_cliente != null ? i.monto_cliente : i.precio,
+                            id_producto: i.id_producto || null,
+                            cantidad_real: i.monto_cliente != null ? i.cantidad : null
                         }))
                     })
-                });
+                }); 
                 if (!res.ok) { mostrarError("Error al guardar la venta."); return; }
                 const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
                 imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
