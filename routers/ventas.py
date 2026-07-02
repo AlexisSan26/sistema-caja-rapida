@@ -72,7 +72,7 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
         cursor = conexion.cursor(dictionary=True)
         conexion.start_transaction()
         cursor.execute(
-            "SELECT tipo_movimiento, producto, cantidad, cantidad_real FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
+            "SELECT tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
             (id_movimiento, user.id_tienda)
         )
         mov = cursor.fetchone()
@@ -84,7 +84,14 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
 
         if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:
             cantidad_devolver = float(mov["cantidad_real"] if mov["cantidad_real"] is not None else mov["cantidad"])
-            cursor.execute("""
+            if mov["id_producto_ref"]:
+                cursor.execute("""
+                    UPDATE productos
+                    SET stock_actual = stock_actual + %s
+                    WHERE id_producto = %s AND id_tienda = %s
+                """, (cantidad_devolver, mov["id_producto_ref"], user.id_tienda))
+            else:
+                cursor.execute("""
                     UPDATE productos
                     SET stock_actual = stock_actual + %s
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
@@ -149,9 +156,9 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
 
             # ── NUEVA VALIDACIÓN: solo actualizar stock si el producto existe y pertenece a esta tienda
             cursor.execute("""
-                INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, cantidad_real, precio_unitario, id_tienda)
-                VALUES (%s, 'VENTA', %s, %s, %s, %s, %s)
-            """, (venta.id_turno, nombre_limpio, i.cantidad, i.cantidad_real, i.precio_unitario, user.id_tienda))
+                INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, cantidad_real, precio_unitario, id_tienda, id_producto_ref)
+                VALUES (%s, 'VENTA', %s, %s, %s, %s, %s, %s)
+            """, (venta.id_turno, nombre_limpio, i.cantidad, i.cantidad_real, i.precio_unitario, user.id_tienda, i.id_producto or None))
 
             # Descontar stock: por id_producto si viene, si no por nombre
             if i.id_producto:
