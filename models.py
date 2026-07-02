@@ -40,8 +40,9 @@ class ProductoNuevo(BaseModel):
     codigo_barras: str | None = None
     nombre_producto: str
     precio_sugerido: float
+    precio_costo: float | None = None
     stock_actual: float = 0
-    stock_minimo: float = 5
+    stock_minimo: float = 0
     proveedor: str | None = None
     fecha_caducidad: str | None = None
     unidad_medida: str = "pieza"
@@ -50,6 +51,7 @@ class ProductoNuevo(BaseModel):
 class ActualizacionProducto(BaseModel):
     nombre_producto: str
     precio_sugerido: float
+    precio_costo: float | None = None
     stock_actual: float
     stock_minimo: float
     proveedor: str | None = None

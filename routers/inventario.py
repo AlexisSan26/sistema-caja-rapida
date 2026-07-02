@@ -104,10 +104,10 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
         cursor = conexion.cursor()
         cursor.execute("""
             INSERT INTO productos
-            (codigo_barras, nombre_producto, precio_sugerido,
+            (codigo_barras, nombre_producto, precio_sugerido, precio_costo,
              stock_actual, stock_minimo, proveedor, fecha_caducidad, activo, id_tienda, unidad_medida)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s)
-        """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido,
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s)
+        """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido, p.precio_costo,
               p.stock_actual, p.stock_minimo, p.proveedor or None,
               p.fecha_caducidad or None, user.id_tienda, p.unidad_medida))
 
@@ -136,6 +136,7 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
             UPDATE productos SET
                 nombre_producto = %s,
                 precio_sugerido = %s,
+                precio_costo    = %s,
                 stock_actual    = %s,
                 stock_minimo    = %s,
                 proveedor       = %s,
@@ -144,7 +145,7 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
                 unidad_medida   = %s
             WHERE id_producto = %s AND activo = 1 AND id_tienda = %s
         """, (
-            datos.nombre_producto, datos.precio_sugerido,
+            datos.nombre_producto, datos.precio_sugerido, datos.precio_costo,
             datos.stock_actual, datos.stock_minimo,
             datos.proveedor or None, datos.codigo_barras or None,
             datos.fecha_caducidad or None, datos.unidad_medida, id_producto, user.id_tienda
@@ -186,7 +187,7 @@ def listar_inventario(q: str = "", proveedor: str = "", user: TokenData = Depend
     try:
         cursor = conexion.cursor(dictionary=True)
         sql = """SELECT id_producto, codigo_barras, nombre_producto,
-                        precio_sugerido, stock_actual, stock_minimo,
+                        precio_sugerido, precio_costo, stock_actual, stock_minimo,
                         proveedor, fecha_caducidad, unidad_medida
                  FROM productos WHERE activo = 1 AND id_tienda = %s"""
         params = [user.id_tienda]

@@ -72,6 +72,7 @@ function abrirDetalleProducto(idProducto) {
     productoEnEdicion = p;
     document.getElementById("sheet-nombre").textContent = p.nombre_producto;
     document.getElementById("sheet-precio").textContent = `$${parseFloat(p.precio_sugerido).toFixed(2)}`;
+    document.getElementById("sheet-costo").textContent = p.precio_costo ? `$${parseFloat(p.precio_costo).toFixed(2)}` : "—";
     document.getElementById("sheet-stock").textContent = p.stock_actual;
     document.getElementById("sheet-unidad").textContent = p.unidad_medida || "pieza";
     document.getElementById("sheet-minimo").textContent = p.stock_minimo;
@@ -95,6 +96,7 @@ function activarModoEdicion() {
     const p = productoEnEdicion;
     document.getElementById("edit-nombre").value = p.nombre_producto;
     document.getElementById("edit-precio").value = p.precio_sugerido;
+    document.getElementById("edit-costo").value = p.precio_costo || "";
     document.getElementById("edit-stock").value = p.stock_actual;
     document.getElementById("edit-minimo").value = p.stock_minimo;
     document.getElementById("edit-proveedor").value = p.proveedor || "";
@@ -129,6 +131,7 @@ async function guardarEdicion() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 nombre_producto: nombre, precio_sugerido: precio,
+                precio_costo: parseFloat(document.getElementById("edit-costo").value) || null,
                 stock_actual: stock, stock_minimo: minimo,
                 proveedor: document.getElementById("edit-proveedor").value.trim() || null,
                 codigo_barras: document.getElementById("edit-codigo").value.trim() || null,
@@ -264,6 +267,7 @@ async function guardarProductoNuevo() {
             body: JSON.stringify({
                 codigo_barras: document.getElementById("nuevo-codigo").value.trim() || null,
                 nombre_producto: nombre, precio_sugerido: precio,
+                precio_costo: parseFloat(document.getElementById("nuevo-costo").value) || null,
                 stock_actual: parseFloat(document.getElementById("nuevo-stock").value) || 0,
                 stock_minimo: parseFloat(document.getElementById("nuevo-minimo").value) || 5,
                 proveedor: document.getElementById("nuevo-proveedor").value.trim() || null,
