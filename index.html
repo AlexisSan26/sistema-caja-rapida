@@ -500,6 +500,22 @@
         <button class="btn btn-outline-secondary w-100" onclick="cancelarEdicion()">← Cancelar</button>
     </div>
 </div>
+<div id="modal-corte" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:9800;overflow-y:auto;">
+    <div style="background:white;margin:4rem auto;max-width:400px;border-radius:12px;padding:1.5rem;">
+        <h5 class="fw-bold mb-1">🧾 Confirmar Cierre de Turno</h5>
+        <p class="text-muted mb-3" style="font-size:.9rem;">¿Estás seguro de que deseas cerrar la caja? Ya no podrás agregar más ventas a este turno.</p>
+        <div class="mb-3">
+            <label class="fw-bold">Efectivo físico en caja <span class="text-muted fw-normal">(opcional)</span></label>
+            <input type="number" id="corte-efectivo-real" class="form-control form-control-lg" placeholder="¿Cuánto hay en caja?" oninput="actualizarDiferenciaCorte()">
+        </div>
+        <div id="corte-diferencia-bloque" class="mb-3 p-2 rounded text-center" style="display:none;">
+            <div id="corte-diferencia" class="h5 fw-bold mb-0 text-success"></div>
+            <div id="corte-diferencia-label" class="text-muted" style="font-size:.8rem;"></div>
+        </div>
+        <button class="btn btn-danger w-100 btn-lg mb-2 fw-bold" onclick="confirmarCorte()">✅ Confirmar y Cerrar Caja</button>
+        <button class="btn btn-outline-secondary w-100" onclick="document.getElementById('modal-corte').style.display='none'">Cancelar</button>
+    </div>
+</div>
 
 <!-- Scripts: orden importante -->
 <script src="js/api.js"></script>

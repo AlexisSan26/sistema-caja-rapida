@@ -91,6 +91,13 @@ function construirTicketHTML(datos, idTurno, momentoCierre = null) {
         <hr style="border-top: 2px solid #000;">
         <p class="h5 mb-1">Efectivo Neto a Entregar:</p>
         <p class="h2 text-success fw-bold">$${datos.total_neto.toFixed(2)}</p>
+        ${datos.efectivo_real != null ? `
+        <hr>
+        <p class="h6 mb-1">Efectivo físico declarado: <strong>$${parseFloat(datos.efectivo_real).toFixed(2)}</strong></p>
+        <p class="h6 mb-1 fw-bold ${datos.diferencia >= 0 ? 'text-warning' : 'text-danger'}">
+            ${datos.diferencia >= 0 ? '⬆️ Sobró' : '⬇️ Faltó'}:
+            ${datos.diferencia >= 0 ? '+' : ''}$${parseFloat(datos.diferencia).toFixed(2)}
+        </p>` : ''}
     </div>`;
 }
 

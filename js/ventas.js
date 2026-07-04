@@ -204,13 +204,42 @@ function mostrarTicket(datos) {
 
 async function hacerCorte() {
     if (!idTurnoActual) return;
-    if (!confirm("⚠️ ¿Estás seguro de que deseas CERRAR LA CAJA y hacer el corte?\n\nYa no podrás agregar más ventas a este turno.")) return;
+    // Abre el modal — el cajero no ve el resumen, solo puede declarar efectivo opcionalmente
+    document.getElementById("corte-efectivo-real").value = "";
+    document.getElementById("corte-diferencia-bloque").style.display = "none";
+    document.getElementById("modal-corte").style.display = "block";
+}
+
+function actualizarDiferenciaCorte() {
+    // Muestra confirmación visual de lo que el cajero declaró — sin revelar el esperado
+    const val = document.getElementById("corte-efectivo-real").value;
+    const bloque = document.getElementById("corte-diferencia-bloque");
+    if (val !== "" && !isNaN(parseFloat(val))) {
+        bloque.style.display = "block";
+        bloque.style.background = "#e8f5ec";
+        document.getElementById("corte-diferencia").textContent = `💵 $${parseFloat(val).toFixed(2)} declarados`;
+        document.getElementById("corte-diferencia-label").textContent = "La diferencia aparecerá en el ticket del corte";
+    } else {
+        bloque.style.display = "none";
+    }
+}
+
+async function confirmarCorte() {
+    const efectivoRealInput = document.getElementById("corte-efectivo-real").value;
+    const efectivoReal = efectivoRealInput !== "" ? parseFloat(efectivoRealInput) : null;
+    document.getElementById("modal-corte").style.display = "none";
     try {
+        // Cierra el turno — backend calcula el resumen completo
         const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`, { method: "POST" });
         const datos = await res.json();
         if (!res.ok) { mostrarError(datos.detail || "Error al cerrar la caja."); return; }
+        // Si el cajero declaró efectivo, calcular diferencia contra el neto esperado
+        if (efectivoReal !== null) {
+            datos.efectivo_real = efectivoReal;
+            datos.diferencia = efectivoReal - (datos.total_neto || 0);
+        }
         mostrarTicket(datos);
-        alert("Turno Cerrado Correctamente");
+        alert("✅ Turno Cerrado Correctamente");
         resetearInterfazCerrada();
     } catch (e) { mostrarError("Error al cerrar la caja."); }
 }
