@@ -228,6 +228,7 @@ function enfocarSegunUnidad(tipo_unidad, precio_sugerido) {
     const labelMonto = document.getElementById("label-monto");
 
     if (tipo_unidad === 'peso') {
+        precioPorKgActual = parseFloat(precio_sugerido);
         labelMonto.innerText = "¿Cuánto pidió ($):";
         inputPrecio.value = "";
         inputPrecio.placeholder = "Ej. 20.00";
@@ -262,14 +263,14 @@ function agregarALista() {
     if (!nombre) { mostrarError("Escribe el nombre del producto."); return; }
     if (isNaN(precio) || precio < 0) { mostrarError("Escribe un precio válido."); return; }
 
-    // Detectar si es producto por peso en memoria
+    // Detectar si es producto por peso en memoria o viene del fetch
     const prod = todosLosProductos.find(p => p.nombre_producto === nombre);
-    const tipoUnidad = prod ? clasificarUnidad(prod.unidad_medida) : 'pieza';
+    const tipoUnidad = prod ? clasificarUnidad(prod.unidad_medida) : (precioPorKgActual != null ? 'peso' : 'pieza');
 
     let cantidadFinal, precioFinal;
     if (tipoUnidad === 'peso') {
         // precio = dinero que pidió el cliente, precio_sugerido = precio por kg
-        const precioPorKg = prod ? parseFloat(prod.precio_sugerido) : 1;
+        const precioPorKg = prod ? parseFloat(prod.precio_sugerido) : (precioPorKgActual || 1);
         if (precioPorKg <= 0) { mostrarError("El producto no tiene precio por kg definido."); return; }
         const kgVendidos = parseFloat((precio / precioPorKg).toFixed(4));
         // Guardamos cantidad=kgVendidos para el stock, precio=precio/kg, monto_cliente=lo que pagó
@@ -285,6 +286,7 @@ function agregarALista() {
     document.getElementById("precio").value = "";
     document.getElementById("cantidad").value = "1";
     document.getElementById("label-monto").innerText = "Precio Unitario ($):";
+    precioPorKgActual = null;
     document.getElementById("producto").focus();
 }
 
@@ -359,6 +361,7 @@ function actualizarCantidadCarrito(idx, val) {
 
 let debounceTimer = null;
 let codigoRechazado = false;
+let precioPorKgActual = null;
 
 async function manejarInputProducto() {
     if (!["VENTA","FIADO"].includes(document.getElementById("tipo").value)) return;
