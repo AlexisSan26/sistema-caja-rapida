@@ -233,10 +233,11 @@ async function confirmarCorte() {
         const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`, { method: "POST" });
         const datos = await res.json();
         if (!res.ok) { mostrarError(datos.detail || "Error al cerrar la caja."); return; }
-        // Si el cajero declaró efectivo, calcular diferencia contra el neto esperado
+        // La diferencia se calcula contra total_en_caja (ventas + fondo - retiros)
+        // Los grupos son solo informativos — se apartan después de cuadrar
         if (efectivoReal !== null) {
             datos.efectivo_real = efectivoReal;
-            datos.diferencia = efectivoReal - (datos.total_neto || 0);
+            datos.diferencia = efectivoReal - (datos.total_en_caja || 0);
         }
         mostrarTicket(datos);
         alert("✅ Turno Cerrado Correctamente");
