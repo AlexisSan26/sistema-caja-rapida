@@ -54,16 +54,20 @@ async function abrirCuentaCliente(idCliente) {
         if (datos.abonos.length === 0) {
             document.getElementById("bs-fiado-abonos").innerHTML = "<p class='text-muted text-center py-2'>Sin abonos registrados.</p>";
         } else {
+            const iconosPago = { efectivo: "💵 Efectivo", tarjeta: "💳 Tarjeta", transferencia: "📲 Transferencia" };
             document.getElementById("bs-fiado-abonos").innerHTML = `
                 <table class="table table-sm mb-0">
                     <thead class="table-light"><tr><th>Fecha</th><th>Nota</th><th class="text-end">Monto</th></tr></thead>
                     <tbody>${datos.abonos.map(a =>
-                        `<tr><td>${a.fecha}</td><td>${esc(a.nota)}</td><td class="text-end text-success">$${parseFloat(a.monto).toFixed(2)}</td></tr>`
+                        `<tr><td>${a.fecha}</td><td>${esc(a.nota || '')} ${iconosPago[a.metodo_pago] || ''}</td><td class="text-end text-success">$${parseFloat(a.monto).toFixed(2)}</td></tr>`
                     ).join("")}</tbody>
                 </table>`;
         }
 
         document.getElementById("monto-abono").value = "";
+        document.getElementById("monto-abono-recibido").value = "";
+        document.getElementById("div-abono-cambio").style.display = "none";
+        seleccionarMetodoAbono("efectivo");
         document.getElementById("bs-fiado-overlay").style.display = "block";
         setTimeout(() => document.getElementById("bs-fiado").classList.add("visible"), 10);
     } catch (e) { mostrarError("Error al cargar la cuenta."); }
@@ -75,18 +79,47 @@ function cerrarBsFiado() {
     clienteFiadoActual = null;
 }
 
+function seleccionarMetodoAbono(metodo) {
+    metodoAbonoActual = metodo;
+    ["efectivo","tarjeta","transferencia"].forEach(m => {
+        const btn = document.getElementById("btn-abono-" + m);
+        btn.className = m === metodo
+            ? "btn btn-success flex-fill fw-bold btn-sm"
+            : "btn btn-outline-success flex-fill fw-bold btn-sm";
+    });
+    document.getElementById("div-abono-recibido").style.display = metodo === "efectivo" ? "block" : "none";
+    document.getElementById("div-abono-cambio").style.display = "none";
+    document.getElementById("monto-abono-recibido").value = "";
+}
+
+function actualizarCambioAbono() {
+    const monto = parseFloat(document.getElementById("monto-abono").value) || 0;
+    const recibido = parseFloat(document.getElementById("monto-abono-recibido").value) || 0;
+    const divCambio = document.getElementById("div-abono-cambio");
+    if (metodoAbonoActual === "efectivo" && recibido > 0) {
+        const cambio = recibido - monto;
+        divCambio.style.display = "block";
+        document.getElementById("monto-abono-cambio").textContent = `$${cambio.toFixed(2)}`;
+        document.getElementById("monto-abono-cambio").className = cambio >= 0
+            ? "fw-bold text-success" : "fw-bold text-danger";
+    } else {
+        divCambio.style.display = "none";
+    }
+}
+
 async function confirmarAbono() {
     if (!clienteFiadoActual) return;
     if (!idTurnoActual) { alert("Debes tener un turno abierto para registrar un abono."); return; }
     const monto = parseFloat(document.getElementById("monto-abono").value);
     if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
     const idCuenta = clienteFiadoActual.id_cuenta;
+    const metodoPago = metodoAbonoActual;
     cerrarBsFiado();
     try {
         const res = await fetch(`${API_URL}/registrar_abono`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id_cuenta: idCuenta, id_turno: idTurnoActual, monto: monto })
+            body: JSON.stringify({ id_cuenta: idCuenta, id_turno: idTurnoActual, monto: monto, metodo_pago: metodoPago })
         });
         if (!res.ok) {
             let errorMsg = "Error del servidor.";

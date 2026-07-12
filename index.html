@@ -421,13 +421,27 @@
         <div class="fw-bold mb-1" style="font-size:.85rem;color:#6c757d;text-transform:uppercase;">Abonos</div>
         <div id="bs-fiado-abonos" class="tabla-scroll" style="max-height:100px;"></div>
     </div>
-    <div class="card border-success mb-3">
+ <div class="card border-success mb-3">
         <div class="card-body py-2">
             <label class="fw-bold mb-1">Registrar abono ($)</label>
-            <div class="input-group">
-                <input type="number" id="monto-abono" class="form-control form-control-lg" placeholder="0.00">
-                <button class="btn btn-success" onclick="confirmarAbono()">Abonar ✓</button>
+            <input type="number" id="monto-abono" class="form-control form-control-lg mb-2" placeholder="0.00" oninput="actualizarCambioAbono()">
+
+            <div class="d-flex gap-2 mb-2">
+                <button id="btn-abono-efectivo" class="btn btn-success flex-fill fw-bold btn-sm" onclick="seleccionarMetodoAbono('efectivo')">Efectivo</button>
+                <button id="btn-abono-tarjeta" class="btn btn-outline-success flex-fill fw-bold btn-sm" onclick="seleccionarMetodoAbono('tarjeta')">Tarjeta</button>
+                <button id="btn-abono-transferencia" class="btn btn-outline-success flex-fill fw-bold btn-sm" onclick="seleccionarMetodoAbono('transferencia')">Transfer</button>
             </div>
+
+            <div id="div-abono-recibido" class="mb-2">
+                <label class="fw-bold" style="font-size:.85rem;">Efectivo recibido ($):</label>
+                <input type="number" id="monto-abono-recibido" class="form-control" placeholder="0.00" oninput="actualizarCambioAbono()">
+            </div>
+            <div id="div-abono-cambio" class="text-center mb-2" style="display:none;">
+                <span class="text-muted" style="font-size:.85rem;">Cambio a entregar:</span>
+                <div id="monto-abono-cambio" class="fw-bold text-success" style="font-size:1.5rem;">$0.00</div>
+            </div>
+
+            <button class="btn btn-success w-100" onclick="confirmarAbono()">Abonar ✓</button>
         </div>
     </div>
     <button class="btn btn-outline-secondary w-100" onclick="cerrarBsFiado()">Cerrar</button>

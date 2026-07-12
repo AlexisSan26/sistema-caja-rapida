@@ -102,6 +102,7 @@ class AbonoFiado(BaseModel):
     id_turno: int
     monto: float = Field(gt=0)
     nota: str | None = None
+    metodo_pago: str = "efectivo"
 
 
 class ItemVenta(BaseModel):

@@ -128,7 +128,7 @@ def obtener_cuenta(id_cliente: int, user: TokenData = Depends(get_current_user))
         detalle = cursor.fetchall()
 
         cursor.execute("""
-            SELECT monto, nota, DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
+            SELECT monto, nota, metodo_pago, DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
             FROM abonos WHERE id_cuenta = %s AND id_tienda = %s
             ORDER BY fecha_hora ASC
         """, (id_cuenta, user.id_tienda))
@@ -241,13 +241,13 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
             raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
 
         cursor.execute(
-            "INSERT INTO abonos (id_cuenta, monto, nota, id_tienda) VALUES (%s, %s, %s, %s)",
-            (abono.id_cuenta, abono.monto, abono.nota or None, user.id_tienda)
+            "INSERT INTO abonos (id_cuenta, monto, nota, metodo_pago, id_tienda) VALUES (%s, %s, %s, %s, %s)",
+            (abono.id_cuenta, abono.monto, abono.nota or None, abono.metodo_pago, user.id_tienda)
         )
         cursor.execute("""
-            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda)
-            VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s)
-        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto, user.id_tienda))
+            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, metodo_pago, id_tienda)
+            VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s, %s)
+        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto, abono.metodo_pago, user.id_tienda))
 
         # Estos SELECTs ahora son seguros: nadie más puede modificar esta
         # cuenta hasta que el commit de abajo libere el FOR UPDATE lock.

@@ -10,6 +10,7 @@ let scannerInv = null;
 let scannerResurtido = null;
 let productoEnEdicion = null;
 let clienteFiadoActual = null;
+let metodoAbonoActual = "efectivo";
 let carritoItems = [];
 let loteResurtido = [];
 let timeoutError = null;
