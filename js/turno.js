@@ -204,20 +204,11 @@ async function actualizarLista() {
                 : `<span></span><span>Total: $${total.toFixed(2)}</span>`;
 
             if (!esVenta) {
+                const infoDerechaMov = g.tipo === 'COBRO_FIADO' ? badgeMetodoPago(g.metodo_pago) : '';
                 return `<div class="mov-card${claseExtra}" data-clave="${g.clave}" onclick="abrirMenuMovimiento('${g.clave}')">
                     <div class="mov-header">
                         <span>${badgeTipo(g.tipo)} &nbsp; ${g.hora || '--:--'}</span>
-                    </div>
-                    <div class="mov-footer">
-                        <span class="mov-desc-normal">${descripcionMovimiento(g)}</span><span>Total: $${total.toFixed(2)}</span>
-                    </div>
-                </div>`;
-            }
-
-            if (!esVenta) {
-                return `<div class="mov-card${claseExtra}" data-clave="${g.clave}" onclick="abrirMenuMovimiento('${g.clave}')">
-                    <div class="mov-header">
-                        <span>${badgeTipo(g.tipo)} &nbsp; ${g.hora || '--:--'}</span>
+                        <span>${infoDerechaMov}</span>
                     </div>
                     <div class="mov-footer">
                         <span class="mov-desc-normal">${descripcionMovimiento(g)}</span><span>Total: $${total.toFixed(2)}</span>
