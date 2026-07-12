@@ -127,6 +127,7 @@ def obtener_movimientos(id_turno: int, user: TokenData = Depends(get_current_use
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
             SELECT id_movimiento, cantidad, producto, total_movimiento, tipo_movimiento,
+                   metodo_pago, id_lote,
                    TIME_FORMAT(fecha_hora, '%H:%i') as hora
             FROM movimientos
             WHERE id_turno = %s AND id_tienda = %s

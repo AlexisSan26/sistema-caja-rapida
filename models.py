@@ -115,6 +115,7 @@ class ItemVenta(BaseModel):
 class VentaLote(BaseModel):
     id_turno: int
     items: list[ItemVenta]
+    metodo_pago: str = "efectivo"
 
 
 # ─── NUEVO MODELO: Merma (Prioridad 2B) ───────────────────────────────────────

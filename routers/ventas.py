@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
@@ -112,6 +113,55 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
         conexion.close()
 
 
+@router.delete("/borrar_lote/{id_lote}")
+def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
+    conexion = conectar_bd()
+    cursor = None
+    try:
+        cursor = conexion.cursor(dictionary=True)
+        conexion.start_transaction()
+        cursor.execute(
+            "SELECT tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_lote = %s AND id_tienda = %s FOR UPDATE",
+            (id_lote, user.id_tienda)
+        )
+        filas = cursor.fetchall()
+        if not filas:
+            return {"mensaje": "Ticket no encontrado"}
+
+        cursor.execute("DELETE FROM movimientos WHERE id_lote = %s AND id_tienda = %s",
+                       (id_lote, user.id_tienda))
+
+        for mov in filas:
+            if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:
+                cantidad_devolver = float(mov["cantidad_real"] if mov["cantidad_real"] is not None else mov["cantidad"])
+                if mov["id_producto_ref"]:
+                    cursor.execute("""
+                        UPDATE productos
+                        SET stock_actual = stock_actual + %s
+                        WHERE id_producto = %s AND id_tienda = %s
+                    """, (cantidad_devolver, mov["id_producto_ref"], user.id_tienda))
+                else:
+                    cursor.execute("""
+                        UPDATE productos
+                        SET stock_actual = stock_actual + %s
+                        WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                    """, (cantidad_devolver, mov["producto"], user.id_tienda))
+
+        _log(cursor, user.id_tienda, user.id_usuario, "BORRAR_LOTE",
+             f"id_lote={id_lote} productos={len(filas)}")
+
+        conexion.commit()
+        return {"mensaje": "Ticket cancelado", "productos_afectados": len(filas)}
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al cancelar el ticket: {str(e)}")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conexion.close()
+
+
 @router.put("/actualizar_precio")
 def actualizar_precio(datos: ActualizacionPrecio, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
@@ -151,14 +201,16 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
 
+        id_lote = uuid.uuid4().hex[:12]
+
         for i in venta.items:
             nombre_limpio = i.producto.strip() if i.producto else "Venta sin nombre"
 
             # ── NUEVA VALIDACIÓN: solo actualizar stock si el producto existe y pertenece a esta tienda
             cursor.execute("""
-                INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, cantidad_real, precio_unitario, id_tienda, id_producto_ref)
-                VALUES (%s, 'VENTA', %s, %s, %s, %s, %s, %s)
-            """, (venta.id_turno, nombre_limpio, i.cantidad, i.cantidad_real, i.precio_unitario, user.id_tienda, i.id_producto or None))
+                INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, cantidad_real, precio_unitario, id_tienda, id_producto_ref, metodo_pago, id_lote)
+                VALUES (%s, 'VENTA', %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (venta.id_turno, nombre_limpio, i.cantidad, i.cantidad_real, i.precio_unitario, user.id_tienda, i.id_producto or None, venta.metodo_pago, id_lote))
 
             # Descontar stock: por id_producto si viene, si no por nombre
             if i.id_producto:
@@ -199,7 +251,7 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                       nombre_limpio, user.id_tienda))
 
         conexion.commit()
-        return {"ok": True, "registrados": len(venta.items)}
+        return {"ok": True, "registrados": len(venta.items), "id_lote": id_lote}
     except HTTPException:
         raise
     except Exception as e:

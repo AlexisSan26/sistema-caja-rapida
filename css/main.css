@@ -65,3 +65,20 @@
 .tarjeta-cliente:hover { box-shadow:0 4px 12px rgba(0,0,0,.15) !important; }
 .saldo-cero { color:#198754; font-weight:700; }
 .saldo-deuda { color:#dc3545; font-weight:700; }
+/* tarjetas de movimiento (historial de turno) */
+.mov-card { border:1px solid #e5e5e5; border-radius:10px; margin-bottom:.6rem; overflow:hidden; cursor:pointer; transition:box-shadow .15s; background:white; }
+.mov-card:active { box-shadow:0 2px 8px rgba(0,0,0,.15); }
+.mov-header { display:flex; justify-content:space-between; align-items:center; padding:.5rem .75rem; font-size:.8rem; }
+.mov-item { display:flex; justify-content:space-between; padding:.3rem .75rem; font-size:.9rem; }
+.mov-item + .mov-item { border-top:1px dashed #eee; }
+.mov-footer { display:flex; justify-content:space-between; padding:.4rem .75rem; font-size:.85rem; font-weight:700; background:#fbfbfb; border-top:1px solid #eee; }
+.mov-desc-normal { font-weight:400; }
+/* tinte tenue por tipo de movimiento, para identificar de un vistazo */
+.mov-card.mov-venta { border-color:#bfe3c8; }
+.mov-card.mov-venta .mov-header { background:#f2faf5; }
+.mov-card.mov-retiro { border-color:#f5c2c7; }
+.mov-card.mov-retiro .mov-header { background:#fdf2f3; }
+.mov-card.mov-abono { border-color:#f5e1a4; }
+.mov-card.mov-abono .mov-header { background:#fdf8ec; }
+.mov-card.mov-fondo { border-color:#b8d4f0; }
+.mov-card.mov-fondo .mov-header { background:#eef5fc; }

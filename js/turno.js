@@ -1,3 +1,6 @@
+let gruposMovimientosActual = [];
+let grupoMenuActual = null;
+
 async function verificarEstadoInicial() {
     try {
         const res = await fetch(`${API_URL}/turno_actual`);
@@ -46,6 +49,56 @@ function configurarInterfazAbierta() {
     setTimeout(() => document.getElementById("producto").focus(), 200);
 }
 
+function abrirMenuMovimiento(clave) {
+    const grupo = gruposMovimientosActual.find(g => g.clave === clave);
+    if (!grupo) return;
+    grupoMenuActual = grupo;
+    document.getElementById("bs-mov-titulo").innerText =
+        `${badgeTipo(grupo.tipo).replace(/<[^>]+>/g, '')} · ${grupo.hora || ''}`;
+    document.getElementById("bs-mov-btn-reimprimir").style.display = grupo.tipo === 'VENTA' ? 'block' : 'none';
+    document.getElementById("bs-mov-overlay").style.display = "block";
+    setTimeout(() => document.getElementById("bs-mov").style.transform = "translateY(0)", 10);
+}
+
+function cerrarMenuMovimiento() {
+    document.getElementById("bs-mov").style.transform = "translateY(100%)";
+    setTimeout(() => { document.getElementById("bs-mov-overlay").style.display = "none"; }, 300);
+    grupoMenuActual = null;
+}
+
+function reimprimirDesdeMenu() {
+    if (!grupoMenuActual) return;
+    const total = grupoMenuActual.items.reduce((acc, m) => acc + m.total_movimiento, 0);
+    reimprimirTicket(grupoMenuActual.items, total, grupoMenuActual.metodo_pago || "efectivo");
+    cerrarMenuMovimiento();
+}
+
+async function borrarDesdeMenu() {
+    if (!grupoMenuActual) return;
+    const grupo = grupoMenuActual;
+    cerrarMenuMovimiento();
+
+    const esLote = grupo.items.length > 1 && grupo.id_lote;
+    if (!confirm(esLote
+        ? `⚠️ ¿Cancelar este ticket completo (${grupo.items.length} productos)?\nEsta acción no se puede deshacer.`
+        : "⚠️ ¿Estás seguro de cancelar este registro?\nEsta acción no se puede deshacer.")) return;
+
+    const tarjeta = document.querySelector(`.mov-card[data-clave="${grupo.clave}"]`);
+    if (tarjeta) tarjeta.remove();
+    grupo.items.forEach(m => idsEnTabla.delete(m.id_movimiento));
+
+    try {
+        const url = esLote
+            ? `${API_URL}/borrar_lote/${grupo.id_lote}`
+            : `${API_URL}/borrar_movimiento/${grupo.items[0].id_movimiento}`;
+        const res = await fetch(url, { method: "DELETE" });
+        if (!res.ok) { mostrarError("Error al cancelar."); actualizarLista(); }
+    } catch (e) {
+        mostrarError("Error de conexión al cancelar.");
+        actualizarLista();
+    }
+}
+
 async function cargarProductosEnMemoria() {
     try {
         const res = await fetch(`${API_URL}/inventario`);
@@ -87,6 +140,42 @@ function resetearInterfazCerrada() {
     document.getElementById("texto-turno").className = "text-muted";
 }
 
+function badgeTipo(tipo) {
+    if (tipo === 'VENTA') return '<span class="badge bg-success">Venta</span>';
+    if (tipo === 'RETIRO') return '<span class="badge bg-danger">Retiro</span>';
+    if (tipo === 'COBRO_FIADO') return '<span class="badge bg-warning text-dark">Abono</span>';
+    if (tipo === 'FONDO_CAJA') return '<span class="badge bg-primary">Fondo</span>';
+    return '';
+}
+
+function badgeMetodoPago(metodo) {
+    const iconos = { efectivo: '💵 Efectivo', tarjeta: '💳 Tarjeta', transferencia: '📲 Transferencia' };
+    return `<span class="text-muted">${iconos[metodo] || ''}</span>`;
+}
+
+function claseTipo(tipo) {
+    if (tipo === 'VENTA') return ' mov-venta';
+    if (tipo === 'RETIRO') return ' mov-retiro';
+    if (tipo === 'COBRO_FIADO') return ' mov-abono';
+    if (tipo === 'FONDO_CAJA') return ' mov-fondo';
+    return '';
+}
+
+function descripcionMovimiento(g) {
+    if (g.tipo === 'FONDO_CAJA') return 'Fondo en caja';
+    return esc(g.items[0].producto || '');
+}
+
+function agruparMovimientos(movimientos) {
+    const grupos = new Map();
+    for (const m of movimientos) {
+        const clave = m.id_lote || `mov_${m.id_movimiento}`;
+        if (!grupos.has(clave)) grupos.set(clave, { clave, id_lote: m.id_lote || null, tipo: m.tipo_movimiento, hora: m.hora, metodo_pago: m.metodo_pago, items: [] });
+        grupos.get(clave).items.push(m);
+    }
+    return [...grupos.values()];
+}
+
 async function actualizarLista() {
     if (!idTurnoActual) return;
     try {
@@ -97,25 +186,53 @@ async function actualizarLista() {
         const cambio = nuevosIds.size !== idsEnTabla.size || [...nuevosIds].some(id => !idsEnTabla.has(id));
         if (!cambio) return;
         idsEnTabla = nuevosIds;
-        cuerpo.innerHTML = movimientos.map(m => {
-            let badge = '';
-            if (m.tipo_movimiento === 'VENTA') badge = '<span class="badge bg-success">Venta</span>';
-            else if (m.tipo_movimiento === 'RETIRO') badge = '<span class="badge bg-danger">Retiro</span>';
-            else if (m.tipo_movimiento === 'COBRO_FIADO') badge = '<span class="badge bg-warning text-dark">Abono</span>';
-            else if (m.tipo_movimiento === 'FONDO_CAJA') badge = '<span class="badge bg-primary">Fondo</span>';
+        gruposMovimientosActual = agruparMovimientos(movimientos);
 
-            return `<tr data-id="${m.id_movimiento}">
-                <td class="text-center" style="vertical-align: middle;">
-                    <div style="font-size:.85rem;">${m.hora || '--:--'}</div>
-                    <div class="mt-1" style="font-size: .75rem;">${badge}</div>
-                </td>
-                <td class="text-center">${m.cantidad}</td>
-                <td style="font-size:.9rem; vertical-align: middle;">${esc(m.producto)}</td>
-                <td class="text-center">$${m.total_movimiento.toFixed(2)}</td>
-                <td class="text-center">
-                    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="borrarMovimiento(${m.id_movimiento})">❌</button>
-                </td>
-            </tr>`;
+        cuerpo.innerHTML = gruposMovimientosActual.map(g => {
+            const total = g.items.reduce((acc, m) => acc + m.total_movimiento, 0);
+            const totalUnidades = g.items.reduce((acc, m) => acc + parseFloat(m.cantidad), 0);
+            const esVenta = g.tipo === 'VENTA';
+            const filas = esVenta ? g.items.map(m => `
+                <div class="mov-item">
+                    <span>${m.cantidad} x ${esc(m.producto)}</span>
+                    <span>$${m.total_movimiento.toFixed(2)}</span>
+                </div>`).join("") : `<div class="mov-item"><span>${descripcionMovimiento(g)}</span></div>`;
+            const infoDerecha = esVenta ? badgeMetodoPago(g.metodo_pago) : '';
+            const claseExtra = claseTipo(g.tipo);
+            const pie = esVenta
+                ? `<span>${totalUnidades} unidad${totalUnidades == 1 ? '' : 'es'}</span><span>Total: $${total.toFixed(2)}</span>`
+                : `<span></span><span>Total: $${total.toFixed(2)}</span>`;
+
+            if (!esVenta) {
+                return `<div class="mov-card${claseExtra}" data-clave="${g.clave}" onclick="abrirMenuMovimiento('${g.clave}')">
+                    <div class="mov-header">
+                        <span>${badgeTipo(g.tipo)} &nbsp; ${g.hora || '--:--'}</span>
+                    </div>
+                    <div class="mov-footer">
+                        <span class="mov-desc-normal">${descripcionMovimiento(g)}</span><span>Total: $${total.toFixed(2)}</span>
+                    </div>
+                </div>`;
+            }
+
+            if (!esVenta) {
+                return `<div class="mov-card${claseExtra}" data-clave="${g.clave}" onclick="abrirMenuMovimiento('${g.clave}')">
+                    <div class="mov-header">
+                        <span>${badgeTipo(g.tipo)} &nbsp; ${g.hora || '--:--'}</span>
+                    </div>
+                    <div class="mov-footer">
+                        <span class="mov-desc-normal">${descripcionMovimiento(g)}</span><span>Total: $${total.toFixed(2)}</span>
+                    </div>
+                </div>`;
+            }
+
+            return `<div class="mov-card${claseExtra}" data-clave="${g.clave}" onclick="abrirMenuMovimiento('${g.clave}')">
+                <div class="mov-header">
+                    <span>${badgeTipo(g.tipo)} &nbsp; ${g.hora || '--:--'}</span>
+                    <span>${infoDerecha}</span>
+                </div>
+                ${filas}
+                <div class="mov-footer">${pie}</div>
+            </div>`;
         }).join("");
     } catch (e) { mostrarError(); }
 }

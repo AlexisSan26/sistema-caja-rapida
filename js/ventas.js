@@ -132,6 +132,7 @@ async function registrar() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         id_turno: idTurnoActual,
+                        metodo_pago: metodoPago,
                         items: carritoItems.map(i => ({
                             producto: i.nombre,
                             cantidad: i.monto_cliente != null ? 1 : i.cantidad,
@@ -367,7 +368,7 @@ function renderCarrito() {
     }).join("");
     totalEl.textContent = `$${total.toFixed(2)}`;
     const contadorEl = document.getElementById("contador-productos-carrito");
-    if (contadorEl) contadorEl.textContent = carritoItems.length;
+    if (contadorEl) contadorEl.textContent = carritoItems.reduce((acc, i) => acc + i.cantidad, 0);
     const barraSticky = document.getElementById("barra-total-sticky");
     const stickyArticulos = document.getElementById("sticky-articulos");
     const stickyTotal = document.getElementById("sticky-total");
@@ -702,6 +703,52 @@ function actualizarCambio() {
     } else {
         divCambio.style.display = "none";
     }
+}
+
+function reimprimirTicket(items, total, metodo) {
+    const iconos = { efectivo: "💵", tarjeta: "💳", transferencia: "📲" };
+    const ahora = new Date().toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    const renglones = items.map(i =>
+        `<tr>
+            <td style="padding:2px 4px;">${esc(i.producto)}</td>
+            <td style="text-align:center;padding:2px 4px;">${i.cantidad}</td>
+            <td style="text-align:right;padding:2px 4px;">$${i.total_movimiento.toFixed(2)}</td>
+        </tr>`
+    ).join("");
+
+    const ventana = window.open("", "_blank", "width=320,height=550");
+    ventana.document.write(`<!DOCTYPE html><html><head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: monospace; font-size: 13px; margin: 16px; }
+            h3 { text-align:center; margin:0 0 2px; font-size:15px; }
+            .sub { text-align:center; color:#666; font-size:11px; margin-bottom:8px; }
+            table { width:100%; border-collapse:collapse; }
+            th { border-bottom:1px solid #000; padding:2px 4px; font-size:12px; }
+            .sep { border-top:1px dashed #000; margin:8px 0; }
+            .total { font-size:17px; font-weight:bold; margin:4px 0; }
+            .pie { text-align:center; font-size:11px; color:#888; margin-top:8px; }
+        </style>
+    </head><body>
+        <h3>${esc(nombreTienda) || "Caja Rápida"}</h3>
+        <div class="sub">👤 ${esc(nombreUsuario)} &nbsp;·&nbsp; ${ahora} (reimpresión)</div>
+        <div class="sep"></div>
+        <table>
+            <thead><tr>
+                <th style="text-align:left;">Producto</th>
+                <th style="text-align:center;">Cant</th>
+                <th style="text-align:right;">Subtotal</th>
+            </tr></thead>
+            <tbody>${renglones}</tbody>
+        </table>
+        <div class="sep"></div>
+        <div class="total">Total: $${total.toFixed(2)}</div>
+        <div>${iconos[metodo] || ""} ${metodo.charAt(0).toUpperCase() + metodo.slice(1)}</div>
+        <div class="sep"></div>
+        <div class="pie">¡Gracias por su compra!</div>
+        <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>`);
+    ventana.document.close();
 }
 
 function imprimirTicketVenta(items, total, metodo, recibido, cambio) {

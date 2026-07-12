@@ -169,19 +169,8 @@
         <div class="card-header bg-dark text-white text-center p-2">
             <h6 class="mb-0 text-white">Movimientos del Turno</h6>
         </div>
-        <div class="card-body p-0 tabla-scroll">
-            <table class="table table-striped mb-0 texto-lista">
-                <thead class="table-light">
-                    <tr>
-                        <th class="text-center">Hora</th>
-                        <th class="text-center">Cant</th>
-                        <th>Producto</th>
-                        <th class="text-center">Total</th>
-                        <th class="text-center"></th>
-                    </tr>
-                </thead>
-                <tbody id="tabla-cuerpo"></tbody>
-            </table>
+        <div class="card-body p-2 tabla-scroll" style="max-height:340px;">
+            <div id="tabla-cuerpo"></div>
         </div>
     </div>
     <div id="panel-corte" class="card shadow-sm border-danger mb-3" style="display:none;">
@@ -444,6 +433,16 @@
     <button class="btn btn-outline-secondary w-100" onclick="cerrarBsFiado()">Cerrar</button>
 </div>
 
+<div id="bs-mov-overlay" onclick="cerrarMenuMovimiento()" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9500;"></div>
+<div id="bs-mov" style="position:fixed;bottom:0;left:0;right:0;background:white;border-radius:16px 16px 0 0;padding:1.25rem 1.25rem 2rem;max-height:70vh;overflow-y:auto;z-index:9600;transform:translateY(100%);transition:transform .3s ease;">
+    <div class="sheet-handle"></div>
+    <h6 id="bs-mov-titulo" class="fw-bold mb-3 text-center"></h6>
+    <div class="d-grid gap-2">
+        <button id="bs-mov-btn-reimprimir" class="btn btn-outline-primary btn-lg" onclick="reimprimirDesdeMenu()">🖨️ Reimprimir</button>
+        <button id="bs-mov-btn-borrar" class="btn btn-outline-danger btn-lg" onclick="borrarDesdeMenu()">🗑️ Borrar</button>
+        <button class="btn btn-outline-secondary" onclick="cerrarMenuMovimiento()">Cancelar</button>
+    </div>
+</div>
 <div id="bottom-sheet-overlay" onclick="cerrarBottomSheet()"></div>
 <div id="bottom-sheet">
     <div class="sheet-handle"></div>
