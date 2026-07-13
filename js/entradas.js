@@ -94,20 +94,20 @@ function renderLoteResurtido() {
     contenedor.innerHTML = `
         <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos a ingresar</div>
         <div style="border:1px solid #dee2e6;border-radius:8px;overflow-x:auto;margin-bottom:1rem;">
-            <table class="table table-sm mb-0" id="tabla-lote-resurtido" style="min-width:400px;">
+            <table class="table table-sm mb-0" id="tabla-lote-resurtido" style="table-layout:fixed;width:390px;">
                 <thead class="table-light">
                     <tr>
-                        <th>Producto</th>
-                        <th class="text-center" style="width:60px; font-size:.8rem;">Stock</th>
+                        <th style="width:80px;">Producto</th>
+                        <th class="text-center" style="width:64px; font-size:.8rem;">Stock</th>
                         <th class="text-center" style="width:70px; font-size:.8rem;">Entran</th>
-                        <th class="text-center" style="width:80px; font-size:.8rem;">Costo</th>
+                        <th class="text-center" style="width:70px; font-size:.8rem;">Costo</th>
                         <th class="text-center" style="width:36px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                     ${loteResurtido.map((item, idx) => `
                         <tr>
-                            <td style="font-size:.9rem;vertical-align:middle;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.nombre)}">${esc(item.nombre)}</td>
+                            <td style="font-size:.9rem;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.nombre)}">${esc(item.nombre)}</td>
                             <td class="text-center text-muted fw-bold" style="vertical-align:middle;font-size:.85rem;">
                                 ${item.stock_actual}
                             </td>
