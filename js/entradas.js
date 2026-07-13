@@ -93,43 +93,30 @@ function renderLoteResurtido() {
 
     contenedor.innerHTML = `
         <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos a ingresar</div>
-        <div style="border:1px solid #dee2e6;border-radius:8px;overflow-x:auto;margin-bottom:1rem;">
-            <table class="table table-sm mb-0" id="tabla-lote-resurtido" style="table-layout:fixed;width:390px;">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width:80px;">Producto</th>
-                        <th class="text-center" style="width:64px; font-size:.8rem;">Stock</th>
-                        <th class="text-center" style="width:70px; font-size:.8rem;">Entran</th>
-                        <th class="text-center" style="width:70px; font-size:.8rem;">Costo</th>
-                        <th class="text-center" style="width:36px;"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${loteResurtido.map((item, idx) => `
-                        <tr>
-                            <td style="font-size:.9rem;vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.nombre)}">${esc(item.nombre)}</td>
-                            <td class="text-center text-muted fw-bold" style="vertical-align:middle;font-size:.85rem;">
-                                ${item.stock_actual}
-                            </td>
-                            <td class="text-center" style="vertical-align:middle;">
-                                <input type="number" class="form-control form-control-sm text-center p-1"
-                                    style="width:60px;display:inline-block;"
-                                    value="${item.cantidad}" min="1"
-                                    onchange="actualizarCantidadLote(${idx}, this.value)">
-                            </td>
-                            <td class="text-center" style="vertical-align:middle;">
-                                <input type="number" class="form-control form-control-sm text-center p-1"
-                                    style="width:70px;display:inline-block;"
-                                    value="${item.precio_costo != null ? item.precio_costo : ''}" min="0" step="any" placeholder="$0.00"
-                                    onchange="actualizarCostoLote(${idx}, this.value)">
-                            </td>
-                            <td class="text-center" style="vertical-align:middle;">
-                                <button class="btn btn-sm btn-outline-danger py-0 px-1 lh-1" onclick="quitarDelLoteResurtido(${idx})">✕</button>
-                            </td>
-                        </tr>
-                    `).join("")}
-                </tbody>
-            </table>
+        <div id="lista-lote-resurtido">
+            ${loteResurtido.map((item, idx) => `
+                <div class="border rounded p-2 mb-2" style="background:#fff;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span style="font-size:.9rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;" title="${esc(item.nombre)}">${esc(item.nombre)}</span>
+                        <span class="text-muted" style="font-size:.8rem;">Stock: <b>${item.stock_actual}</b></span>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-2 lh-1" onclick="quitarDelLoteResurtido(${idx})">✕</button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <div class="flex-fill">
+                            <div class="text-muted" style="font-size:.7rem;">Entran</div>
+                            <input type="number" class="form-control form-control-sm text-center p-1"
+                                value="${item.cantidad}" min="1"
+                                onchange="actualizarCantidadLote(${idx}, this.value)">
+                        </div>
+                        <div class="flex-fill">
+                            <div class="text-muted" style="font-size:.7rem;">Costo</div>
+                            <input type="number" class="form-control form-control-sm text-center p-1"
+                                value="${item.precio_costo != null ? item.precio_costo : ''}" min="0" step="any" placeholder="$0.00"
+                                onchange="actualizarCostoLote(${idx}, this.value)">
+                        </div>
+                    </div>
+                </div>
+            `).join("")}
         </div>
     `;
 }
