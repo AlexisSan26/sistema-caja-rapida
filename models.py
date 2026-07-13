@@ -77,6 +77,7 @@ class ItemEntradaLote(BaseModel):
     id_producto: int
     cantidad: float
     fecha_caducidad: str | None = None
+    precio_costo: float | None = None
 
 
 class EntradaLote(BaseModel):

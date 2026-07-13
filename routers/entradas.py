@@ -57,11 +57,16 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
                     "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s AND id_tienda = %s",
                     (item.fecha_caducidad, item.id_producto, user.id_tienda)
                 )
+            if item.precio_costo is not None:
+                cursor.execute(
+                    "UPDATE productos SET precio_costo = %s WHERE id_producto = %s AND id_tienda = %s",
+                    (item.precio_costo, item.id_producto, user.id_tienda)
+                )
             cursor.execute("""
-                INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas, id_tienda)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas, precio_costo, id_tienda)
+                VALUES (%s, %s, %s, %s, %s, %s)
             """, (
-            item.id_producto, item.cantidad, item.fecha_caducidad or None, lote.nota_general or None, user.id_tienda))
+            item.id_producto, item.cantidad, item.fecha_caducidad or None, lote.nota_general or None, item.precio_costo, user.id_tienda))
         conexion.commit()
         return {"mensaje": f"Se registraron {len(lote.items)} productos correctamente"}
     except HTTPException:
@@ -120,7 +125,7 @@ def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_us
             SELECT e.id_entrada, p.nombre_producto, e.cantidad,
                    DATE_FORMAT(e.fecha_entrada, '%d/%m/%Y') AS fecha,
                    TIME_FORMAT(e.fecha_entrada, '%H:%i') AS hora,
-                   e.notas, e.fecha_caducidad
+                   e.notas, e.fecha_caducidad, e.precio_costo
             FROM entradas_mercancia e
             JOIN productos p ON p.id_producto = e.id_producto
             WHERE e.id_tienda = %s

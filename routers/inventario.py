@@ -15,7 +15,7 @@ def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
         cursor = conexion.cursor(dictionary=True)
         if q == "":
             cursor.execute("""
-                SELECT p.id_producto, p.nombre_producto, p.precio_sugerido, p.codigo_barras, p.unidad_medida
+                SELECT p.id_producto, p.nombre_producto, p.precio_sugerido, p.precio_costo, p.codigo_barras, p.unidad_medida
                 FROM productos p
                 LEFT JOIN (
                     SELECT producto, COUNT(*) as ventas FROM movimientos WHERE id_tienda = %s GROUP BY producto
@@ -25,7 +25,7 @@ def buscar_productos(q: str = "", user: TokenData = Depends(get_current_user)):
             """, (user.id_tienda, user.id_tienda))
         else:
             cursor.execute(
-                "SELECT id_producto, nombre_producto, precio_sugerido, codigo_barras, unidad_medida FROM productos WHERE nombre_producto LIKE %s AND activo = 1 AND id_tienda = %s LIMIT 10",
+                "SELECT id_producto, nombre_producto, precio_sugerido, precio_costo, codigo_barras, unidad_medida FROM productos WHERE nombre_producto LIKE %s AND activo = 1 AND id_tienda = %s LIMIT 10",
                 (f"%{q}%", user.id_tienda)
             )
         return cursor.fetchall()
@@ -42,7 +42,7 @@ def obtener_todos_productos(user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute(
-            "SELECT id_producto, nombre_producto, precio_sugerido, codigo_barras, unidad_medida FROM productos WHERE activo = 1 AND id_tienda = %s ORDER BY nombre_producto",
+            "SELECT id_producto, nombre_producto, precio_sugerido, precio_costo, codigo_barras, unidad_medida FROM productos WHERE activo = 1 AND id_tienda = %s ORDER BY nombre_producto",
             (user.id_tienda,)
         )
         return cursor.fetchall()
@@ -61,7 +61,7 @@ def producto_por_codigo(codigo: str, user: TokenData = Depends(get_current_user)
 
         # ── CAMINO VERDE: existe en la tienda ────────────────────────────────
         cursor.execute("""
-            SELECT id_producto, nombre_producto, precio_sugerido,
+            SELECT id_producto, nombre_producto, precio_sugerido, precio_costo,
                    stock_actual, stock_minimo, proveedor, fecha_caducidad,
                    codigo_barras, unidad_medida
             FROM productos WHERE codigo_barras = %s AND activo = 1 AND id_tienda = %s

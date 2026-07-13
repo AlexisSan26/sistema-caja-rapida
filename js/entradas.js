@@ -23,6 +23,7 @@ async function cargarEntradas() {
                         </div>
                         <div class="text-end">
                             <span class="badge bg-success">+${e.cantidad} ${e.unidad_medida || 'pza'}</span>
+                            ${e.precio_costo != null ? `<div class="text-muted" style="font-size:.75rem;">Costo: $${parseFloat(e.precio_costo).toFixed(2)}</div>` : ''}
                         </div>
                     </div>
                 </div>
@@ -59,6 +60,7 @@ function abrirFlujoResurtido(codigoInicial = null) {
     document.getElementById("producto-resurtido").value = codigoInicial || "";
     document.getElementById("cantidad-resurtido").value = "1";
     document.getElementById("fecha-cad-resurtido").value = "";
+    document.getElementById("costo-resurtido").value = "";
 
     cargarProveedoresDatalist();
 
@@ -98,6 +100,7 @@ function renderLoteResurtido() {
                         <th>Producto</th>
                         <th class="text-center" style="width:60px; font-size:.8rem;">Stock</th>
                         <th class="text-center" style="width:70px; font-size:.8rem;">Entran</th>
+                        <th class="text-center" style="width:80px; font-size:.8rem;">Costo</th>
                         <th class="text-center" style="width:36px;"></th>
                     </tr>
                 </thead>
@@ -115,6 +118,12 @@ function renderLoteResurtido() {
                                     onchange="actualizarCantidadLote(${idx}, this.value)">
                             </td>
                             <td class="text-center" style="vertical-align:middle;">
+                                <input type="number" class="form-control form-control-sm text-center p-1"
+                                    style="width:70px;display:inline-block;"
+                                    value="${item.precio_costo != null ? item.precio_costo : ''}" min="0" step="any" placeholder="$0.00"
+                                    onchange="actualizarCostoLote(${idx}, this.value)">
+                            </td>
+                            <td class="text-center" style="vertical-align:middle;">
                                 <button class="btn btn-sm btn-outline-danger py-0 px-1 lh-1" onclick="quitarDelLoteResurtido(${idx})">✕</button>
                             </td>
                         </tr>
@@ -129,9 +138,12 @@ function agregarAlLoteResurtido() {
     const nombre = document.getElementById("producto-resurtido").value.trim();
     const cantidad = parseFloat(document.getElementById("cantidad-resurtido").value);
     const fechaCad = document.getElementById("fecha-cad-resurtido").value;
+    const costoInput = document.getElementById("costo-resurtido").value;
+    const costo = costoInput !== "" ? parseFloat(costoInput) : null;
 
     if (!nombre) { alert("Escribe el nombre del producto o escanea su código."); return; }
     if (isNaN(cantidad) || cantidad <= 0) { alert("La cantidad debe ser mayor a 0."); return; }
+    if (costo !== null && (isNaN(costo) || costo < 0)) { alert("El precio de costo no es válido."); return; }
 
     const productoLocal = todosLosProductos.find(p => p.nombre_producto === nombre || p.codigo_barras === nombre);
 
@@ -141,6 +153,7 @@ function agregarAlLoteResurtido() {
             nombre: productoLocal.nombre_producto,
             cantidad: cantidad,
             fecha_caducidad: fechaCad || null,
+            precio_costo: costo !== null ? costo : productoLocal.precio_costo,
             stock_actual: productoLocal.stock_actual
         });
 
@@ -149,6 +162,7 @@ function agregarAlLoteResurtido() {
         document.getElementById("producto-resurtido").value = "";
         document.getElementById("cantidad-resurtido").value = "1";
         document.getElementById("fecha-cad-resurtido").value = "";
+        document.getElementById("costo-resurtido").value = "";
         document.getElementById("producto-resurtido").focus();
     } else {
         alert("⚠️ Producto no encontrado en el inventario. Verifícalo o regístralo como nuevo.");
@@ -170,6 +184,18 @@ function actualizarCantidadLote(idx, val) {
     renderLoteResurtido();
 }
 
+function actualizarCostoLote(idx, val) {
+    const n = parseFloat(val);
+    loteResurtido[idx].precio_costo = (val === "" || isNaN(n) || n < 0) ? null : n;
+}
+
+function precargarCostoResurtido(producto) {
+    const inputCosto = document.getElementById("costo-resurtido");
+    if (inputCosto.value === "" && producto.precio_costo != null) {
+        inputCosto.value = producto.precio_costo;
+    }
+}
+
 async function manejarInputResurtido() {
     const texto = document.getElementById("producto-resurtido").value;
     if (!texto) return;
@@ -184,12 +210,14 @@ async function manejarInputResurtido() {
             const local = todosLosProductos.find(p => p.codigo_barras === val);
             if (local) {
                 document.getElementById("producto-resurtido").value = local.nombre_producto;
+                precargarCostoResurtido(local);
             } else {
                 fetch(`${API_URL}/producto_por_codigo/${val}`)
                     .then(r => r.json())
                     .then(data => {
                         if (data.encontrado) {
                             document.getElementById("producto-resurtido").value = data.producto.nombre_producto;
+                            precargarCostoResurtido(data.producto);
                         } else {
                             if (confirm("Producto no encontrado. ¿Deseas registrarlo en el inventario?")) {
                                 document.getElementById("nuevo-codigo").value = val;
@@ -228,7 +256,8 @@ async function enviarTicketProveedor() {
         const itemsLote = loteResurtido.map(item => ({
             id_producto: item.id_producto,
             cantidad: item.cantidad,
-            fecha_caducidad: item.fecha_caducidad
+            fecha_caducidad: item.fecha_caducidad,
+            precio_costo: item.precio_costo
         }));
 
         const res = await fetch(`${API_URL}/entrada_mercancia_lote`, {
