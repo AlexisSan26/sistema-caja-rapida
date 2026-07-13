@@ -93,8 +93,8 @@ function renderLoteResurtido() {
 
     contenedor.innerHTML = `
         <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos a ingresar</div>
-        <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;margin-bottom:1rem;">
-            <table class="table table-sm mb-0" id="tabla-lote-resurtido">
+        <div style="border:1px solid #dee2e6;border-radius:8px;overflow-x:auto;margin-bottom:1rem;">
+            <table class="table table-sm mb-0" id="tabla-lote-resurtido" style="min-width:400px;">
                 <thead class="table-light">
                     <tr>
                         <th>Producto</th>
@@ -107,7 +107,7 @@ function renderLoteResurtido() {
                 <tbody>
                     ${loteResurtido.map((item, idx) => `
                         <tr>
-                            <td style="font-size:.9rem;vertical-align:middle;">${esc(item.nombre)}</td>
+                            <td style="font-size:.9rem;vertical-align:middle;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.nombre)}">${esc(item.nombre)}</td>
                             <td class="text-center text-muted fw-bold" style="vertical-align:middle;font-size:.85rem;">
                                 ${item.stock_actual}
                             </td>
@@ -243,6 +243,9 @@ async function manejarInputResurtido() {
 
         const datalist = document.getElementById("lista-productos-resurtido");
         datalist.innerHTML = resultados.map(p => `<option value="${esc(p.nombre_producto)}">`).join("");
+
+        const exacto = todosLosProductos.find(p => p.nombre_producto.toLowerCase() === textoMin);
+        if (exacto) precargarCostoResurtido(exacto);
     }, 80);
 }
 
