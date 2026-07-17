@@ -117,7 +117,8 @@ async function registrar() {
                         items: carritoItems.map(item => ({
                             producto: item.nombre,
                             cantidad: item.cantidad,
-                            precio: item.precio
+                            precio: item.precio,
+                            monto_real: item.monto_cliente
                         }))
                     })
                 });

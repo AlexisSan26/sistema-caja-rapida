@@ -96,12 +96,14 @@ class ItemFiado(BaseModel):
     producto: str
     cantidad: float = 1.0
     precio: float
+    monto_real: float | None = None
 
 
 class ItemFiadoLote(BaseModel):
     producto: str
     cantidad: float = 1.0
     precio: float
+    monto_real: float | None = None
 
 
 class FiadoLote(BaseModel):

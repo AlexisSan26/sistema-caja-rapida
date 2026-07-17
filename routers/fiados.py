@@ -15,7 +15,7 @@ def listar_clientes(user: TokenData = Depends(get_current_user)):
         cursor.execute("""
             SELECT c.id_cliente, c.nombre, c.telefono,
                    COALESCE(
-                     (SELECT SUM(df.cantidad * df.precio)
+                     (SELECT SUM(COALESCE(df.monto_real, df.cantidad * df.precio))
                       FROM detalle_fiado df
                       JOIN cuentas_fiado cf ON df.id_cuenta = cf.id_cuenta
                       WHERE cf.id_cliente = c.id_cliente AND cf.estado = 'ABIERTA' AND df.id_tienda = %s)
@@ -73,7 +73,7 @@ def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
-            SELECT COALESCE(SUM(df.cantidad * df.precio), 0) - COALESCE(SUM(a.monto), 0) AS saldo
+            SELECT COALESCE(SUM(COALESCE(df.monto_real, df.cantidad * df.precio)), 0) - COALESCE(SUM(a.monto), 0) AS saldo
             FROM cuentas_fiado cf
             LEFT JOIN detalle_fiado df ON df.id_cuenta = cf.id_cuenta
             LEFT JOIN abonos a ON a.id_cuenta = cf.id_cuenta
@@ -120,7 +120,7 @@ def obtener_cuenta(id_cliente: int, user: TokenData = Depends(get_current_user))
             id_cuenta = cuenta['id_cuenta']
 
         cursor.execute("""
-            SELECT producto, cantidad, precio, (cantidad * precio) AS subtotal,
+            SELECT producto, cantidad, precio, COALESCE(monto_real, cantidad * precio) AS subtotal,
                    DATE_FORMAT(fecha_hora, '%d/%m %H:%i') as fecha
             FROM detalle_fiado WHERE id_cuenta = %s AND id_tienda = %s
             ORDER BY fecha_hora ASC
@@ -175,9 +175,9 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
             raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
 
         cursor.execute("""
-            INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (item.id_cuenta, item.producto.strip(), item.cantidad, item.precio, user.id_tienda))
+            INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, monto_real, id_tienda)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (item.id_cuenta, item.producto.strip(), item.cantidad, item.precio, item.monto_real, user.id_tienda))
 
         # Buscar id_producto para evitar ambigüedad con nombres duplicados
         cursor.execute("""
@@ -234,9 +234,9 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
             nombre_limpio = item.producto.strip()
 
             cursor.execute("""
-                INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (fiado.id_cuenta, nombre_limpio, item.cantidad, item.precio, user.id_tienda))
+                INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, monto_real, id_tienda)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (fiado.id_cuenta, nombre_limpio, item.cantidad, item.precio, item.monto_real, user.id_tienda))
 
             cursor.execute("""
                 SELECT id_producto FROM productos
@@ -310,7 +310,7 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         # Estos SELECTs ahora son seguros: nadie más puede modificar esta
         # cuenta hasta que el commit de abajo libere el FOR UPDATE lock.
         cursor.execute("""
-            SELECT COALESCE(SUM(df.cantidad * df.precio), 0) AS total_fiado
+            SELECT COALESCE(SUM(COALESCE(df.monto_real, df.cantidad * df.precio)), 0) AS total_fiado
             FROM detalle_fiado df WHERE df.id_cuenta = %s AND df.id_tienda = %s
         """, (abono.id_cuenta, user.id_tienda))
         tf = cursor.fetchone()
