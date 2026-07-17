@@ -16,6 +16,10 @@ function mostrarError(msg) {
     timeoutError = setTimeout(() => { el.style.display = "none"; }, 4000);
 }
 
+function toggleBotones(selector, deshabilitar) {
+    document.querySelectorAll(selector).forEach(btn => btn.disabled = deshabilitar);
+}
+
 function mostrarFechaDelDia() {
     const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     document.getElementById("fecha-actual").innerText = new Date().toLocaleDateString('es-MX', opciones);

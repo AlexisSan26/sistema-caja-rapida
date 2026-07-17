@@ -104,6 +104,7 @@ async function registrar() {
             if (!idCliente) { alert("Selecciona un cliente para el fiado."); return; }
             if (enviandoVenta) return;
             enviandoVenta = true;
+            toggleBotones('button[onclick="registrar()"]', true);
             try {
                 const resCuenta = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
                 const dataCuenta = await resCuenta.json();
@@ -122,10 +123,11 @@ async function registrar() {
                 }
                 alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
             } catch (e) { mostrarError("Error al registrar el fiado."); return; }
-            finally { enviandoVenta = false; }
+            finally { enviandoVenta = false; toggleBotones('button[onclick="registrar()"]', false); }
         } else {
             if (enviandoVenta) return;
             enviandoVenta = true;
+            toggleBotones('button[onclick="registrar()"]', true);
             try {
                 let metodoPago = "efectivo";
                 if (document.getElementById("btn-tarjeta").classList.contains("btn-success")) metodoPago = "tarjeta";
@@ -151,7 +153,7 @@ async function registrar() {
                 const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
                 imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
             } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
-            finally { enviandoVenta = false; }
+            finally { enviandoVenta = false; toggleBotones('button[onclick="registrar()"]', false); }
         }
         carritoItems = [];
         renderCarrito();
@@ -173,6 +175,7 @@ async function registrar() {
     cantidadVal = 1;
     if (enviandoVenta) return;
     enviandoVenta = true;
+    toggleBotones('button[onclick="registrar()"]', true);
     try {
         const res = await fetch(`${API_URL}/registrar_movimiento`, {
             method: "POST",
@@ -187,7 +190,7 @@ async function registrar() {
             actualizarLista();
         } else { mostrarError("El servidor rechazó el registro."); }
     } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); }
-    finally { enviandoVenta = false; }
+    finally { enviandoVenta = false; toggleBotones('button[onclick="registrar()"]', false); }
 }
 
 async function borrarMovimiento(idMovimiento) {

@@ -241,6 +241,9 @@ async function enviarTicketProveedor() {
         alert("No hay productos en la lista para guardar.");
         return;
     }
+    if (enviandoResurtido) return;
+    enviandoResurtido = true;
+    toggleBotones('button[onclick="enviarTicketProveedor()"]', true);
 
     try {
         const itemsLote = loteResurtido.map(item => ({
@@ -274,5 +277,8 @@ async function enviarTicketProveedor() {
 
     } catch (e) {
         mostrarError("Error al registrar el ticket completo.");
+    } finally {
+        enviandoResurtido = false;
+        toggleBotones('button[onclick="enviarTicketProveedor()"]', false);
     }
 }

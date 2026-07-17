@@ -188,6 +188,9 @@ async function confirmarMerma() {
     if (cantidad > productoEnEdicion.stock_actual) {
         if (!confirm(`⚠️ La cantidad (${cantidad}) supera el stock actual (${productoEnEdicion.stock_actual}). ¿Continuar de todas formas?`)) return;
     }
+    if (enviandoMerma) return;
+    enviandoMerma = true;
+    toggleBotones('button[onclick="confirmarMerma()"]', true);
     try {
         const res = await fetch(`${API_URL}/registrar_merma`, {
             method: "POST",
@@ -206,6 +209,7 @@ async function confirmarMerma() {
         cerrarBottomSheet();
         cargarInventario();
     } catch (e) { mostrarError("Error al registrar la merma."); }
+    finally { enviandoMerma = false; toggleBotones('button[onclick="confirmarMerma()"]', false); }
 }
 
 function exportarInventarioCSV() {
@@ -260,6 +264,9 @@ async function guardarProductoNuevo() {
     const precio = parseFloat(document.getElementById("nuevo-precio").value);
     if (!nombre) { alert("El nombre del producto es obligatorio."); return; }
     if (isNaN(precio) || precio < 0) { alert("Escribe un precio válido."); return; }
+    if (enviandoProductoNuevo) return;
+    enviandoProductoNuevo = true;
+    toggleBotones('button[onclick="guardarProductoNuevo()"]', true);
     try {
         const res = await fetch(`${API_URL}/registrar_producto`, {
             method: "POST",
@@ -282,4 +289,5 @@ async function guardarProductoNuevo() {
         volverPaso1();
         cargarInventario();
     } catch (e) { mostrarError("Error al guardar el producto."); }
+    finally { enviandoProductoNuevo = false; toggleBotones('button[onclick="guardarProductoNuevo()"]', false); }
 }
