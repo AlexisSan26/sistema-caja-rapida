@@ -108,18 +108,23 @@ async function registrar() {
             try {
                 const resCuenta = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
                 const dataCuenta = await resCuenta.json();
-                for (const item of carritoItems) {
-                    await fetch(`${API_URL}/agregar_fiado`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            id_cuenta: dataCuenta.id_cuenta,
-                            id_turno: idTurnoActual,
+                const resFiado = await fetch(`${API_URL}/agregar_fiado_lote`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        id_cuenta: dataCuenta.id_cuenta,
+                        id_turno: idTurnoActual,
+                        items: carritoItems.map(item => ({
                             producto: item.nombre,
                             cantidad: item.cantidad,
                             precio: item.precio
-                        })
-                    });
+                        }))
+                    })
+                });
+                if (!resFiado.ok) {
+                    const errData = await resFiado.json().catch(() => ({}));
+                    mostrarError(errData.detail || "Error al registrar el fiado.");
+                    return;
                 }
                 alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
             } catch (e) { mostrarError("Error al registrar el fiado."); return; }

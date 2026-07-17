@@ -98,6 +98,18 @@ class ItemFiado(BaseModel):
     precio: float
 
 
+class ItemFiadoLote(BaseModel):
+    producto: str
+    cantidad: float = 1.0
+    precio: float
+
+
+class FiadoLote(BaseModel):
+    id_cuenta: int
+    id_turno: int
+    items: list[ItemFiadoLote]
+
+
 class AbonoFiado(BaseModel):
     id_cuenta: int
     id_turno: int

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
-from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado
+from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote
 
 router = APIRouter()
 
@@ -194,6 +194,64 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
 
         conexion.commit()  # ← libera el FOR UPDATE lock
         return {"mensaje": "Fiado registrado correctamente"}
+    except HTTPException:
+        if conexion:
+            conexion.rollback()
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al registrar fiado: {str(e)}")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conexion.close()
+
+
+@router.post("/agregar_fiado_lote")
+def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_user)):
+    if not fiado.items:
+        return {"error": "Sin items"}
+    conexion = conectar_bd()
+    cursor = None
+    try:
+        cursor = conexion.cursor()
+
+        # ── Misma protección que agregar_fiado: FOR UPDATE + transacción única ──
+        # Ahora cubre TODOS los productos del carrito, no solo uno.
+        conexion.start_transaction()
+
+        cursor.execute("""
+            SELECT cf.id_cuenta FROM cuentas_fiado cf
+            JOIN clientes c ON c.id_cliente = cf.id_cliente
+            WHERE cf.id_cuenta = %s AND c.id_tienda = %s AND cf.estado = 'ABIERTA'
+            FOR UPDATE
+        """, (fiado.id_cuenta, user.id_tienda))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
+
+        for item in fiado.items:
+            nombre_limpio = item.producto.strip()
+
+            cursor.execute("""
+                INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (fiado.id_cuenta, nombre_limpio, item.cantidad, item.precio, user.id_tienda))
+
+            cursor.execute("""
+                SELECT id_producto FROM productos
+                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                LIMIT 1
+            """, (nombre_limpio, user.id_tienda))
+            prod = cursor.fetchone()
+            if prod:
+                cursor.execute("""
+                    UPDATE productos SET stock_actual = stock_actual - %s
+                    WHERE id_producto = %s AND id_tienda = %s
+                """, (float(item.cantidad), prod[0], user.id_tienda))
+
+        conexion.commit()  # ← si algo falló arriba, nunca se llega aquí y todo se revierte
+        return {"mensaje": "Fiado registrado correctamente", "registrados": len(fiado.items)}
     except HTTPException:
         if conexion:
             conexion.rollback()
