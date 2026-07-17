@@ -12,7 +12,14 @@ from routers import turnos, ventas, inventario, entradas, fiados, config, admin
 
 load_dotenv()
 
-app = FastAPI()
+ENV = os.getenv("ENV", "production")
+
+app = FastAPI(
+    title="Caja Rápida API",
+    docs_url="/docs" if ENV == "development" else None,
+    redoc_url="/redoc" if ENV == "development" else None,
+    openapi_url="/openapi.json" if ENV == "development" else None,
+)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
