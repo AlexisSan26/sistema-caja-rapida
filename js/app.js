@@ -12,6 +12,7 @@ let productoEnEdicion = null;
 let clienteFiadoActual = null;
 let metodoAbonoActual = "efectivo";
 let carritoItems = [];
+let enviandoVenta = false; // evita doble envío si se presiona "Cobrar" varias veces
 let loteResurtido = [];
 let timeoutError = null;
 let nombreTienda = "";

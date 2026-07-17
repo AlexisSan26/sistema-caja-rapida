@@ -102,6 +102,8 @@ async function registrar() {
         if (tipo === "FIADO") {
             const idCliente = document.getElementById("select-cliente").value;
             if (!idCliente) { alert("Selecciona un cliente para el fiado."); return; }
+            if (enviandoVenta) return;
+            enviandoVenta = true;
             try {
                 const resCuenta = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
                 const dataCuenta = await resCuenta.json();
@@ -120,7 +122,10 @@ async function registrar() {
                 }
                 alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
             } catch (e) { mostrarError("Error al registrar el fiado."); return; }
+            finally { enviandoVenta = false; }
         } else {
+            if (enviandoVenta) return;
+            enviandoVenta = true;
             try {
                 let metodoPago = "efectivo";
                 if (document.getElementById("btn-tarjeta").classList.contains("btn-success")) metodoPago = "tarjeta";
@@ -146,6 +151,7 @@ async function registrar() {
                 const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
                 imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
             } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
+            finally { enviandoVenta = false; }
         }
         carritoItems = [];
         renderCarrito();
@@ -165,6 +171,8 @@ async function registrar() {
     if (tipo === "RETIRO" && !nombreProducto) { alert("Favor de poner el concepto o motivo del retiro."); return; }
     if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
     cantidadVal = 1;
+    if (enviandoVenta) return;
+    enviandoVenta = true;
     try {
         const res = await fetch(`${API_URL}/registrar_movimiento`, {
             method: "POST",
@@ -179,6 +187,7 @@ async function registrar() {
             actualizarLista();
         } else { mostrarError("El servidor rechazó el registro."); }
     } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); }
+    finally { enviandoVenta = false; }
 }
 
 async function borrarMovimiento(idMovimiento) {
@@ -368,12 +377,12 @@ function renderCarrito() {
     }).join("");
     totalEl.textContent = `$${total.toFixed(2)}`;
     const contadorEl = document.getElementById("contador-productos-carrito");
-    if (contadorEl) contadorEl.textContent = carritoItems.reduce((acc, i) => acc + i.cantidad, 0);
+    if (contadorEl) contadorEl.textContent = carritoItems.reduce((acc, i) => acc + (i.monto_cliente != null ? 1 : i.cantidad), 0);
     const barraSticky = document.getElementById("barra-total-sticky");
     const stickyArticulos = document.getElementById("sticky-articulos");
     const stickyTotal = document.getElementById("sticky-total");
     if (barraSticky && stickyArticulos && stickyTotal) {
-        const totalArticulos = carritoItems.reduce((acc, i) => acc + i.cantidad, 0);
+        const totalArticulos = carritoItems.reduce((acc, i) => acc + (i.monto_cliente != null ? 1 : i.cantidad), 0);
         stickyArticulos.textContent = `${totalArticulos} artículo${totalArticulos !== 1 ? 's' : ''}`;
         stickyTotal.textContent = `$${total.toFixed(2)}`;
         barraSticky.style.display = "flex";
