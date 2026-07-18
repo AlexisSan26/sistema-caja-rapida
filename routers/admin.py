@@ -228,7 +228,8 @@ def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: Tok
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="La tienda destino no existe")
         cursor.execute(
-            "UPDATE usuarios SET id_tienda = %s, rol = %s WHERE id_usuario = %s AND activo = 1",
+            "UPDATE usuarios SET id_tienda = %s, rol = %s, token_version = token_version + 1 "
+            "WHERE id_usuario = %s AND activo = 1",
             (datos.id_tienda, datos.rol, id_usuario)
         )
         conexion.commit()

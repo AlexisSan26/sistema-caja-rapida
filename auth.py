@@ -31,12 +31,16 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         id_tienda: int = payload.get("id_tienda")
         id_usuario: int = payload.get("id_usuario")
-        if id_tienda is None or id_usuario is None:
+        token_version: int = payload.get("token_version")
+        if id_tienda is None or id_usuario is None or token_version is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    cache_key = f"{id_tienda}:{id_usuario}"
+    # ← La versión va DENTRO de la clave de caché: un token viejo (con
+    # token_version vieja) nunca puede reusar la entrada de caché de un
+    # token nuevo, sin importar timing ni cuántos procesos/workers corran.
+    cache_key = f"{id_tienda}:{id_usuario}:{token_version}"
     with _cache_lock:
         if cache_key in _auth_cache:
             return _auth_cache[cache_key]
@@ -46,13 +50,14 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
-            SELECT t.activa, u.id_usuario, u.rol
+            SELECT t.activa, u.id_usuario, u.rol, u.token_version
             FROM tiendas t
             LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1 AND u.id_tienda = t.id_tienda
             WHERE t.id_tienda = %s
         """, (id_usuario, id_tienda))
         estado = cursor.fetchone()
-        if not estado or not estado['activa'] or not estado['id_usuario']:
+        if (not estado or not estado['activa'] or not estado['id_usuario']
+                or estado['token_version'] != token_version):
             raise credentials_exception
 
         # ← CORRECCIÓN CRÍTICA: el rol viene de la BD, no del token
@@ -85,7 +90,7 @@ def register_auth_routes(app):
         try:
             cursor = conexion.cursor(dictionary=True)
             cursor.execute("""
-                        SELECT id_usuario, id_tienda, password_hash, rol 
+                        SELECT id_usuario, id_tienda, password_hash, rol, token_version 
                         FROM usuarios 
                         WHERE username = %s AND activo = 1
                     """, (datos.username,)
@@ -103,7 +108,7 @@ def register_auth_routes(app):
             # ────────────────────────────────────────────────────────────
             encoded_jwt = jwt.encode(
                 {"id_tienda": user['id_tienda'], "id_usuario": user['id_usuario'],
-                 "rol": user.get('rol', 'cajero'), "exp": expire},
+                 "rol": user.get('rol', 'cajero'), "token_version": user['token_version'], "exp": expire},
                 SECRET_KEY, algorithm=ALGORITHM
             )
             return {"access_token": encoded_jwt, "token_type": "bearer", "rol": user.get('rol', 'cajero')}
