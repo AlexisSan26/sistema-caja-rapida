@@ -227,6 +227,11 @@ def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: Tok
         cursor.execute("SELECT id_tienda FROM tiendas WHERE id_tienda = %s", (datos.id_tienda,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="La tienda destino no existe")
+
+        cursor.execute("SELECT id_tienda FROM usuarios WHERE id_usuario = %s AND activo = 1", (id_usuario,))
+        fila_actual = cursor.fetchone()
+        id_tienda_actual = fila_actual["id_tienda"] if fila_actual else None
+
         cursor.execute(
             "UPDATE usuarios SET id_tienda = %s, rol = %s, token_version = token_version + 1 "
             "WHERE id_usuario = %s AND activo = 1",
@@ -235,6 +240,10 @@ def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: Tok
         conexion.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        if id_tienda_actual is not None:
+            _invalidar_cache_tienda(id_tienda_actual)
+
         return {"mensaje": "Usuario actualizado correctamente"}
     finally:
         if cursor:
