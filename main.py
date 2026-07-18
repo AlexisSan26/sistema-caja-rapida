@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -13,6 +14,11 @@ from routers import turnos, ventas, inventario, entradas, fiados, config, admin
 load_dotenv()
 
 ENV = os.getenv("ENV", "production")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 app = FastAPI(
     title="Caja Rápida API",

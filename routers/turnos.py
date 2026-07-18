@@ -1,9 +1,11 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData
 from helpers import _calcular_resumen
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -81,7 +83,8 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
         raise
     except Exception as e:
         conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al hacer corte: {str(e)}")
+        logger.exception("Error al hacer corte")
+        raise HTTPException(status_code=500, detail="Error al hacer corte")
     finally:
         if cursor is not None:  # ← proteger el close
             cursor.close()

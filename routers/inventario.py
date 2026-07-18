@@ -1,9 +1,11 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, ProductoNuevo, ActualizacionProducto, MermaProducto
 from helpers import _log
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -317,7 +319,8 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar merma: {str(e)}")
+        logger.exception("Error al registrar merma")
+        raise HTTPException(status_code=500, detail="Error al registrar merma")
     finally:
         if cursor is not None:
             cursor.close()

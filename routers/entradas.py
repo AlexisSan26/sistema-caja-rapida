@@ -1,8 +1,10 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, EntradaMercancia, EntradaLote, ResurtidoPorCodigo
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -32,7 +34,8 @@ def entrada_mercancia(e: EntradaMercancia, user: TokenData = Depends(get_current
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar entrada: {str(e)}")
+        logger.exception("Error al registrar entrada")
+        raise HTTPException(status_code=500, detail="Error al registrar entrada")
     finally:
         if cursor:
             cursor.close()
@@ -74,7 +77,8 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar lote: {str(e)}")
+        logger.exception("Error al registrar lote")
+        raise HTTPException(status_code=500, detail="Error al registrar lote")
     finally:
         if cursor:
             cursor.close()

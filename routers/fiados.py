@@ -1,8 +1,10 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -59,7 +61,8 @@ def crear_cliente(c: ClienteNuevo, user: TokenData = Depends(get_current_user)):
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al crear cliente: {str(e)}")
+        logger.exception("Error al crear cliente")
+        raise HTTPException(status_code=500, detail="Error al crear cliente")
     finally:
         if cursor:
             cursor.close()
@@ -201,7 +204,8 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar fiado: {str(e)}")
+        logger.exception("Error al registrar fiado")
+        raise HTTPException(status_code=500, detail="Error al registrar fiado")
     finally:
         if cursor is not None:
             cursor.close()
@@ -259,7 +263,8 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar fiado: {str(e)}")
+        logger.exception("Error al registrar fiado")
+        raise HTTPException(status_code=500, detail="Error al registrar fiado")
     finally:
         if cursor is not None:
             cursor.close()
@@ -340,7 +345,8 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar abono: {str(e)}")
+        logger.exception("Error al registrar abono")
+        raise HTTPException(status_code=500, detail="Error al registrar abono")
     finally:
         if cursor is not None:
             cursor.close()

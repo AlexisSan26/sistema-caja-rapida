@@ -1,10 +1,12 @@
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, Movimiento, ActualizacionPrecio, VentaLote
 from helpers import _log
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -58,7 +60,8 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar movimiento: {str(e)}")
+        logger.exception("Error al registrar movimiento")
+        raise HTTPException(status_code=500, detail="Error al registrar movimiento")
     finally:
         if cursor is not None:
             cursor.close()
@@ -106,7 +109,8 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al cancelar movimiento: {str(e)}")
+        logger.exception("Error al cancelar movimiento")
+        raise HTTPException(status_code=500, detail="Error al cancelar movimiento")
     finally:
         if cursor is not None:
             cursor.close()
@@ -155,7 +159,8 @@ def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al cancelar el ticket: {str(e)}")
+        logger.exception("Error al cancelar el ticket")
+        raise HTTPException(status_code=500, detail="Error al cancelar el ticket")
     finally:
         if cursor is not None:
             cursor.close()
@@ -257,7 +262,8 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
     except Exception as e:
         if conexion:
             conexion.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al registrar venta: {str(e)}")
+        logger.exception("Error al registrar venta")
+        raise HTTPException(status_code=500, detail="Error al registrar venta")
     finally:
         if cursor:
             cursor.close()
