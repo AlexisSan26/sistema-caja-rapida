@@ -110,6 +110,7 @@ async function guardarConfiguracionTicket() {
             body: JSON.stringify({ reglas: reglasFiltradas })
         });
         const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al guardar configuración.")); return; }
         alert("✅ " + data.mensaje);
         reglasConfig = reglasFiltradas;
         renderReglasConfig();

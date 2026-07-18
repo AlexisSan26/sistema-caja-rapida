@@ -145,6 +145,7 @@ async function eliminarCliente(idCliente, nombre) {
     try {
         const res = await fetch(`${API_URL}/clientes/${idCliente}`, { method: "DELETE" });
         const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al eliminar cliente.")); return; }
         if (data.error) { alert("❌ " + data.error); return; }
         cargarClientes();
     } catch (e) { mostrarError("Error al eliminar cliente."); }
@@ -170,6 +171,7 @@ async function guardarNuevoCliente() {
             body: JSON.stringify({ nombre, telefono: document.getElementById("nuevo-cliente-tel").value.trim() || null })
         });
         const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al guardar el cliente.")); return; }
         alert("✅ " + data.mensaje);
         cerrarModalNuevoCliente();
         cargarClientes();

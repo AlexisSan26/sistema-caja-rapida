@@ -80,6 +80,7 @@ async function actualizarPrecioMaestro() {
             body: JSON.stringify({ nombre_producto: nombreProducto, nuevo_precio: nuevoPrecio })
         });
         const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al actualizar el precio.")); return; }
         alert(data.mensaje);
     } catch (e) { mostrarError("Error al actualizar el precio."); }
 }
@@ -88,6 +89,7 @@ async function abrirTurno() {
     try {
         const res = await fetch(`${API_URL}/abrir_turno`, { method: "POST" });
         const datos = await res.json();
+        if (!res.ok) { mostrarError(datos.detail || "Error al abrir turno."); return; }
         idTurnoActual = datos.id_turno;
         configurarInterfazAbierta();
     } catch (e) { mostrarError("Error al conectar con el servidor."); }
@@ -474,7 +476,7 @@ async function manejarInputProducto() {
                             const precio = parseFloat(precioStr);
                             if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                             try {
-                                await fetch(`${API_URL}/registrar_producto`, {
+                                const res = await fetch(`${API_URL}/registrar_producto`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -486,6 +488,7 @@ async function manejarInputProducto() {
                                         unidad_medida: sug.unidad_medida
                                     })
                                 });
+                                if (!res.ok) { mostrarError("No se pudo registrar el producto del catálogo."); return; }
                                 try { await cargarProductosEnMemoria(); } catch(e) {}
                                 const tipoUnidadSug = clasificarUnidad(sug.unidad_medida);
                                 if (tipoUnidadSug === 'pieza') {
@@ -512,7 +515,7 @@ async function manejarInputProducto() {
                             const precio = parseFloat(precioStr);
                             if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                             try {
-                                await fetch(`${API_URL}/registrar_producto`, {
+                                const res = await fetch(`${API_URL}/registrar_producto`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -524,6 +527,7 @@ async function manejarInputProducto() {
                                         unidad_medida: "pieza"
                                     })
                                 });
+                                if (!res.ok) { mostrarError("No se pudo registrar el producto."); return; }
                                 try { await cargarProductosEnMemoria(); } catch(e) {}
                                 agregarProductoAlCarrito(nombre.trim(), precio);
                                 document.getElementById("producto").value = "";
@@ -622,7 +626,7 @@ function manejarEnterProducto(event) {
                         const precio = parseFloat(precioStr);
                         if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                         try {
-                            await fetch(`${API_URL}/registrar_producto`, {
+                            const res = await fetch(`${API_URL}/registrar_producto`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
@@ -634,6 +638,7 @@ function manejarEnterProducto(event) {
                                     unidad_medida: sug.unidad_medida
                                 })
                             });
+                            if (!res.ok) { mostrarError("No se pudo registrar el producto del catálogo."); return; }
                             try { await cargarProductosEnMemoria(); } catch(e) {}
                             const tipoUnidadSug = clasificarUnidad(sug.unidad_medida);
                             if (tipoUnidadSug === 'pieza') {
@@ -659,7 +664,7 @@ function manejarEnterProducto(event) {
                         const precio = parseFloat(precioStr);
                         if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                         try {
-                            await fetch(`${API_URL}/registrar_producto`, {
+                            const res = await fetch(`${API_URL}/registrar_producto`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
@@ -671,6 +676,7 @@ function manejarEnterProducto(event) {
                                     unidad_medida: "pieza"
                                 })
                             });
+                            if (!res.ok) { mostrarError("No se pudo registrar el producto."); return; }
                             try { await cargarProductosEnMemoria(); } catch(e) {}
                             agregarProductoAlCarrito(nombre.trim(), precio);
                             document.getElementById("producto").value = "";

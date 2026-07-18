@@ -27,7 +27,7 @@ function abrirEscanerCaja() {
                 const precio = parseFloat(precioStr);
                 if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                 try {
-                    await fetch(`${API_URL}/registrar_producto`, {
+                    const res = await fetch(`${API_URL}/registrar_producto`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -39,6 +39,7 @@ function abrirEscanerCaja() {
                             unidad_medida: sug.unidad_medida
                         })
                     });
+                    if (!res.ok) { mostrarError("No se pudo registrar el producto del catálogo."); return; }
                     try { await cargarProductosEnMemoria(); } catch(e){}
                     const esGranel = unidadesFraccionales.includes((sug.unidad_medida || '').toLowerCase());
                     if (esGranel) {
@@ -59,7 +60,7 @@ function abrirEscanerCaja() {
                 const precio = parseFloat(precioStr);
                 if (isNaN(precio) || precio < 0) { mostrarError("Precio no válido."); return; }
                 try {
-                    await fetch(`${API_URL}/registrar_producto`, {
+                    const res = await fetch(`${API_URL}/registrar_producto`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -71,6 +72,7 @@ function abrirEscanerCaja() {
                             unidad_medida: "pieza"
                         })
                     });
+                    if (!res.ok) { mostrarError("No se pudo registrar el producto."); return; }
                     try { await cargarProductosEnMemoria(); } catch(e) {}
                     agregarProductoAlCarrito(nombre.trim(), precio);
                 } catch(e) { mostrarError("Error al registrar el producto."); }

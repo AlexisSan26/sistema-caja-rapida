@@ -283,6 +283,7 @@ async function guardarProductoNuevo() {
             })
         });
         const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al registrar el producto.")); return; }
         alert("✅ " + (data.mensaje || "Producto registrado"));
 
         document.getElementById("producto-resurtido").value = nombre;
