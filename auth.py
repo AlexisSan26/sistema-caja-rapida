@@ -50,7 +50,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
-            SELECT t.activa, u.id_usuario, u.rol, u.token_version
+            SELECT t.activa, t.estado_pago, u.id_usuario, u.rol, u.token_version
             FROM tiendas t
             LEFT JOIN usuarios u ON u.id_usuario = %s AND u.activo = 1 AND u.id_tienda = t.id_tienda
             WHERE t.id_tienda = %s
@@ -62,6 +62,14 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> TokenData:
 
         # ← CORRECCIÓN CRÍTICA: el rol viene de la BD, no del token
         rol_verificado = estado['rol']
+
+        # ← Enforcement de impago: bloquea la tienda si está ATRASADO,
+        # salvo al superadmin (para que nunca se quede fuera de su propio panel).
+        if estado['estado_pago'] == 'ATRASADO' and rol_verificado != 'superadmin':
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Suscripción vencida. Contacta al administrador para reactivar el servicio."
+            )
 
         token_data = TokenData(id_tienda=id_tienda, id_usuario=id_usuario, rol=rol_verificado)
         with _cache_lock:

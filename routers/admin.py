@@ -394,6 +394,7 @@ def admin_actualizar_suscripcion(id_tienda: int, datos: SuscripcionTienda, user:
         conexion.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Tienda no encontrada")
+        _invalidar_cache_tienda(id_tienda)
         return {"mensaje": "Suscripción actualizada correctamente"}
     finally:
         if cursor:
