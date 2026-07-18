@@ -26,3 +26,6 @@ env/
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# Archivos pesados que no deben vivir en el repo
+cajarapida.zip
