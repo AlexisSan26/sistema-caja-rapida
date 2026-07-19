@@ -510,10 +510,8 @@ async function verInventarioTienda(idTienda) {
 }
 
 // ── Utils ────────────────────────────────────────────────────
+// era la versión incompleta que la auditoría marcó como XSS (#13).
 function fmt(n) { return Number(n || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
 // Cerrar modal con clic en overlay
 document.querySelectorAll('.modal-overlay').forEach(m => {
