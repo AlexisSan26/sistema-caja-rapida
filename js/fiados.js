@@ -18,6 +18,7 @@ async function cargarClientes() {
                         <small class="text-muted">${esc(c.telefono || '')}</small>
                     </div>
                     <div class="${colorSaldo} me-2">${textoSaldo}</div>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" onclick="editarLimiteCliente(${c.id_cliente}, '${esc(c.nombre)}', ${c.limite_credito === null ? 'null' : c.limite_credito})" title="Editar límite de crédito">✏️</button>
                     <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="eliminarCliente(${c.id_cliente}, '${esc(c.nombre)}')">🗑️</button>
                 </div>
             </div>`;
@@ -155,6 +156,7 @@ function abrirModalNuevoCliente() {
     document.getElementById("modal-nuevo-cliente").style.display = "block";
     document.getElementById("nuevo-cliente-nombre").value = "";
     document.getElementById("nuevo-cliente-tel").value = "";
+    document.getElementById("nuevo-cliente-limite").value = "";
 }
 
 function cerrarModalNuevoCliente() {
@@ -165,10 +167,15 @@ async function guardarNuevoCliente() {
     const nombre = document.getElementById("nuevo-cliente-nombre").value.trim();
     if (!nombre) { alert("El nombre es obligatorio."); return; }
     try {
+        const limiteStr = document.getElementById("nuevo-cliente-limite").value.trim();
         const res = await fetch(`${API_URL}/clientes`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nombre, telefono: document.getElementById("nuevo-cliente-tel").value.trim() || null })
+            body: JSON.stringify({
+                nombre,
+                telefono: document.getElementById("nuevo-cliente-tel").value.trim() || null,
+                limite_credito: limiteStr ? parseFloat(limiteStr) : null
+            })
         });
         const data = await res.json();
         if (!res.ok) { alert("❌ " + (data.detail || "Error al guardar el cliente.")); return; }
@@ -176,4 +183,23 @@ async function guardarNuevoCliente() {
         cerrarModalNuevoCliente();
         cargarClientes();
     } catch (e) { mostrarError("Error al guardar el cliente."); }
+}
+
+async function editarLimiteCliente(idCliente, nombre, limiteActual) {
+    const actualTexto = limiteActual === null ? "sin límite" : `$${limiteActual}`;
+    const nuevo = prompt(`Límite de crédito para "${nombre}" (actual: ${actualTexto}).\nDeja vacío para quitar el límite:`);
+    if (nuevo === null) return; // canceló
+    const nuevoLimpio = nuevo.trim();
+    const limiteNuevo = nuevoLimpio === "" ? null : parseFloat(nuevoLimpio);
+    if (nuevoLimpio !== "" && (isNaN(limiteNuevo) || limiteNuevo < 0)) { alert("Ingresa un número válido."); return; }
+    try {
+        const res = await fetch(`${API_URL}/clientes/${idCliente}/limite_credito`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ limite_credito: limiteNuevo })
+        });
+        const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al actualizar el límite.")); return; }
+        cargarClientes();
+    } catch (e) { mostrarError("Error al actualizar el límite."); }
 }

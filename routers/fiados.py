@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
-from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote
+from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote, LimiteCredito
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -15,7 +15,7 @@ def listar_clientes(user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("""
-            SELECT c.id_cliente, c.nombre, c.telefono,
+            SELECT c.id_cliente, c.nombre, c.telefono, c.limite_credito,
                    COALESCE(
                      (SELECT SUM(COALESCE(df.monto_real, df.cantidad * df.precio))
                       FROM detalle_fiado df
@@ -46,8 +46,8 @@ def crear_cliente(c: ClienteNuevo, user: TokenData = Depends(get_current_user)):
     try:
         cursor = conexion.cursor()
         cursor.execute(
-            "INSERT INTO clientes (nombre, telefono, id_tienda) VALUES (%s, %s, %s)",
-            (c.nombre.strip(), c.telefono or None, user.id_tienda)
+            "INSERT INTO clientes (nombre, telefono, limite_credito, id_tienda) VALUES (%s, %s, %s, %s)",
+            (c.nombre.strip(), c.telefono or None, c.limite_credito, user.id_tienda)
         )
         id_cliente = cursor.lastrowid
         cursor.execute(
@@ -89,6 +89,33 @@ def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user
                        (id_cliente, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Cliente eliminado"}
+    finally:
+        if cursor:
+            cursor.close()
+        conexion.close()
+
+
+@router.put("/clientes/{id_cliente}/limite_credito")
+def editar_limite_credito(id_cliente: int, datos: LimiteCredito, user: TokenData = Depends(get_current_user)):
+    conexion = conectar_bd()
+    cursor = None
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "UPDATE clientes SET limite_credito = %s WHERE id_cliente = %s AND id_tienda = %s",
+            (datos.limite_credito, id_cliente, user.id_tienda)
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        conexion.commit()
+        return {"mensaje": "Límite de crédito actualizado"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        logger.exception("Error al actualizar límite de crédito")
+        raise HTTPException(status_code=500, detail="Error al actualizar límite de crédito")
     finally:
         if cursor:
             cursor.close()
@@ -169,13 +196,34 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
         conexion.start_transaction()
 
         cursor.execute("""
-            SELECT cf.id_cuenta FROM cuentas_fiado cf
+            SELECT cf.id_cuenta, c.limite_credito FROM cuentas_fiado cf
             JOIN clientes c ON c.id_cliente = cf.id_cliente
             WHERE cf.id_cuenta = %s AND c.id_tienda = %s AND cf.estado = 'ABIERTA'
             FOR UPDATE
         """, (item.id_cuenta, user.id_tienda))
-        if not cursor.fetchone():
+        fila_cuenta = cursor.fetchone()
+        if not fila_cuenta:
             raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
+
+        limite_credito = fila_cuenta[1]
+        if limite_credito is not None:
+            monto_nuevo = item.monto_real if item.monto_real is not None else item.cantidad * item.precio
+            cursor.execute(
+                "SELECT COALESCE(SUM(COALESCE(monto_real, cantidad * precio)), 0) FROM detalle_fiado WHERE id_cuenta = %s AND id_tienda = %s",
+                (item.id_cuenta, user.id_tienda)
+            )
+            total_fiado = float(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT COALESCE(SUM(monto), 0) FROM abonos WHERE id_cuenta = %s AND id_tienda = %s",
+                (item.id_cuenta, user.id_tienda)
+            )
+            total_abonos = float(cursor.fetchone()[0])
+            saldo_actual = total_fiado - total_abonos
+            if saldo_actual + monto_nuevo > float(limite_credito):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Límite de crédito excedido. Saldo actual: ${saldo_actual:.2f}, límite: ${float(limite_credito):.2f}."
+                )
 
         cursor.execute("""
             INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, monto_real, id_tienda)
@@ -226,13 +274,37 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
         conexion.start_transaction()
 
         cursor.execute("""
-            SELECT cf.id_cuenta FROM cuentas_fiado cf
+            SELECT cf.id_cuenta, c.limite_credito FROM cuentas_fiado cf
             JOIN clientes c ON c.id_cliente = cf.id_cliente
             WHERE cf.id_cuenta = %s AND c.id_tienda = %s AND cf.estado = 'ABIERTA'
             FOR UPDATE
         """, (fiado.id_cuenta, user.id_tienda))
-        if not cursor.fetchone():
+        fila_cuenta = cursor.fetchone()
+        if not fila_cuenta:
             raise HTTPException(status_code=403, detail="Cuenta de fiado no válida para esta tienda")
+
+        limite_credito = fila_cuenta[1]
+        if limite_credito is not None:
+            monto_nuevo_lote = sum(
+                (i.monto_real if i.monto_real is not None else i.cantidad * i.precio)
+                for i in fiado.items
+            )
+            cursor.execute(
+                "SELECT COALESCE(SUM(COALESCE(monto_real, cantidad * precio)), 0) FROM detalle_fiado WHERE id_cuenta = %s AND id_tienda = %s",
+                (fiado.id_cuenta, user.id_tienda)
+            )
+            total_fiado = float(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT COALESCE(SUM(monto), 0) FROM abonos WHERE id_cuenta = %s AND id_tienda = %s",
+                (fiado.id_cuenta, user.id_tienda)
+            )
+            total_abonos = float(cursor.fetchone()[0])
+            saldo_actual = total_fiado - total_abonos
+            if saldo_actual + monto_nuevo_lote > float(limite_credito):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Límite de crédito excedido. Saldo actual: ${saldo_actual:.2f}, límite: ${float(limite_credito):.2f}."
+                )
 
         for item in fiado.items:
             nombre_limpio = item.producto.strip()

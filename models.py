@@ -88,6 +88,11 @@ class EntradaLote(BaseModel):
 class ClienteNuevo(BaseModel):
     nombre: str
     telefono: str | None = None
+    limite_credito: float | None = None
+
+
+class LimiteCredito(BaseModel):
+    limite_credito: float | None = None
 
 
 class ItemFiado(BaseModel):
