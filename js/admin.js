@@ -1,5 +1,7 @@
 // ── Config ───────────────────────────────────────────────────
-const API = 'https://sistema-caja-rapida.onrender.com';
+const API = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+    ? "http://127.0.0.1:8000"
+    : "https://sistema-caja-rapida.onrender.com";
 
 // ── Estado ───────────────────────────────────────────────────
 let TOKEN = localStorage.getItem('caja_rapida_admin_token') || null;
