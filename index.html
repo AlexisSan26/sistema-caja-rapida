@@ -38,6 +38,7 @@
         <button class="menu-item" id="menu-fiados" onclick="irA('fiados')">💳 Fiados</button>
         <button class="menu-item" id="menu-entradas" onclick="irA('entradas')">📥 Entradas</button>
         <button class="menu-item" id="menu-historial" onclick="irA('historial')">📅 Historial</button>
+        <button class="menu-item" id="menu-reportes" onclick="irA('reportes')">📊 Reportes</button>
         <button class="menu-item" id="menu-config" onclick="irA('config')">⚙️ Configuración</button>
         <button class="menu-item text-danger mt-auto" onclick="logoutSaaS()">🚪 Cerrar Sesión</button>
     </div>
@@ -224,6 +225,21 @@
     </div>
     <div id="lista-historial" class="list-group mb-3"></div>
     <div id="detalle-historial"></div>
+</div>
+</div>
+
+<div id="pantalla-reportes" class="pantalla">
+<div class="container mt-4 pb-5" style="max-width:600px;">
+    <h4 class="text-center mb-3" style="margin-top:2.5rem;">📊 Reportes</h4>
+    <div class="mb-3">
+        <label class="fw-bold text-secondary" style="font-size:.85rem;">Top 10 productos más vendidos</label>
+        <select id="select-dias-reporte" class="form-select form-select-lg" onchange="cargarReporteProductos()">
+            <option value="7" selected>Últimos 7 días</option>
+            <option value="30">Últimos 30 días</option>
+            <option value="9999">Todo el histórico</option>
+        </select>
+    </div>
+    <div id="lista-reporte-productos" class="list-group mb-3"></div>
 </div>
 </div>
 
@@ -548,6 +564,7 @@
 <script src="js/entradas.js"></script>
 <script src="js/fiados.js"></script>
 <script src="js/historial.js"></script>
+<script src="js/reportes.js"></script>
 <script src="js/config_ticket.js"></script>
 <script src="js/scanner.js"></script>
 <script src="js/app.js"></script>

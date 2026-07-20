@@ -10,7 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from auth import register_auth_routes, register_yo_route, limiter
-from routers import turnos, ventas, inventario, entradas, fiados, config, admin
+from routers import turnos, ventas, inventario, entradas, fiados, config, admin, reportes
 
 load_dotenv()
 
@@ -55,6 +55,7 @@ app.include_router(entradas.router)
 app.include_router(fiados.router)
 app.include_router(config.router)
 app.include_router(admin.router)
+app.include_router(reportes.router)
 
 
 # ─── Endpoints base ───────────────────────────────────────────────────────────
