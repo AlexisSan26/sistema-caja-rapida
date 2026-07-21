@@ -1,10 +1,7 @@
 \# Caja Rápida
 
 
-
 Sistema de punto de venta (POS) multi-tenant en modalidad SaaS para tiendas de retail pequeño en México. Suscripción mensual, catálogo de productos, ventas, fiados, turnos de caja, corte de caja y panel de superadministración para dar de alta y gestionar tiendas clientes.
-
-
 
 \## Stack
 
