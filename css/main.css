@@ -4,7 +4,8 @@
     display:none; position:fixed; bottom:5rem; left:50%;
     transform:translateX(-50%); background:#dc3545; color:white;
     padding:.6rem 1.2rem; border-radius:8px; font-size:.95rem;
-    z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.25); white-space:nowrap;
+    z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,.25);
+    max-width:90vw; white-space:pre-wrap; word-break:break-word;
 }
 #menu-lateral { display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:8000; }
 #menu-fondo { position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.45); }
