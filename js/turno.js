@@ -27,7 +27,7 @@ function configurarInterfazAbierta() {
     document.getElementById("panel-corte").style.display = "block";
     document.getElementById("btn-abrir").style.display = "none";
     document.getElementById("resultado-corte").innerHTML = "";
-    document.getElementById("tipo").value = "VENTA";
+    seleccionarTipo("VENTA");
     document.getElementById("div-btn-agregar").style.display = "block";
     carritoItems = [];
     try {
