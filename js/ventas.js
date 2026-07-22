@@ -1,3 +1,14 @@
+function seleccionarTipo(tipo) {
+    document.getElementById("tipo").value = tipo;
+    ["VENTA","FIADO","RETIRO"].forEach(t => {
+        const btn = document.getElementById("btn-tipo-" + t);
+        btn.className = t === tipo
+            ? "btn btn-success flex-fill fw-bold"
+            : "btn btn-outline-success flex-fill fw-bold";
+    });
+    ajustarCampos();
+}
+
 function ajustarCampos() {
     const tipo = document.getElementById("tipo").value;
     const divProducto = document.getElementById("div-producto");
@@ -91,8 +102,30 @@ async function abrirTurno() {
         const datos = await res.json();
         if (!res.ok) { mostrarError(datos.detail || "Error al abrir turno."); return; }
         idTurnoActual = datos.id_turno;
-        configurarInterfazAbierta();
+        document.getElementById("fondo-monto").value = "";
+        document.getElementById("modal-fondo").style.display = "block";
     } catch (e) { mostrarError("Error al conectar con el servidor."); }
+}
+
+async function confirmarFondoInicial() {
+    const monto = parseFloat(document.getElementById("fondo-monto").value) || 0;
+    if (monto > 0) {
+        try {
+            const res = await fetch(`${API_URL}/registrar_movimiento`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id_turno: idTurnoActual, tipo_movimiento: "FONDO_CAJA", producto: "Fondo inicial", cantidad: 1, precio_unitario: monto })
+            });
+            if (!res.ok) { mostrarError("No se pudo guardar el fondo inicial, puedes agregarlo luego como retiro/ajuste."); }
+        } catch (e) { mostrarError("No se pudo guardar el fondo inicial, puedes agregarlo luego como retiro/ajuste."); }
+    }
+    document.getElementById("modal-fondo").style.display = "none";
+    configurarInterfazAbierta();
+}
+
+function omitirFondoInicial() {
+    document.getElementById("modal-fondo").style.display = "none";
+    configurarInterfazAbierta();
 }
 
 async function registrar() {
