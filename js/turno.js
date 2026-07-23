@@ -27,8 +27,6 @@ function configurarInterfazAbierta() {
     document.getElementById("panel-corte").style.display = "block";
     document.getElementById("btn-abrir").style.display = "none";
     document.getElementById("resultado-corte").innerHTML = "";
-    seleccionarTipo("VENTA");
-    document.getElementById("div-btn-agregar").style.display = "block";
     carritoItems = [];
     try {
         const borrador = localStorage.getItem('carrito_borrador');
@@ -41,6 +39,8 @@ function configurarInterfazAbierta() {
             }
         }
     } catch(e) { localStorage.removeItem('carrito_borrador'); }
+    seleccionarTipo("VENTA");
+    document.getElementById("div-btn-agregar").style.display = "block";
     renderCarrito();
     actualizarLista();
     cargarProductosEnMemoria();

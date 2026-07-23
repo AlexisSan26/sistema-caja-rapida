@@ -23,7 +23,9 @@ function ajustarCampos() {
     document.getElementById("precio").value = "";
     divCliente.style.display = "none";
 
-    carritoItems = [];
+    if (!["VENTA", "FIADO"].includes(tipo)) {
+        carritoItems = [];
+    }
     renderCarrito();
 
     if (tipo === "VENTA") {
