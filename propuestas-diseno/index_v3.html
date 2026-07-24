@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Caja Rápida — Prototipo</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          pine:   { 50:'#EEF4F1', 100:'#D8E6E0', 300:'#7FA79A', 500:'#2F6F63', 600:'#245A50', 700:'#1B4B43', 800:'#123832', 900:'#0C2622' },
+          paper:  { DEFAULT:'#F7F7F4', card:'#FFFFFF' },
+          ink:    { DEFAULT:'#1C201F', soft:'#4B534F', mute:'#6E7671' },
+          leaf:   { 100:'#DFF0E4', 500:'#3D8361', 600:'#2F6B4E' },
+          brick:  { 100:'#F6E4DC', 500:'#B5482A', 600:'#973B21' },
+          gold:   { 100:'#F7ECD3', 500:'#B8892B' },
+        },
+        fontFamily: {
+          display: ['Fraunces', 'serif'],
+          sans: ['Inter', 'sans-serif'],
+          mono: ['IBM Plex Mono', 'monospace'],
+        },
+        boxShadow: {
+          card: '0 1px 2px rgba(18,56,50,0.06), 0 4px 14px rgba(18,56,50,0.06)',
+        }
+      }
+    }
+  }
+</script>
+
+<style>
+  /* Borde tipo "papel picado" para el ticket — el elemento signature */
+  .ticket-edge {
+    position: relative;
+  }
+  .ticket-edge::before {
+    content: "";
+    position: absolute;
+    top: -1px; left: 0; right: 0; height: 10px;
+    background-image: radial-gradient(circle at 8px 0, transparent 7px, #F7F7F4 7.5px);
+    background-size: 16px 10px;
+    background-repeat: repeat-x;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #D8E6E0; border-radius: 8px; }
+
+  [x-cloak] { display: none !important; }
+
+  /* Foco visible accesible en todos los controles */
+  button:focus-visible, a:focus-visible, input:focus-visible {
+    outline: 3px solid #B8892B;
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+
+<body class="bg-paper text-ink font-sans antialiased" x-data="cajaRapida()">
+
+<div class="min-h-screen flex flex-col md:flex-row">
+
+  <!-- ============ SIDEBAR (desktop) ============ -->
+  <aside class="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-pine-700 text-white">
+    <div class="h-20 flex items-center gap-3 px-6 border-b border-white/10">
+      <div class="w-10 h-10 rounded-lg bg-gold-500/90 flex items-center justify-center font-display font-bold text-pine-900 text-lg">CR</div>
+      <div>
+        <p class="font-display font-semibold text-lg leading-tight">Caja Rápida</p>
+        <p class="text-pine-100/70 text-xs">Abarrotes San Miguel</p>
+      </div>
+    </div>
+
+    <nav class="flex-1 px-3 py-5 space-y-1">
+      <template x-for="item in navItems" :key="item.id">
+        <button
+          @click="activeView = item.id"
+          class="w-full flex items-center gap-3 rounded-xl px-4 py-3.5 min-h-[48px] text-[15px] font-medium transition-colors"
+          :class="activeView === item.id ? 'bg-white text-pine-800 shadow-card' : 'text-pine-100 hover:bg-white/10'"
+        >
+          <span class="w-6 h-6 shrink-0" x-html="item.icon"></span>
+          <span x-text="item.label"></span>
+        </button>
+      </template>
+    </nav>
+
+    <div class="px-3 pb-5">
+      <button class="w-full flex items-center gap-3 rounded-xl px-4 py-3.5 min-h-[48px] text-[15px] font-medium text-pine-100 hover:bg-white/10">
+        <span class="w-6 h-6 shrink-0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.2"/><path d="M4.5 20c1.5-3.6 4.6-5.4 7.5-5.4s6 1.8 7.5 5.4"/></svg>
+        </span>
+        <span>Rosa (encargada)</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============ CONTENEDOR PRINCIPAL ============ -->
+  <div class="flex-1 md:ml-64 flex flex-col min-h-screen">
+
+    <!-- Top bar -->
+    <header class="sticky top-0 z-20 bg-paper/95 backdrop-blur border-b border-pine-100 px-4 md:px-8 h-16 md:h-20 flex items-center justify-between">
+      <div class="flex items-center gap-3 md:hidden">
+        <div class="w-9 h-9 rounded-lg bg-pine-700 flex items-center justify-center font-display font-bold text-white text-sm">CR</div>
+        <p class="font-display font-semibold text-ink" x-text="currentLabel()"></p>
+      </div>
+      <p class="hidden md:block font-display text-2xl font-semibold text-pine-800" x-text="currentLabel()"></p>
+
+      <div class="flex items-center gap-3">
+        <p class="hidden sm:block text-sm text-ink-mute font-medium" x-text="todayLabel"></p>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-leaf-100 text-leaf-600 text-xs font-semibold px-3 py-1.5">
+          <span class="w-2 h-2 rounded-full bg-leaf-500"></span> En línea
+        </span>
+      </div>
+    </header>
+
+    <!-- ============ VISTA: CAJA ============ -->
+    <main class="flex-1 px-4 md:px-8 py-5 pb-28 md:pb-8" x-show="activeView==='caja'" x-transition.opacity>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        <!-- Buscador + grilla de productos -->
+        <section class="lg:col-span-2 space-y-4">
+          <div class="relative">
+            <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-ink-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input x-model="search" type="text" placeholder="Buscar producto o escanear código..."
+              class="w-full h-14 rounded-2xl border border-pine-100 bg-white pl-12 pr-4 text-[16px] shadow-card placeholder:text-ink-mute focus:border-pine-500 focus:ring-0">
+          </div>
+
+          <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            <template x-for="cat in categories" :key="cat">
+              <button @click="activeCat = cat"
+                class="shrink-0 min-h-[44px] px-4 rounded-full text-sm font-semibold border transition-colors"
+                :class="activeCat===cat ? 'bg-pine-700 text-white border-pine-700' : 'bg-white text-ink-soft border-pine-100'"
+                x-text="cat"></button>
+            </template>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <template x-for="p in filteredProducts()" :key="p.id">
+              <button @click="addToCart(p)"
+                class="group text-left bg-white rounded-2xl border border-pine-100 shadow-card p-4 min-h-[112px] flex flex-col justify-between active:scale-[0.97] transition-transform hover:border-pine-300">
+                <div>
+                  <p class="font-semibold text-[15px] leading-snug" x-text="p.name"></p>
+                  <p class="text-xs text-ink-mute mt-0.5" x-text="p.unit"></p>
+                </div>
+                <div class="flex items-end justify-between mt-3">
+                  <p class="font-mono font-semibold text-pine-700 text-lg" x-text="'$'+p.price.toFixed(2)"></p>
+                  <span class="text-[11px] font-semibold px-2 py-1 rounded-full"
+                    :class="p.stock <= p.min ? 'bg-brick-100 text-brick-600' : 'bg-leaf-100 text-leaf-600'"
+                    x-text="p.stock + ' und'"></span>
+                </div>
+              </button>
+            </template>
+          </div>
+        </section>
+
+        <!-- Ticket / carrito -->
+        <section class="bg-pine-800 rounded-3xl text-white flex flex-col overflow-hidden shadow-card lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)]">
+          <div class="px-5 pt-5 pb-3 border-b border-white/10 flex items-center justify-between">
+            <p class="font-display font-semibold text-lg">Venta actual</p>
+            <button @click="cart=[]" class="text-pine-100/70 text-xs font-medium hover:text-white min-h-[44px] px-2" x-show="cart.length">Vaciar</button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto px-5 py-3 space-y-2" x-show="cart.length">
+            <template x-for="item in cart" :key="item.id">
+              <div class="flex items-center gap-3 py-2 border-b border-white/5">
+                <div class="flex-1 min-w-0">
+                  <p class="text-[15px] font-medium truncate" x-text="item.name"></p>
+                  <p class="font-mono text-sm text-pine-100/70" x-text="'$'+item.price.toFixed(2)+' c/u'"></p>
+                </div>
+                <div class="flex items-center gap-2 bg-white/10 rounded-full">
+                  <button @click="changeQty(item, -1)" class="w-9 h-9 flex items-center justify-center rounded-full text-lg font-bold hover:bg-white/10">–</button>
+                  <span class="w-5 text-center font-mono text-sm" x-text="item.qty"></span>
+                  <button @click="changeQty(item, 1)" class="w-9 h-9 flex items-center justify-center rounded-full text-lg font-bold hover:bg-white/10">+</button>
+                </div>
+                <p class="font-mono font-semibold w-16 text-right" x-text="'$'+(item.price*item.qty).toFixed(2)"></p>
+              </div>
+            </template>
+          </div>
+
+          <div class="flex-1 flex items-center justify-center px-5 text-center" x-show="!cart.length">
+            <div>
+              <p class="text-pine-100/60 text-sm">Toca un producto para agregarlo a la venta</p>
+            </div>
+          </div>
+
+          <div class="ticket-edge bg-pine-900 px-5 pt-5 pb-6 space-y-3">
+            <div class="flex justify-between text-sm text-pine-100/70">
+              <span>Artículos</span>
+              <span class="font-mono" x-text="cartCount()"></span>
+            </div>
+            <div class="flex justify-between items-baseline">
+              <span class="font-display text-lg">Total</span>
+              <span class="font-mono text-3xl font-semibold" x-text="'$'+cartTotal().toFixed(2)"></span>
+            </div>
+            <button @click="cobrar()" :disabled="!cart.length"
+              class="w-full min-h-[56px] rounded-2xl bg-gold-500 text-pine-900 font-bold text-lg shadow-card disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-transform">
+              Cobrar
+            </button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ============ VISTA: INVENTARIO ============ -->
+    <main class="flex-1 px-4 md:px-8 py-5 pb-28 md:pb-8" x-show="activeView==='inventario'" x-transition.opacity x-cloak>
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
+        <div class="relative flex-1">
+          <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-ink-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" placeholder="Buscar en inventario..." class="w-full h-14 rounded-2xl border border-pine-100 bg-white pl-12 pr-4 text-[16px] shadow-card focus:border-pine-500">
+        </div>
+        <button class="min-h-[48px] px-5 rounded-2xl bg-pine-700 text-white font-semibold shadow-card whitespace-nowrap">+ Nuevo producto</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        <template x-for="p in products" :key="'inv-'+p.id">
+          <div class="bg-white rounded-2xl border border-pine-100 shadow-card p-4 flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-pine-50 flex items-center justify-center shrink-0">
+              <svg class="w-6 h-6 text-pine-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold truncate" x-text="p.name"></p>
+              <p class="text-sm text-ink-mute" x-text="p.unit + ' · $'+p.price.toFixed(2)"></p>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="font-mono font-semibold" x-text="p.stock"></p>
+              <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                :class="p.stock <= p.min ? 'bg-brick-100 text-brick-600' : 'bg-leaf-100 text-leaf-600'"
+                x-text="p.stock <= p.min ? 'Reponer' : 'Stock OK'"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ============ VISTA: HISTORIAL ============ -->
+    <main class="flex-1 px-4 md:px-8 py-5 pb-28 md:pb-8" x-show="activeView==='historial'" x-transition.opacity x-cloak>
+      <div class="flex gap-2 overflow-x-auto pb-1 mb-4 -mx-1 px-1">
+        <template x-for="f in ['Hoy','Ayer','Esta semana','Este mes']" :key="f">
+          <button @click="historyFilter=f"
+            class="shrink-0 min-h-[44px] px-4 rounded-full text-sm font-semibold border"
+            :class="historyFilter===f ? 'bg-pine-700 text-white border-pine-700' : 'bg-white text-ink-soft border-pine-100'"
+            x-text="f"></button>
+        </template>
+      </div>
+
+      <div class="space-y-3">
+        <template x-for="sale in sales" :key="sale.id">
+          <div class="bg-white rounded-2xl border border-pine-100 shadow-card p-4 flex items-center gap-4">
+            <div class="w-11 h-11 rounded-full bg-leaf-100 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5 text-leaf-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold" x-text="'Venta #'+sale.id"></p>
+              <p class="text-sm text-ink-mute" x-text="sale.time + ' · ' + sale.items + ' artículos · ' + sale.pay"></p>
+            </div>
+            <p class="font-mono font-semibold text-lg text-pine-700" x-text="'$'+sale.total.toFixed(2)"></p>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ============ VISTA: REPORTES ============ -->
+    <main class="flex-1 px-4 md:px-8 py-5 pb-28 md:pb-8" x-show="activeView==='reportes'" x-transition.opacity x-cloak>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div class="bg-white rounded-2xl border border-pine-100 shadow-card p-5">
+          <p class="text-sm text-ink-mute font-medium">Ventas de hoy</p>
+          <p class="font-mono font-semibold text-2xl text-pine-700 mt-1">$1,284.50</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-pine-100 shadow-card p-5">
+          <p class="text-sm text-ink-mute font-medium">Ticket promedio</p>
+          <p class="font-mono font-semibold text-2xl text-pine-700 mt-1">$46.20</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-pine-100 shadow-card p-5">
+          <p class="text-sm text-ink-mute font-medium">Ventas realizadas</p>
+          <p class="font-mono font-semibold text-2xl text-pine-700 mt-1">28</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-brick-100 shadow-card p-5">
+          <p class="text-sm text-ink-mute font-medium">Productos bajos</p>
+          <p class="font-mono font-semibold text-2xl text-brick-500 mt-1" x-text="lowStockCount()"></p>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-pine-100 shadow-card p-5">
+        <p class="font-display font-semibold text-lg mb-4">Ventas por hora</p>
+        <div class="flex items-end gap-2 h-40">
+          <template x-for="h in hourly" :key="h.label">
+            <div class="flex-1 flex flex-col items-center gap-2">
+              <div class="w-full bg-pine-500 rounded-t-md" :style="'height:'+h.pct+'%'"></div>
+              <span class="text-xs text-ink-mute font-mono" x-text="h.label"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ============ NAV INFERIOR (mobile) ============ -->
+<nav class="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-pine-100 shadow-[0_-4px_16px_rgba(18,56,50,0.08)]">
+  <div class="grid grid-cols-4">
+    <template x-for="item in navItems" :key="'m-'+item.id">
+      <button @click="activeView = item.id"
+        class="flex flex-col items-center justify-center gap-1 min-h-[64px] py-2"
+        :class="activeView===item.id ? 'text-pine-700' : 'text-ink-mute'">
+        <span class="w-6 h-6" x-html="item.icon"></span>
+        <span class="text-[11px] font-semibold" x-text="item.label"></span>
+      </button>
+    </template>
+  </div>
+</nav>
+
+<!-- Toast de confirmación de cobro -->
+<div x-show="toast" x-transition x-cloak
+     class="fixed top-5 left-1/2 -translate-x-1/2 z-40 bg-pine-900 text-white px-6 py-4 rounded-2xl shadow-card flex items-center gap-3">
+  <svg class="w-6 h-6 text-leaf-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 13 4 4L19 7"/></svg>
+  <p class="font-semibold" x-text="toast"></p>
+</div>
+
+<script>
+function cajaRapida() {
+  return {
+    activeView: 'caja',
+    search: '',
+    activeCat: 'Todos',
+    historyFilter: 'Hoy',
+    toast: '',
+    todayLabel: new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }),
+
+    navItems: [
+      { id:'caja', label:'Caja', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' },
+      { id:'inventario', label:'Inventario', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7"/></svg>' },
+      { id:'historial', label:'Historial', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>' },
+      { id:'reportes', label:'Reportes', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>' },
+    ],
+
+    categories: ['Todos','Dulces','Abarrotes','Bebidas','Aseo'],
+
+    products: [
+      { id:1, name:'Coca-Cola 600ml', unit:'Botella', price:18.50, stock:34, min:10, cat:'Bebidas' },
+      { id:2, name:'Gansito', unit:'Pieza', price:15.00, stock:6, min:8, cat:'Dulces' },
+      { id:3, name:'Arroz Morelos 1kg', unit:'Bolsa', price:32.00, stock:22, min:5, cat:'Abarrotes' },
+      { id:4, name:'Sabritas Original', unit:'Pieza', price:17.00, stock:4, min:10, cat:'Dulces' },
+      { id:5, name:'Jabón Zote', unit:'Barra', price:14.50, stock:18, min:6, cat:'Aseo' },
+      { id:6, name:'Frijol negro 1kg', unit:'Bolsa', price:29.00, stock:15, min:5, cat:'Abarrotes' },
+      { id:7, name:'Agua Ciel 1L', unit:'Botella', price:12.00, stock:40, min:12, cat:'Bebidas' },
+      { id:8, name:'Paleta Payaso', unit:'Pieza', price:5.00, stock:60, min:15, cat:'Dulces' },
+      { id:9, name:'Cloro 950ml', unit:'Botella', price:19.00, stock:9, min:10, cat:'Aseo' },
+    ],
+
+    sales: [
+      { id: 1042, time:'6:42 pm', items:5, total:86.50, pay:'Efectivo' },
+      { id: 1041, time:'6:10 pm', items:2, total:31.00, pay:'Tarjeta' },
+      { id: 1040, time:'5:47 pm', items:9, total:142.90, pay:'Efectivo' },
+      { id: 1039, time:'4:58 pm', items:1, total:18.50, pay:'Efectivo' },
+    ],
+
+    hourly: [
+      {label:'9h', pct:20},{label:'11h', pct:45},{label:'13h', pct:80},
+      {label:'15h', pct:60},{label:'17h', pct:95},{label:'19h', pct:70},
+    ],
+
+    cart: [],
+
+    currentLabel() {
+      const found = this.navItems.find(i => i.id === this.activeView);
+      return found ? found.label : '';
+    },
+
+    filteredProducts() {
+      return this.products.filter(p => {
+        const matchesCat = this.activeCat === 'Todos' || p.cat === this.activeCat;
+        const matchesSearch = p.name.toLowerCase().includes(this.search.toLowerCase());
+        return matchesCat && matchesSearch;
+      });
+    },
+
+    addToCart(p) {
+      const existing = this.cart.find(i => i.id === p.id);
+      if (existing) { existing.qty++; }
+      else { this.cart.push({ id:p.id, name:p.name, price:p.price, qty:1 }); }
+    },
+
+    changeQty(item, delta) {
+      item.qty += delta;
+      if (item.qty <= 0) {
+        this.cart = this.cart.filter(i => i.id !== item.id);
+      }
+    },
+
+    cartCount() {
+      return this.cart.reduce((sum, i) => sum + i.qty, 0);
+    },
+
+    cartTotal() {
+      return this.cart.reduce((sum, i) => sum + i.qty * i.price, 0);
+    },
+
+    lowStockCount() {
+      return this.products.filter(p => p.stock <= p.min).length;
+    },
+
+    cobrar() {
+      const total = this.cartTotal().toFixed(2);
+      this.toast = `Venta registrada · $${total}`;
+      this.cart = [];
+      setTimeout(() => { this.toast = ''; }, 2200);
+    }
+  }
+}
+</script>
+</body>
+</html>
