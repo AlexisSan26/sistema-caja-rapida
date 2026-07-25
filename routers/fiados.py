@@ -1,4 +1,5 @@
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
@@ -379,10 +380,11 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
             "INSERT INTO abonos (id_cuenta, monto, nota, metodo_pago, id_tienda) VALUES (%s, %s, %s, %s, %s)",
             (abono.id_cuenta, abono.monto, abono.nota or None, abono.metodo_pago, user.id_tienda)
         )
+        id_lote = uuid.uuid4().hex[:12]
         cursor.execute("""
-            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, metodo_pago, id_tienda)
-            VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s, %s)
-        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto, abono.metodo_pago, user.id_tienda))
+            INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, metodo_pago, id_tienda, id_lote)
+            VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s, %s, %s)
+        """, (abono.id_turno, f"Abono fiado — {nombre_cliente}", abono.monto, abono.metodo_pago, user.id_tienda, id_lote))
 
         # Estos SELECTs ahora son seguros: nadie más puede modificar esta
         # cuenta hasta que el commit de abajo libere el FOR UPDATE lock.
@@ -408,7 +410,8 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         return {
             "mensaje": "Abono registrado",
             "saldo_restante": max(0.0, saldo_nuevo),
-            "saldo_favor": abs(min(0.0, saldo_nuevo))
+            "saldo_favor": abs(min(0.0, saldo_nuevo)),
+            "id_lote": id_lote
         }
     except HTTPException:
         if conexion:
