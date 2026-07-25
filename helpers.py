@@ -30,9 +30,15 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
     cursor.execute("SELECT config_resumen FROM tiendas WHERE id_tienda = %s", (id_tienda,))
     conf = cursor.fetchone()
     reglas = []
+    gastos_fijos = []
     if conf and conf['config_resumen']:
         try:
-            reglas = json.loads(conf['config_resumen'])
+            data = json.loads(conf['config_resumen'])
+            if isinstance(data, list):
+                reglas = data
+            else:
+                reglas = data.get('reglas', [])
+                gastos_fijos = data.get('gastos_fijos', [])
         except Exception:
             pass
 
@@ -53,6 +59,12 @@ def _calcular_resumen(cursor, id_turno: int, id_tienda: int) -> dict:
     # ── Aplicar reglas dinámicas (claves + ids_productos) ─────
     resultados_reglas = {r['nombre']: 0.0 for r in reglas}
     total_deducciones = 0.0
+
+    for g in gastos_fijos:
+        monto_g = float(g.get('monto') or 0)
+        if monto_g:
+            resultados_reglas[g['nombre']] = resultados_reglas.get(g['nombre'], 0.0) + monto_g
+            total_deducciones += monto_g
 
     if reglas:
         cursor.execute("""

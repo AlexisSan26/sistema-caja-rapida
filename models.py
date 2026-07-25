@@ -154,8 +154,14 @@ class ReglaResumen(BaseModel):
     ids_productos: List[int] = []
 
 
+class GastoFijo(BaseModel):
+    nombre: str
+    monto: float
+
+
 class ConfiguracionTicket(BaseModel):
     reglas: List[ReglaResumen] = []
+    gastos_fijos: List[GastoFijo] = []
 
 
 class TiendaNueva(BaseModel):

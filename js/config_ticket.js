@@ -1,5 +1,6 @@
 let reglasConfig = [];
 let reglaActivaIdx = null;
+let gastosFijosConfig = [];
 
 async function cargarConfiguracionTicket() {
     try { const r = await fetch(`${API_URL}/inventario`); todosLosProductos = await r.json(); } catch (_) {}
@@ -7,8 +8,46 @@ async function cargarConfiguracionTicket() {
         const res = await fetch(`${API_URL}/configuracion_tienda`);
         const data = await res.json();
         reglasConfig = data.reglas || [];
+        gastosFijosConfig = data.gastos_fijos || [];
         renderReglasConfig();
+        renderGastosFijosConfig();
     } catch (e) { mostrarError("Error al cargar configuración"); }
+}
+
+function renderGastosFijosConfig() {
+    const cont = document.getElementById("contenedor-gastos-config");
+    if (gastosFijosConfig.length === 0) {
+        cont.innerHTML = "<p class='text-muted text-center py-2'>Sin gastos fijos. Agrega uno.</p>";
+        return;
+    }
+    cont.innerHTML = gastosFijosConfig.map((g, idx) => {
+        return `<div class="d-flex align-items-center gap-2 mb-2 gasto-fijo-bloque">
+            <input type="text" class="form-control gf-nom-cfg" placeholder="Nombre (ej: Luz)" value="${esc(g.nombre)}">
+            <input type="number" step="0.01" min="0" class="form-control gf-monto-cfg" placeholder="Monto" style="max-width:120px;" value="${g.monto != null ? g.monto : ''}">
+            <button class="btn btn-sm btn-outline-danger" onclick="eliminarGastoFijoConfig(${idx})">✕</button>
+        </div>`;
+    }).join("");
+}
+
+function agregarFilaGastoFijoConfig() {
+    gastosFijosConfig.push({ nombre: "", monto: null });
+    renderGastosFijosConfig();
+}
+
+function eliminarGastoFijoConfig(idx) {
+    _sincronizarInputsGastosFijos();
+    gastosFijosConfig.splice(idx, 1);
+    renderGastosFijosConfig();
+}
+
+function _sincronizarInputsGastosFijos() {
+    document.querySelectorAll(".gasto-fijo-bloque").forEach((div, idx) => {
+        if (!gastosFijosConfig[idx]) return;
+        const nom = div.querySelector(".gf-nom-cfg");
+        const monto = div.querySelector(".gf-monto-cfg");
+        if (nom) gastosFijosConfig[idx].nombre = nom.value.trim();
+        if (monto) gastosFijosConfig[idx].monto = monto.value.trim() ? parseFloat(monto.value) : null;
+    });
 }
 
 function renderReglasConfig() {
@@ -102,17 +141,21 @@ function toggleProductoSelector(idProducto) {
 
 async function guardarConfiguracionTicket() {
     _sincronizarInputsReglas();
+    _sincronizarInputsGastosFijos();
     const reglasFiltradas = reglasConfig.filter(r => r.nombre);
+    const gastosFiltrados = gastosFijosConfig.filter(g => g.nombre);
     try {
         const res = await fetch(`${API_URL}/configuracion_tienda`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reglas: reglasFiltradas })
+            body: JSON.stringify({ reglas: reglasFiltradas, gastos_fijos: gastosFiltrados })
         });
         const data = await res.json();
         if (!res.ok) { alert("❌ " + (data.detail || "Error al guardar configuración.")); return; }
         alert("✅ " + data.mensaje);
         reglasConfig = reglasFiltradas;
+        gastosFijosConfig = gastosFiltrados;
         renderReglasConfig();
+        renderGastosFijosConfig();
     } catch (e) { mostrarError("Error al guardar configuración"); }
 }

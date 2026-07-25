@@ -253,10 +253,22 @@
         <div class="card-body">
             <p class="text-muted" style="font-size:.88rem;">Crea grupos para desglosar ciertos productos en tu resumen. Puedes combinar palabras clave (para atrapar productos nuevos automáticamente) con productos específicos de tu catálogo.</p>
             <div id="contenedor-reglas-config"></div>
-            <button class="btn btn-outline-primary w-100 mb-3 fw-bold" onclick="agregarFilaReglaConfig()">➕ Agregar grupo</button>
-            <button class="btn btn-success w-100 btn-lg shadow" onclick="guardarConfiguracionTicket()">💾 Guardar</button>
+            <button class="btn btn-outline-primary w-100 fw-bold" onclick="agregarFilaReglaConfig()">➕ Agregar grupo</button>
         </div>
     </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-header bg-dark text-white">
+            <h6 class="mb-0">Gastos fijos del día</h6>
+        </div>
+        <div class="card-body">
+            <p class="text-muted" style="font-size:.88rem;">Monto que se resta cada corte sin depender de ventas (ej. Luz: 100).</p>
+            <div id="contenedor-gastos-config"></div>
+            <button class="btn btn-outline-primary w-100 fw-bold" onclick="agregarFilaGastoFijoConfig()">➕ Agregar gasto fijo</button>
+        </div>
+    </div>
+
+    <button class="btn btn-success w-100 btn-lg shadow" onclick="guardarConfiguracionTicket()">💾 Guardar</button>
 </div>
 </div>
 

@@ -2,7 +2,7 @@ import json
 from fastapi import APIRouter, Depends
 from database import conectar_bd
 from auth import get_current_user
-from models import TokenData, ConfiguracionTicket
+from models import TokenData, ConfiguracionTicket, GastoFijo
 
 router = APIRouter()
 
@@ -15,8 +15,13 @@ def obtener_configuracion(user: TokenData = Depends(get_current_user)):
         cursor = conexion.cursor(dictionary=True)
         cursor.execute("SELECT config_resumen FROM tiendas WHERE id_tienda = %s", (user.id_tienda,))
         row = cursor.fetchone()
-        reglas = json.loads(row['config_resumen']) if row and row['config_resumen'] else []
-        return {"reglas": reglas}
+        data = json.loads(row['config_resumen']) if row and row['config_resumen'] else []
+        if isinstance(data, list):
+            reglas, gastos_fijos = data, []
+        else:
+            reglas = data.get('reglas', [])
+            gastos_fijos = data.get('gastos_fijos', [])
+        return {"reglas": reglas, "gastos_fijos": gastos_fijos}
     finally:
         if cursor:
             cursor.close()
@@ -29,7 +34,10 @@ def actualizar_configuracion(config: ConfiguracionTicket, user: TokenData = Depe
     cursor = None
     try:
         cursor = conexion.cursor()
-        json_str = json.dumps([r.model_dump() for r in config.reglas])
+        json_str = json.dumps({
+            "reglas": [r.model_dump() for r in config.reglas],
+            "gastos_fijos": [g.model_dump() for g in config.gastos_fijos],
+        })
         cursor.execute("UPDATE tiendas SET config_resumen = %s WHERE id_tienda = %s", (json_str, user.id_tienda))
         conexion.commit()
         return {"mensaje": "Configuración del ticket actualizada correctamente"}
