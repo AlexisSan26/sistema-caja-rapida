@@ -285,16 +285,14 @@ async function confirmarCorte() {
     const efectivoReal = efectivoRealInput !== "" ? parseFloat(efectivoRealInput) : null;
     document.getElementById("modal-corte").style.display = "none";
     try {
-        // Cierra el turno — backend calcula el resumen completo
-        const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`, { method: "POST" });
+        // Cierra el turno — backend calcula el resumen completo y guarda el efectivo declarado
+        const res = await fetch(`${API_URL}/corte_caja/${idTurnoActual}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ efectivo_declarado: efectivoReal })
+        });
         const datos = await res.json();
         if (!res.ok) { mostrarError(datos.detail || "Error al cerrar la caja."); return; }
-        // La diferencia se calcula contra total_en_caja (ventas + fondo - retiros)
-        // Los grupos son solo informativos — se apartan después de cuadrar
-        if (efectivoReal !== null) {
-            datos.efectivo_real = efectivoReal;
-            datos.diferencia = efectivoReal - (datos.total_en_caja || 0);
-        }
         mostrarTicket(datos);
         alert("✅ Turno Cerrado Correctamente");
         resetearInterfazCerrada();

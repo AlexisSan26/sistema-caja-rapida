@@ -88,14 +88,10 @@ function construirTicketHTML(datos, idTurno, momentoCierre = null) {
             <h6 class="mb-0 text-uppercase fw-bold text-primary">${encabezado}</h6>
             ${subtitulo}
         </div>
+        ${datos.total_fondo > 0 ? `<p class="h6 mb-1 text-primary">Fondo en caja, (no se entrega): <strong>$${(datos.total_fondo || 0).toFixed(2)}</strong></p>` : ''}
         <p class="h6 mb-1">Ingresos del Día: <strong>$${(datos.total_ingresos || 0).toFixed(2)}</strong></p>
-        ${datos.total_fondo > 0 ? `<p class="h6 mb-1 text-primary">Fondo inicial: <strong>+$${(datos.total_fondo || 0).toFixed(2)}</strong></p>` : ''}
         <p class="h6 mb-1 text-danger">Retiros: <strong>-$${(datos.total_retiros || 0).toFixed(2)}</strong></p>
         <p class="h5 mt-2">Subtotal en Caja: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
-        ${bloqueReglas}
-        <hr style="border-top: 2px solid #000;">
-        <p class="h5 mb-1">Efectivo Neto a Entregar:</p>
-        <p class="h2 text-success fw-bold">$${datos.total_neto.toFixed(2)}</p>
         ${datos.efectivo_real != null ? `
         <hr>
         <p class="h6 mb-1">Efectivo físico declarado: <strong>$${parseFloat(datos.efectivo_real).toFixed(2)}</strong></p>
@@ -103,6 +99,10 @@ function construirTicketHTML(datos, idTurno, momentoCierre = null) {
             ${datos.diferencia >= 0 ? '⬆️ Sobró' : '⬇️ Faltó'}:
             ${datos.diferencia >= 0 ? '+' : ''}$${parseFloat(datos.diferencia).toFixed(2)}
         </p>` : ''}
+        ${bloqueReglas}
+        <hr style="border-top: 2px solid #000;">
+        <p class="h5 mb-1">Efectivo Neto a Entregar:</p>
+        <p class="h2 text-success fw-bold">$${datos.total_neto.toFixed(2)}</p>
     </div>`;
 }
 

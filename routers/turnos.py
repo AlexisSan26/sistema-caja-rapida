@@ -1,5 +1,6 @@
+import json
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData
@@ -54,7 +55,11 @@ def abrir_turno(user: TokenData = Depends(get_current_user)):
 
 
 @router.post("/corte_caja/{id_turno}")
-def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
+def hacer_corte(
+    id_turno: int,
+    efectivo_declarado: float | None = Body(default=None, embed=True),
+    user: TokenData = Depends(get_current_user)
+):
     conexion = conectar_bd()
     cursor = None
     try:
@@ -70,12 +75,12 @@ def hacer_corte(id_turno: int, user: TokenData = Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Turno no encontrado o ya cerrado")
 
         # 2. Calcular primero — si falla, no se cierra nada
-        resumen = _calcular_resumen(cursor, id_turno, user.id_tienda)
+        resumen = _calcular_resumen(cursor, id_turno, user.id_tienda, efectivo_declarado)
 
         # 3. Cerrar solo si el cálculo fue exitoso
         cursor.execute(
-            "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO', turno_activo = NULL WHERE id_turno = %s AND id_tienda = %s",
-            (id_turno, user.id_tienda)
+            "UPDATE turnos SET fecha_cierre = NOW(), estado = 'CERRADO', turno_activo = NULL, efectivo_declarado = %s, reglas_resumen_cerrado = %s WHERE id_turno = %s AND id_tienda = %s",
+            (efectivo_declarado, json.dumps(resumen["reglas_resumen"]), id_turno, user.id_tienda)
         )
         conexion.commit()
         return resumen
