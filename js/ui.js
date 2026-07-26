@@ -41,7 +41,7 @@ function irA(pantalla) {
     if (pantalla === 'fiados') cargarClientes();
     if (pantalla === 'historial') cargarHistorial();
     if (pantalla === 'entradas') cargarEntradas();
-    if (pantalla === 'reportes') cargarReporteProductos();
+    if (pantalla === 'reportes') { cargarReporteProductos(); cargarResumenDashboardTurno(); }
     if (pantalla === 'config') cargarConfiguracionTicket();
 }
 

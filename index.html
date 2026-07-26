@@ -231,6 +231,39 @@
 <div id="pantalla-reportes" class="pantalla">
 <div class="container mt-4 pb-5" style="max-width:600px;">
     <h4 class="text-center mb-3" style="margin-top:2.5rem;">📊 Reportes</h4>
+
+    <h6 class="text-center mb-3 text-secondary">🧾 Turno en curso</h6>
+    <div class="row g-2 mb-3">
+        <div class="col-6">
+            <div class="card shadow-sm text-center p-2">
+                <small class="text-muted">Venta total</small>
+                <div class="h5 mb-0 text-success fw-bold" id="dash-venta-total">$0.00</div>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="card shadow-sm text-center p-2">
+                <small class="text-muted">Productos vendidos</small>
+                <div class="h5 mb-0 fw-bold" id="dash-productos-vendidos">0</div>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="card shadow-sm text-center p-2">
+                <small class="text-muted">Ventas realizadas</small>
+                <div class="h5 mb-0 fw-bold" id="dash-num-ventas">0</div>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="card shadow-sm text-center p-2">
+                <small class="text-muted">Retiros del día</small>
+                <div class="h5 mb-0 text-danger fw-bold" id="dash-retiros">$0.00</div>
+            </div>
+        </div>
+    </div>
+    <div id="dash-abonos-lista" class="mb-2"></div>
+    <div id="dash-fiados-lista" class="mb-3"></div>
+    <canvas id="dash-grafica-ventas" height="180"></canvas>
+    <hr class="my-4">
+
     <div class="mb-3">
         <label class="fw-bold text-secondary" style="font-size:.85rem;">Top 10 productos más vendidos</label>
         <select id="select-dias-reporte" class="form-select form-select-lg" onchange="cargarReporteProductos()">
@@ -590,6 +623,7 @@
 <script src="js/fiados.js"></script>
 <script src="js/historial.js"></script>
 <script src="js/reportes.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="js/config_ticket.js"></script>
 <script src="js/scanner.js"></script>
 <script src="js/app.js"></script>
