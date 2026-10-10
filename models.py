@@ -95,6 +95,10 @@ class LimiteCredito(BaseModel):
     limite_credito: float | None = None
 
 
+class NombreCliente(BaseModel):
+    nombre: str
+
+
 class ItemFiado(BaseModel):
     id_cuenta: int
     id_turno: int

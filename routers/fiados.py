@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
-from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote, LimiteCredito
+from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote, LimiteCredito, NombreCliente
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -117,6 +117,36 @@ def editar_limite_credito(id_cliente: int, datos: LimiteCredito, user: TokenData
             conexion.rollback()
         logger.exception("Error al actualizar límite de crédito")
         raise HTTPException(status_code=500, detail="Error al actualizar límite de crédito")
+    finally:
+        if cursor:
+            cursor.close()
+        conexion.close()
+
+
+@router.put("/clientes/{id_cliente}/nombre")
+def editar_nombre_cliente(id_cliente: int, datos: NombreCliente, user: TokenData = Depends(get_current_user)):
+    nombre = datos.nombre.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+    conexion = conectar_bd()
+    cursor = None
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "UPDATE clientes SET nombre = %s WHERE id_cliente = %s AND id_tienda = %s AND activo = 1",
+            (nombre, id_cliente, user.id_tienda)
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        conexion.commit()
+        return {"mensaje": "Nombre actualizado"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if conexion:
+            conexion.rollback()
+        logger.exception("Error al actualizar nombre de cliente")
+        raise HTTPException(status_code=500, detail="Error al actualizar nombre de cliente")
     finally:
         if cursor:
             cursor.close()

@@ -18,6 +18,7 @@ async function cargarClientes() {
                         <small class="text-muted">${esc(c.telefono || '')}</small>
                     </div>
                     <div class="${colorSaldo} me-2">${textoSaldo}</div>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" onclick="editarNombreCliente(${c.id_cliente}, '${esc(c.nombre)}')" title="Editar nombre">🏷️</button>
                     <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" onclick="editarLimiteCliente(${c.id_cliente}, '${esc(c.nombre)}', ${c.limite_credito === null ? 'null' : c.limite_credito})" title="Editar límite de crédito">✏️</button>
                     <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="eliminarCliente(${c.id_cliente}, '${esc(c.nombre)}')">🗑️</button>
                 </div>
@@ -202,4 +203,22 @@ async function editarLimiteCliente(idCliente, nombre, limiteActual) {
         if (!res.ok) { alert("❌ " + (data.detail || "Error al actualizar el límite.")); return; }
         cargarClientes();
     } catch (e) { mostrarError("Error al actualizar el límite."); }
+}
+
+async function editarNombreCliente(idCliente, nombreActual) {
+    const nuevo = prompt(`Nuevo nombre para "${nombreActual}":`, nombreActual);
+    if (nuevo === null) return; // canceló
+    const nombreNuevo = nuevo.trim();
+    if (!nombreNuevo) { alert("El nombre no puede estar vacío."); return; }
+    if (nombreNuevo === nombreActual) return; // sin cambios
+    try {
+        const res = await fetch(`${API_URL}/clientes/${idCliente}/nombre`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nombre: nombreNuevo })
+        });
+        const data = await res.json();
+        if (!res.ok) { alert("❌ " + (data.detail || "Error al actualizar el nombre.")); return; }
+        cargarClientes();
+    } catch (e) { mostrarError("Error al actualizar el nombre."); }
 }
