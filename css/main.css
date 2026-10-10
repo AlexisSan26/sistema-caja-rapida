@@ -83,3 +83,67 @@
 .mov-card.mov-abono .mov-header { background:#fdf8ec; }
 .mov-card.mov-fondo { border-color:#b8d4f0; }
 .mov-card.mov-fondo .mov-header { background:#eef5fc; }
+
+/* ── Tablet y escritorio (≥768px). El celular no cambia ─────────────── */
+@media (min-width: 768px) {
+    /* Menú lateral fijo en lugar del drawer con hamburguesa */
+    #btn-menu { display:none !important; }
+    #menu-lateral { display:block !important; width:260px; }
+    #menu-fondo { display:none; }
+    #menu-panel { background:#1B4B43; box-shadow:none; }
+    #menu-panel > div:first-child { color:#fff; border-bottom-color:rgba(255,255,255,.14) !important; }
+    #menu-panel .menu-item { color:#D8E6E0; }
+    #menu-panel .menu-item:hover { background:rgba(255,255,255,.1); }
+    #menu-panel .menu-item.activo { background:#fff; color:#123832; }
+    #menu-panel .menu-item.text-danger { color:#F6C7B6 !important; }
+
+    /* El contenido queda a la derecha del menú */
+    body { padding-left:260px; }
+    .pantalla > .container { max-width:900px !important; }
+    #barra-flotante-acciones { left:260px !important; }
+    #aviso-error { left:calc(50% + 130px); }
+
+    /* Hojas inferiores: angostas y centradas en vez de ancho completo */
+    #bottom-sheet, #bs-fiado, #bs-mov { left:0 !important; right:0 !important; margin:0 auto !important; width:min(560px, 100%) !important; }
+}
+
+/* ── Caja en dos columnas (≥1100px) ─────────────────────────────────── */
+/* Caja en celular y tablet: mismo orden de siempre (lista, pago, cambio, captura, cobrar).
+   Los márgenes de #div-pago y #div-cambio compensan que ya no están anidados. */
+#caja-grid { display:flex; flex-direction:column; }
+#caja-ticket { display:contents; }
+#div-carrito { order:1; }
+#div-pago { order:2; margin-bottom:.5rem !important; }
+#div-cambio { order:3; margin-top:-.5rem !important; margin-bottom:1rem; }
+#caja-captura { order:4; }
+#caja-grid > button { order:5; }
+
+@media (min-width: 1100px) {
+    #pantalla-caja > .container { max-width:1180px !important; }
+    #caja-grid {
+        display:grid;
+        grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows:repeat(5, auto);
+        column-gap:1.5rem;
+        align-items:start;
+    }
+    #caja-grid > * { grid-column:1; }
+    /* El ticket mide lo mismo que la columna izquierda; height:0 + min-height:100% evita que su contenido la estire */
+    #caja-grid > #caja-ticket { display:flex; flex-direction:column; grid-column:2; grid-row:1 / span 5; height:0; min-height:100%; }
+    #div-pago { order:6; margin-top:1rem; margin-bottom:0 !important; }
+    #div-cambio { margin-top:.75rem !important; margin-bottom:0; flex:none; }
+    /* Con muchos productos la lista se recoge con scroll, como Movimientos del Turno */
+    #div-carrito { display:flex !important; flex-direction:column; flex:0 1 auto; min-height:0; margin-bottom:0 !important; }
+    #div-carrito[style*="none"] { display:none !important; }
+    #carrito-scroll { flex:0 1 auto; min-height:0; overflow-y:auto !important; }
+    #carrito-scroll thead th { position:sticky; top:0; z-index:1; }
+}
+
+/* ── Encabezado de Caja en tablet y escritorio (≥768px) ─────────────── */
+@media (min-width: 768px) {
+    #pantalla-caja > .container > h2 { display:none; }
+    #caja-encabezado { display:flex; justify-content:space-between; align-items:baseline; gap:1rem; margin-bottom:.75rem; }
+    #caja-encabezado p { margin:0 !important; }
+    #info-tienda-usuario { text-align:left !important; }
+    #fecha-actual { text-align:right !important; }
+}

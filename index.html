@@ -54,8 +54,10 @@
 </div>
 <div class="container mt-4" style="max-width:600px;">
     <h2 class="text-center mb-1" style="margin-top:2.5rem;">Caja Rápida</h2>
+    <div id="caja-encabezado">
     <p id="info-tienda-usuario" class="text-center fw-bold text-success mb-0" style="font-size:.95rem;"></p>
     <p id="fecha-actual" class="text-center text-secondary mb-2 text-capitalize"></p>
+    </div>
     <div class="card mb-4 shadow-sm" id="panel-apertura">
         <div class="card-body text-center">
             <h5 id="texto-turno" class="text-muted">No hay turno abierto</h5>
@@ -66,7 +68,7 @@
         <div class="card-header bg-success text-white">
             <h5 class="mb-0">Registrar Movimiento</h5>
         </div>
-        <div class="card-body">
+        <div class="card-body" id="caja-grid">
             <div class="mb-3">
                 <label class="fw-bold">Tipo de movimiento:</label>
                 <input type="hidden" id="tipo" value="VENTA">
@@ -82,9 +84,10 @@
                     <option value="">— Selecciona cliente —</option>
                 </select>
             </div>
+            <div id="caja-ticket">
             <div id="div-carrito" style="display:none;" class="mb-3">
                 <div class="fw-bold mb-2 text-secondary" style="font-size:.85rem;text-transform:uppercase;letter-spacing:.5px;">Lista de productos</div>
-                <div style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
+                <div id="carrito-scroll" style="border:1px solid #dee2e6;border-radius:8px;overflow:hidden;">
                     <table class="table table-sm mb-0" id="tabla-carrito">
                         <thead class="table-light">
                             <tr>
@@ -107,6 +110,11 @@
                     </div>
                 </div>
             </div>
+            <div id="div-cambio" class="text-center mt-2" style="display:none;">
+                <span class="text-muted" style="font-size:.9rem;">Cambio a entregar:</span>
+                <div id="monto-cambio" class="fw-bold text-success" style="font-size:2rem;">$0.00</div>
+            </div>
+            </div>
             <div id="div-pago" class="mb-3" style="display:none;">
                 <div class="d-flex gap-2 mb-2">
                     <button id="btn-efectivo" class="btn btn-success flex-fill fw-bold" onclick="seleccionarMetodo('efectivo')">Efectivo</button>
@@ -124,11 +132,8 @@
                     <label class="fw-bold">Recibido ($):</label>
                     <input type="number" id="monto-recibido" class="form-control form-control-lg" placeholder="0.00" oninput="actualizarCambio()">
                 </div>
-                <div id="div-cambio" class="text-center mt-2" style="display:none;">
-                    <span class="text-muted" style="font-size:.9rem;">Cambio a entregar:</span>
-                    <div id="monto-cambio" class="fw-bold text-success" style="font-size:2rem;">$0.00</div>
-                </div>
             </div>
+            <div id="caja-captura">
             <div class="mb-3" id="div-producto">
                 <label id="label-producto" class="fw-bold">Producto:</label>
                 <div class="input-group">
@@ -140,12 +145,12 @@
             <div class="row" id="div-campos-manuales">
                 <div class="col-6 mb-3" id="div-cantidad">
                     <label class="fw-bold">Cantidad:</label>
-                    <input type="number" id="cantidad" class="form-control form-control-lg" value="1" min="0.01" step="any" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();}">
+                    <input type="number" id="cantidad" class="form-control form-control-lg" value="1" min="0.01" step="any" onkeydown="manejarEnterCampo(event)">
                 </div>
                 <div class="col-6 mb-3" id="div-precio">
                     <label id="label-monto" class="fw-bold">Precio ($):</label>
                     <div class="input-group">
-                        <input type="number" id="precio" class="form-control form-control-lg" placeholder="0.00">
+                        <input type="number" id="precio" class="form-control form-control-lg" placeholder="0.00" onkeydown="manejarEnterCampo(event)">
                         <button class="btn btn-warning fw-bold" type="button" id="btn-actualizar-precio" onclick="actualizarPrecioMaestro()" title="Guardar precio">🔄</button>
                     </div>
                 </div>
@@ -162,6 +167,7 @@
             <div id="escaner-caja-container" style="display:none;" class="mb-3">
                 <div id="lector-qr-caja"></div>
                 <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="cerrarEscanerCaja()">Cerrar cámara</button>
+            </div>
             </div>
             <button class="btn btn-success w-100 btn-lg shadow" onclick="registrar()">💾 Guardar y Cobrar</button>
         </div>

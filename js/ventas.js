@@ -727,6 +727,14 @@ function manejarEnterProducto(event) {
     }
 }
 
+function manejarEnterCampo(event) {
+    if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        agregarALista();
+    }
+}
+
 function seleccionarMetodo(metodo) {
     ["efectivo","tarjeta","transferencia"].forEach(m => {
         const btn = document.getElementById("btn-" + m);
