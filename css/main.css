@@ -147,3 +147,31 @@
     #info-tienda-usuario { text-align:left !important; }
     #fecha-actual { text-align:right !important; }
 }
+
+/* ── Inventario, Fiados e Historial en cuadrícula de tarjetas (≥768px) ── */
+@media (min-width: 768px) {
+    /* Inventario y Fiados usan más ancho para 2-3 columnas (Historial conserva sus 900px) */
+    #pantalla-inventario > .container,
+    #pantalla-fiados > .container { max-width:1180px !important; }
+    /* Aire al final para que el botón flotante ➕ no tape la última tarjeta */
+    #pantalla-inventario > .container { padding-bottom:6rem !important; }
+
+    /* Las columnas se acomodan solas: tarjetas de mínimo 360px */
+    #lista-inventario, #lista-clientes, #lista-historial {
+        display:grid;
+        grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));
+        gap:.75rem;
+    }
+    /* Las tarjetas de Fiados llevan más contenido (saldo + 3 botones): columnas más anchas */
+    #lista-clientes { grid-template-columns:repeat(auto-fill, minmax(440px, 1fr)); }
+    #lista-clientes .card-body > div:first-child { padding-right:.75rem; }
+    #lista-inventario > .card, #lista-clientes > .card { margin-bottom:0 !important; }
+    /* Mensajes ("Cargando...", "No se encontraron...", "← Ver todos") ocupan toda la fila */
+    #lista-inventario > p, #lista-clientes > p,
+    #lista-historial > p, #lista-historial > .text-center { grid-column:1 / -1; }
+    /* En list-group Bootstrap quita el borde superior entre ítems; en cuadrícula cada uno es tarjeta */
+    #lista-historial > .list-group-item { border-width:1px; border-radius:.5rem; }
+    /* El stock y el saldo no se parten en dos líneas cuando el nombre es largo */
+    #lista-inventario .text-end > div,
+    #lista-clientes .saldo-cero, #lista-clientes .saldo-deuda { white-space:nowrap; }
+}
