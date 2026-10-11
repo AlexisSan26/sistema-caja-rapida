@@ -84,6 +84,8 @@ function renderGraficaVentasDia(grafica) {
         },
         options: {
             responsive: true,
+            // En tablet y escritorio la gráfica queda más baja y ancha (en celular se queda como estaba)
+            ...(window.innerWidth >= 768 ? { aspectRatio: 2.6 } : {}),
             plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true } }
         }

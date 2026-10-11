@@ -175,3 +175,38 @@
     #lista-inventario .text-end > div,
     #lista-clientes .saldo-cero, #lista-clientes .saldo-deuda { white-space:nowrap; }
 }
+
+/* ── Reportes y Configuración (≥768px) ── */
+@media (min-width: 768px) {
+    /* El filtro del Top 10 no hace falta que ocupe todo el ancho */
+    #select-dias-reporte { max-width:420px; }
+
+    /* Reportes: 4 indicadores en una fila y listas en 2 columnas */
+    #pantalla-reportes .row.g-2 > .col-6 { flex:0 0 auto; width:25%; }
+    /* Los 4 indicadores miden lo mismo aunque una etiqueta se parta en dos líneas */
+    #pantalla-reportes .row.g-2 .card { height:100%; justify-content:center; }
+    #dash-abonos-lista, #dash-fiados-lista, #lista-reporte-productos {
+        display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    }
+    #dash-abonos-lista > .card, #dash-fiados-lista > .card { margin-bottom:0 !important; }
+    #dash-abonos-lista > p, #lista-reporte-productos > p { grid-column:1 / -1; }
+    #dash-abonos-lista .text-end, #dash-fiados-lista .text-end { white-space:nowrap; margin-left:.75rem; }
+    /* En list-group Bootstrap quita el borde superior entre ítems; en cuadrícula cada uno es tarjeta */
+    #lista-reporte-productos > .list-group-item { border-width:1px; border-radius:.5rem; }
+    /* "69 und." y el total no se parten en dos líneas cuando el nombre es largo */
+    #lista-reporte-productos .text-end { white-space:nowrap; margin-left:.75rem; }
+}
+
+/* Configuración: los dos bloques lado a lado (≥1100px) */
+@media (min-width: 1100px) {
+    #pantalla-config > .container {
+        max-width:1180px !important;
+        display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+        column-gap:1.5rem; align-items:start;
+    }
+    #pantalla-config > .container > h4,
+    #pantalla-config > .container > button { grid-column:1 / -1; }
+    /* En una cuadrícula los márgenes no se funden: se compensa para que el título quede a la misma altura que en las demás pantallas */
+    #pantalla-config > .container > h4 { margin-top:1rem !important; }
+    #pantalla-config > .container > button { justify-self:center; max-width:420px; }
+}
