@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Caja Rápida",
+  "short_name": "Caja Rápida",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8f9fa",
+  "theme_color": "#198754",
+  "icons": [
+    { "src": "icono.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
