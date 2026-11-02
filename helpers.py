@@ -40,7 +40,7 @@ def _calcular_resumen(
 
     cursor.execute("""
         SELECT
-            SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'COBRO_FIADO') THEN total_movimiento ELSE 0 END) AS ingresos,
+            SUM(CASE WHEN tipo_movimiento IN ('VENTA', 'COBRO_FIADO') AND COALESCE(metodo_pago, 'efectivo') NOT IN ('tarjeta', 'transferencia') THEN total_movimiento ELSE 0 END) AS ingresos,
             SUM(CASE WHEN tipo_movimiento = 'RETIRO' THEN total_movimiento ELSE 0 END) AS retiros,
             SUM(CASE WHEN tipo_movimiento = 'FONDO_CAJA' THEN total_movimiento ELSE 0 END) AS fondo
         FROM movimientos WHERE id_turno = %s AND id_tienda = %s
@@ -53,6 +53,21 @@ def _calcular_resumen(
     # El fondo de caja NO se cuenta en el Subtotal ni en el Neto a entregar:
     # ese dinero se queda en caja para el siguiente turno, solo se muestra informativo.
     total_en_caja = total_ingresos - total_retiros
+
+    # Ventas cobradas con tarjeta/transferencia: cuántas y cuánto (no están en caja)
+    cursor.execute("""
+        SELECT COALESCE(LOWER(metodo_pago), 'efectivo') AS metodo,
+               COUNT(DISTINCT COALESCE(id_lote, CONCAT('m-', id_movimiento))) AS num_ventas,
+               SUM(total_movimiento) AS total
+        FROM movimientos
+        WHERE id_turno = %s AND id_tienda = %s
+          AND tipo_movimiento IN ('VENTA', 'COBRO_FIADO')
+        GROUP BY COALESCE(LOWER(metodo_pago), 'efectivo')
+    """, (id_turno, id_tienda))
+    pagos_digitales = {
+        p['metodo']: {"num_ventas": int(p['num_ventas']), "total": float(p['total'])}
+        for p in cursor.fetchall()
+    }
 
     if reglas_resumen_snapshot is not None:
         # Turno ya cerrado con desglose congelado: no se toca la Configuración actual,
@@ -92,6 +107,7 @@ def _calcular_resumen(
                 FROM movimientos m
                 LEFT JOIN productos p ON p.nombre_producto = m.producto AND p.id_tienda = m.id_tienda
                 WHERE m.id_turno = %s AND m.id_tienda = %s AND m.tipo_movimiento = 'VENTA'
+                  AND COALESCE(m.metodo_pago, 'efectivo') NOT IN ('tarjeta', 'transferencia')
             """, (id_turno, id_tienda))
             ventas = cursor.fetchall()
             for v in ventas:
@@ -125,6 +141,7 @@ def _calcular_resumen(
         "total_neto": total_neto_final,
         "efectivo_real": efectivo_declarado,
         "diferencia": diferencia,
+        "pagos_digitales": pagos_digitales,
         "fecha_apertura": fecha_apertura,
         "fecha_cierre":   fecha_cierre,
     }

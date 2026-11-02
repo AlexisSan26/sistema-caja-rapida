@@ -83,13 +83,32 @@ function construirTicketHTML(datos, idTurno, momentoCierre = null) {
     }
     const bloqueReglas = deduccionesHTML !== "" ? `<hr>${deduccionesHTML}` : "";
 
+    const pagosDig = datos.pagos_digitales || {};
+    const totalDigitales = Object.values(pagosDig).reduce((suma, p) => suma + (p.total || 0), 0);
+    const totalIngresoDia = totalDigitales;
+    let digitalesHTML = "";
+    [['efectivo', '💵 Efectivo'], ['tarjeta', '💳 Tarjeta'], ['transferencia', '🏦 Transferencia']].forEach(([clave, etiqueta]) => {
+        const p = pagosDig[clave];
+        if (p && p.num_ventas > 0) {
+            digitalesHTML += `<div class="d-flex gap-2">
+                <span>${etiqueta}: ${p.num_ventas} ${p.num_ventas === 1 ? 'venta' : 'ventas'}</span>
+                <strong class="text-nowrap">$${p.total.toFixed(2)}</strong>
+            </div>`;
+        }
+    });
+    const bloquePagosDigitales = digitalesHTML !== ""
+        ? `<div class="mb-2 ps-2 border-start border-2">${digitalesHTML}</div>`
+        : "";
+
     return `<div class="card bg-light p-3 border-dark text-start shadow-sm mt-3">
         <div class="text-center mb-3 border-bottom pb-2">
             <h6 class="mb-0 text-uppercase fw-bold text-primary">${encabezado}</h6>
             ${subtitulo}
         </div>
         ${datos.total_fondo > 0 ? `<p class="h6 mb-1 text-primary">Fondo en caja, (no se entrega): <strong>$${(datos.total_fondo || 0).toFixed(2)}</strong></p>` : ''}
-        <p class="h6 mb-1">Ingresos del Día: <strong>$${(datos.total_ingresos || 0).toFixed(2)}</strong></p>
+        <p class="h6 mb-1">Ventas:</p>
+        ${bloquePagosDigitales}
+        <p class="h6 mb-0">Ingresos del Día: <strong>$${totalIngresoDia.toFixed(2)}</strong></p>
         <p class="h6 mb-1 text-danger">Retiros: <strong>-$${(datos.total_retiros || 0).toFixed(2)}</strong></p>
         <p class="h5 mt-2">Subtotal en Caja: <strong>$${datos.total_en_caja.toFixed(2)}</strong></p>
         ${datos.efectivo_real != null ? `
