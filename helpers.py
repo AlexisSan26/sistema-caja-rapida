@@ -103,9 +103,14 @@ def _calcular_resumen(
 
         if reglas:
             cursor.execute("""
-                SELECT m.producto, m.total_movimiento, p.id_producto
+                SELECT m.producto, m.total_movimiento,
+                       COALESCE(
+                           m.id_producto_ref,
+                           (SELECT p.id_producto FROM productos p
+                            WHERE p.nombre_producto = m.producto AND p.id_tienda = m.id_tienda
+                            ORDER BY (p.activo = 1) DESC, p.id_producto LIMIT 1)
+                       ) AS id_producto
                 FROM movimientos m
-                LEFT JOIN productos p ON p.nombre_producto = m.producto AND p.id_tienda = m.id_tienda
                 WHERE m.id_turno = %s AND m.id_tienda = %s AND m.tipo_movimiento = 'VENTA'
                   AND COALESCE(m.metodo_pago, 'efectivo') NOT IN ('tarjeta', 'transferencia')
             """, (id_turno, id_tienda))

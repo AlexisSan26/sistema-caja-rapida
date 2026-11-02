@@ -328,7 +328,9 @@ function enfocarSegunUnidad(tipo_unidad, precio_sugerido) {
 }
 
 function agregarProductoAlCarrito(nombre, precio, cantidad = 1, id_producto = null, monto_cliente = null) {
-    const existente = carritoItems.find(i => i.nombre === nombre);
+    const existente = carritoItems.find(i => id_producto != null
+        ? i.id_producto === id_producto
+        : (i.id_producto == null && i.nombre === nombre));
     if (existente) {
         existente.cantidad += cantidad;
         if (monto_cliente != null) existente.monto_cliente = (existente.monto_cliente || 0) + monto_cliente;
