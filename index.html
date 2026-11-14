@@ -131,7 +131,10 @@
                         <button class="btn btn-outline-secondary fw-bold" onclick="agregarBillete(500)">$500</button>
                     </div>
                     <label class="fw-bold">Recibido ($):</label>
-                    <input type="number" id="monto-recibido" class="form-control form-control-lg" placeholder="0.00" oninput="actualizarCambio()">
+                    <div class="input-group">
+                        <input type="number" id="monto-recibido" class="form-control form-control-lg" placeholder="0.00" oninput="actualizarCambio()">
+                        <button class="btn btn-outline-danger fw-bold" type="button" onclick="limpiarRecibido()" title="Borrar monto recibido">✕</button>
+                    </div>
                 </div>
             </div>
             <div id="caja-captura">

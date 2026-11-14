@@ -756,6 +756,11 @@ function agregarBillete(valor) {
     actualizarCambio();
 }
 
+function limpiarRecibido() {
+    document.getElementById("monto-recibido").value = "";
+    actualizarCambio();
+}
+
 function actualizarCambio() {
     const total = carritoItems.reduce((acc, i) => acc + (i.monto_cliente != null ? i.monto_cliente : i.cantidad * i.precio), 0);
     const recibido = parseFloat(document.getElementById("monto-recibido").value) || 0;
