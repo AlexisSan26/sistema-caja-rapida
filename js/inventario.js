@@ -8,7 +8,7 @@ async function cargarInventario() {
         todosLosProductos = await resProds.json();
         const proveedores = await resProv.json();
         renderFiltrosProveedor(proveedores);
-        renderInventario(todosLosProductos);
+        filtrarInventario();
     } catch (e) {
         document.getElementById("lista-inventario").innerHTML = "<p class='text-danger text-center mt-4'>Error al cargar inventario.</p>";
     }
@@ -16,9 +16,10 @@ async function cargarInventario() {
 
 function renderFiltrosProveedor(proveedores) {
     const cont = document.getElementById("filtros-proveedor");
+    if (proveedorFiltro && !proveedores.includes(proveedorFiltro)) proveedorFiltro = "";
     let opciones = `<option value="">Filtrar por proveedor: Todos</option>`;
     proveedores.forEach(p => {
-        opciones += `<option value="${esc(p)}">${esc(p)}</option>`;
+        opciones += `<option value="${esc(p)}"${p === proveedorFiltro ? ' selected' : ''}>${esc(p)}</option>`;
     });
     cont.innerHTML = `<select class="form-select form-select-lg mb-3" onchange="setProveedor(this.value)">${opciones}</select>`;
 }
