@@ -38,6 +38,8 @@ function filtrarInventario() {
             p.nombre_producto.toLowerCase().includes(q) ||
             (p.codigo_barras && p.codigo_barras.toLowerCase().includes(q))
         );
+        const rango = p => ((p.codigo_barras || "").toLowerCase() === q ? 0 : (p.nombre_producto.toLowerCase() === q ? 1 : 2));
+        filtrados.sort((x, y) => rango(x) - rango(y));
     }
 
     if (proveedorFiltro) {
