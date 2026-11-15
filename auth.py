@@ -104,9 +104,9 @@ def register_auth_routes(app):
                     """, (datos.username,)
             )
             user = cursor.fetchone()
-            password_hash = user[
-                'password_hash'] if user else "$2b$12$KIXnotarealhashjustpaddingtomakeittakesametime00000000000"
-            if not user or not pwd_context.verify(datos.password, password_hash):
+            password_hash = user['password_hash'] if user else "$2b$12$uc.7exRwSCTrZ21YdIgWEOd2WRWiEgLv9ewLqlTYCF6qWnRpMCQpa"
+            password_ok = pwd_context.verify(datos.password, password_hash)
+            if not user or not password_ok:
                 raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
             if user.get('rol') == 'superadmin':
