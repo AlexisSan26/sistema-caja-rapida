@@ -183,6 +183,11 @@ class ResetPassword(BaseModel):
     nuevo_password: str
 
 
+class CambioPassword(BaseModel):
+    password_actual: str
+    password_nueva: str = Field(min_length=6, max_length=72)
+
+
 class ActualizacionNombreTienda(BaseModel):
     nombre_comercial: str
 

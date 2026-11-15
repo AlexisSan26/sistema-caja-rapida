@@ -7,8 +7,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from cachetools import TTLCache
 from database import db_pool, conectar_bd
-from models import TokenData, LoginRequest
-from helpers import _auth_cache, _cache_lock
+from models import TokenData, LoginRequest, CambioPassword
+from helpers import _auth_cache, _cache_lock, _invalidar_cache_tienda
 
 # ─── SEGURIDAD: JWT y Bcrypt ──────────────────────────────────────────────────
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -143,6 +143,49 @@ def register_yo_route(app):
                 "username": fila["username"] if fila else "—",
                 "nombre_tienda": fila["nombre_comercial"] if fila else "—"
             }
+        finally:
+            if cursor:
+                cursor.close()
+            conexion.close()
+
+    @app.put("/yo/password")
+    @limiter.limit("5/minute")
+    def cambiar_mi_password(request: Request, datos: CambioPassword, user: TokenData = Depends(get_current_user)):
+        if datos.password_actual == datos.password_nueva:
+            raise HTTPException(status_code=400, detail="La contraseña nueva debe ser distinta a la actual")
+        conexion = conectar_bd()
+        cursor = None
+        try:
+            cursor = conexion.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT password_hash FROM usuarios WHERE id_usuario = %s AND id_tienda = %s AND activo = 1",
+                (user.id_usuario, user.id_tienda)
+            )
+            fila = cursor.fetchone()
+            if not fila or not pwd_context.verify(datos.password_actual, fila['password_hash']):
+                raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+            cursor.execute(
+                "UPDATE usuarios SET password_hash = %s, token_version = token_version + 1 "
+                "WHERE id_usuario = %s AND id_tienda = %s",
+                (pwd_context.hash(datos.password_nueva), user.id_usuario, user.id_tienda)
+            )
+            cursor.execute(
+                "SELECT token_version FROM usuarios WHERE id_usuario = %s AND id_tienda = %s",
+                (user.id_usuario, user.id_tienda)
+            )
+            nueva_version = cursor.fetchone()['token_version']
+            conexion.commit()
+            _invalidar_cache_tienda(user.id_tienda)
+            if user.rol == 'superadmin':
+                expire = datetime.now(tz=timezone.utc) + timedelta(days=2)
+            else:
+                expire = datetime.now(tz=timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            nuevo_token = jwt.encode(
+                {"id_tienda": user.id_tienda, "id_usuario": user.id_usuario,
+                 "rol": user.rol, "token_version": nueva_version, "exp": expire},
+                SECRET_KEY, algorithm=ALGORITHM
+            )
+            return {"mensaje": "Contraseña actualizada", "access_token": nuevo_token}
         finally:
             if cursor:
                 cursor.close()
