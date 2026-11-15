@@ -206,6 +206,15 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
 
+        ids_prod = list({i.id_producto for i in venta.items if i.id_producto})
+        if ids_prod:
+            cursor.execute(
+                f"SELECT COUNT(*) FROM productos WHERE id_tienda = %s AND id_producto IN ({','.join(['%s'] * len(ids_prod))})",
+                [user.id_tienda] + ids_prod
+            )
+            if cursor.fetchone()[0] != len(ids_prod):
+                raise HTTPException(status_code=400, detail="Uno o más productos no pertenecen a esta tienda")
+
         id_lote = uuid.uuid4().hex[:12]
 
         for i in venta.items:

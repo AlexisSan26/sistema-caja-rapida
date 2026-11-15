@@ -50,6 +50,13 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
     cursor = None
     try:
         cursor = conexion.cursor()
+        ids = list({item.id_producto for item in lote.items})
+        cursor.execute(
+            f"SELECT COUNT(*) FROM productos WHERE id_tienda = %s AND id_producto IN ({','.join(['%s'] * len(ids))})",
+            [user.id_tienda] + ids
+        )
+        if cursor.fetchone()[0] != len(ids):
+            raise HTTPException(status_code=400, detail="Uno o más productos no pertenecen a esta tienda")
         for item in lote.items:
             cursor.execute(
                 "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s AND id_tienda = %s",
@@ -131,7 +138,7 @@ def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_us
                    TIME_FORMAT(e.fecha_entrada, '%H:%i') AS hora,
                    e.notas, e.fecha_caducidad, e.precio_costo
             FROM entradas_mercancia e
-            JOIN productos p ON p.id_producto = e.id_producto
+            JOIN productos p ON p.id_producto = e.id_producto AND p.id_tienda = e.id_tienda
             WHERE e.id_tienda = %s
         """
         params = [user.id_tienda]
