@@ -2,45 +2,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from database import conectar_bd
 from auth import get_current_user
-from models import TokenData, EntradaMercancia, EntradaLote, ResurtidoPorCodigo
+from models import TokenData, EntradaLote
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-@router.post("/entrada_mercancia")
-def entrada_mercancia(e: EntradaMercancia, user: TokenData = Depends(get_current_user)):
-    conexion = conectar_bd()
-    cursor = None
-    try:
-        cursor = conexion.cursor()
-        cursor.execute(
-            "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s AND id_tienda = %s",
-            (e.cantidad, e.id_producto, user.id_tienda)
-        )
-        if e.fecha_caducidad:
-            cursor.execute(
-                "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s AND id_tienda = %s",
-                (e.fecha_caducidad, e.id_producto, user.id_tienda)
-            )
-        cursor.execute("""
-            INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, notas, id_tienda)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (e.id_producto, e.cantidad, e.fecha_caducidad or None, e.notas or None, user.id_tienda))
-        conexion.commit()
-        return {"mensaje": "Entrada registrada correctamente"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        if conexion:
-            conexion.rollback()
-        logger.exception("Error al registrar entrada")
-        raise HTTPException(status_code=500, detail="Error al registrar entrada")
-    finally:
-        if cursor:
-            cursor.close()
-        conexion.close()
-
 
 @router.post("/entrada_mercancia_lote")
 def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_current_user)):
@@ -90,41 +55,6 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
         if cursor:
             cursor.close()
         conexion.close()
-
-
-@router.post("/resurtir_por_codigo")
-def resurtir_por_codigo(r: ResurtidoPorCodigo, user: TokenData = Depends(get_current_user)):
-    conexion = conectar_bd()
-    cursor = None
-    try:
-        cursor = conexion.cursor(dictionary=True)
-        cursor.execute(
-            "SELECT id_producto, nombre_producto FROM productos WHERE codigo_barras = %s AND activo = 1 AND id_tienda = %s",
-            (r.codigo_barras, user.id_tienda)
-        )
-        producto = cursor.fetchone()
-        if not producto:
-            return {"encontrado": False, "mensaje": "Producto no encontrado"}
-        cursor.execute(
-            "UPDATE productos SET stock_actual = stock_actual + %s WHERE id_producto = %s AND id_tienda = %s",
-            (r.cantidad, producto['id_producto'], user.id_tienda)
-        )
-        if r.fecha_caducidad:
-            cursor.execute(
-                "UPDATE productos SET fecha_caducidad = %s WHERE id_producto = %s AND id_tienda = %s",
-                (r.fecha_caducidad, producto['id_producto'], user.id_tienda)
-            )
-        cursor.execute(
-            "INSERT INTO entradas_mercancia (id_producto, cantidad, fecha_caducidad, id_tienda) VALUES (%s, %s, %s, %s)",
-            (producto['id_producto'], r.cantidad, r.fecha_caducidad or None, user.id_tienda)
-        )
-        conexion.commit()
-        return {"encontrado": True, "mensaje": f"Stock de {producto['nombre_producto']} actualizado"}
-    finally:
-        if cursor:
-            cursor.close()
-        conexion.close()
-
 
 @router.get("/historial_entradas")
 def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_user)):
