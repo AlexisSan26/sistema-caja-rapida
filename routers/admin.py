@@ -180,12 +180,17 @@ def admin_reset_password(id_usuario: int, datos: ResetPassword, user: TokenData 
     cursor = None
     try:
         cursor = conexion.cursor()
+        cursor.execute("SELECT id_tienda FROM usuarios WHERE id_usuario = %s", (id_usuario,))
+        fila = cursor.fetchone()
         cursor.execute(
-            "UPDATE usuarios SET password_hash = %s WHERE id_usuario = %s", (hashed, id_usuario)
+            "UPDATE usuarios SET password_hash = %s, token_version = token_version + 1 WHERE id_usuario = %s",
+            (hashed, id_usuario)
         )
         conexion.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        if fila:
+            _invalidar_cache_tienda(fila[0])
         return {"mensaje": "Contraseña actualizada"}
     finally:
         if cursor:
@@ -202,11 +207,18 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
     cursor = None
     try:
         cursor = conexion.cursor()
+        cursor.execute("SELECT id_tienda FROM usuarios WHERE id_usuario = %s", (id_usuario,))
+        fila = cursor.fetchone()
         # CAMBIO QUIRÚRGICO: Soft-delete en lugar de borrado físico
-        cursor.execute("UPDATE usuarios SET activo = 0 WHERE id_usuario = %s", (id_usuario,))
+        cursor.execute(
+            "UPDATE usuarios SET activo = 0, token_version = token_version + 1 WHERE id_usuario = %s",
+            (id_usuario,)
+        )
         conexion.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        if fila:
+            _invalidar_cache_tienda(fila[0])
         return {"mensaje": "Usuario eliminado correctamente"}
     finally:
         if cursor:
