@@ -104,6 +104,17 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
     cursor = None
     try:
         cursor = conexion.cursor()
+        if not (p.codigo_barras or "").strip():
+            cursor.execute("""
+                SELECT 1 FROM productos
+                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                LIMIT 1
+            """, (p.nombre_producto.strip(), user.id_tienda))
+            if cursor.fetchone():
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Ya existe «{p.nombre_producto.strip()}». Edítalo o agrega algo que lo distinga (tamaño, color, marca)."
+                )
         cursor.execute("""
             INSERT INTO productos
             (codigo_barras, nombre_producto, precio_sugerido, precio_costo,
@@ -134,6 +145,22 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
     cursor = None
     try:
         cursor = conexion.cursor()
+        if not (datos.codigo_barras or "").strip():
+            cursor.execute("""
+                SELECT 1 FROM productos
+                WHERE id_producto = %s AND id_tienda = %s AND nombre_producto = %s
+            """, (id_producto, user.id_tienda, datos.nombre_producto.strip()))
+            if not cursor.fetchone():
+                cursor.execute("""
+                    SELECT 1 FROM productos
+                    WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s AND id_producto <> %s
+                    LIMIT 1
+                """, (datos.nombre_producto.strip(), user.id_tienda, id_producto))
+                if cursor.fetchone():
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Ya existe «{datos.nombre_producto.strip()}». Agrega algo que lo distinga (tamaño, color, marca)."
+                    )
         cursor.execute("""
             UPDATE productos SET
                 nombre_producto = %s,
