@@ -98,6 +98,8 @@ def app(_test_schema_listo):
     """Importa la app YA con DB_NAME apuntando al schema de prueba (import tardío
     a propósito: database.py arma su connection pool en cuanto se importa)."""
     from main import app as fastapi_app
+    from auth import limiter
+    limiter.enabled = False  # los tests hacen cientos de peticiones seguidas; el límite de 300/min los tumbaría
     return fastapi_app
 
 
@@ -180,3 +182,58 @@ def dos_tiendas(client, _test_schema_listo):
     cajero_b["id_turno"] = turno_b
 
     return {"a": cajero_a, "b": cajero_b}
+
+
+# ─── Fixtures extra para tests de auth, admin y similares ─────────────────────
+def _crear_usuario(id_tienda: int, username: str, password: str, rol: str) -> dict:
+    """Usuario con contraseña REAL (hash bcrypt) para poder probar /login,
+    más su JWT ya armado. Igual que _crear_cajero pero con rol y password."""
+    from database import conectar_bd
+    from auth import SECRET_KEY, ALGORITHM, pwd_context
+    from jose import jwt
+    from datetime import datetime, timedelta, timezone
+
+    conexion = conectar_bd()
+    cursor = conexion.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "INSERT INTO usuarios (id_tienda, username, password_hash, rol) VALUES (%s, %s, %s, %s)",
+            (id_tienda, username, pwd_context.hash(password), rol)
+        )
+        conexion.commit()
+        id_usuario = cursor.lastrowid
+        cursor.execute("SELECT token_version FROM usuarios WHERE id_usuario = %s", (id_usuario,))
+        token_version = cursor.fetchone()["token_version"]
+    finally:
+        cursor.close()
+        conexion.close()
+
+    token = jwt.encode(
+        {
+            "id_tienda": id_tienda, "id_usuario": id_usuario, "rol": rol,
+            "token_version": token_version,
+            "exp": datetime.now(tz=timezone.utc) + timedelta(hours=1),
+        },
+        SECRET_KEY, algorithm=ALGORITHM,
+    )
+    return {"id_usuario": id_usuario, "id_tienda": id_tienda, "username": username,
+            "password": password, "token": token,
+            "headers": {"Authorization": f"Bearer {token}"}}
+
+
+@pytest.fixture(scope="function")
+def tienda_nueva(client, _test_schema_listo):
+    """Una tienda vacía (sin usuarios ni turno). Devuelve su id_tienda."""
+    return _crear_tienda("Tienda de prueba extra")
+
+
+@pytest.fixture(scope="function")
+def crear_usuario():
+    """Fábrica: crear_usuario(id_tienda, rol="cajero") -> dict con token y headers."""
+    contador = {"n": 0}
+
+    def _fabrica(id_tienda: int, rol: str = "cajero", password: str = "clave-de-prueba-1") -> dict:
+        contador["n"] += 1
+        return _crear_usuario(id_tienda, f"u_{id_tienda}_{contador['n']}", password, rol)
+
+    return _fabrica
