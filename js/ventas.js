@@ -155,6 +155,7 @@ async function registrar() {
                             producto: item.nombre,
                             cantidad: item.cantidad,
                             precio: item.precio,
+                            id_producto: item.id_producto || null,
                             monto_real: item.monto_cliente
                         }))
                     })

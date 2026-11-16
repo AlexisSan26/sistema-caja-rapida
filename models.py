@@ -113,6 +113,7 @@ class ItemFiadoLote(BaseModel):
     cantidad: float = 1.0
     precio: float
     monto_real: float | None = None
+    id_producto: int | None = None
 
 
 class FiadoLote(BaseModel):

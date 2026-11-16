@@ -345,12 +345,15 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (fiado.id_cuenta, nombre_limpio, item.cantidad, item.precio, item.monto_real, user.id_tienda))
 
-            cursor.execute("""
-                SELECT id_producto FROM productos
-                WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                LIMIT 1
-            """, (nombre_limpio, user.id_tienda))
-            prod = cursor.fetchone()
+            if item.id_producto:
+                prod = (item.id_producto,)
+            else:
+                cursor.execute("""
+                    SELECT id_producto FROM productos
+                    WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                    LIMIT 1
+                """, (nombre_limpio, user.id_tienda))
+                prod = cursor.fetchone()
             if prod:
                 cursor.execute("""
                     UPDATE productos SET stock_actual = stock_actual - %s
