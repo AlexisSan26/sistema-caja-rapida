@@ -96,10 +96,18 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
                 """, (cantidad_devolver, mov["id_producto_ref"], user.id_tienda))
             else:
                 cursor.execute("""
-                    UPDATE productos
-                    SET stock_actual = stock_actual + %s
+                    SELECT id_producto FROM productos
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                """, (cantidad_devolver, mov["producto"], user.id_tienda))
+                    ORDER BY id_producto
+                    LIMIT 1
+                """, (mov["producto"], user.id_tienda))
+                prod_nombre = cursor.fetchone()
+                if prod_nombre:
+                    cursor.execute("""
+                        UPDATE productos
+                        SET stock_actual = stock_actual + %s
+                        WHERE id_producto = %s AND id_tienda = %s
+                    """, (cantidad_devolver, prod_nombre["id_producto"], user.id_tienda))
 
         _log(cursor, user.id_tienda, user.id_usuario, "BORRAR_MOVIMIENTO",
              f"id={id_movimiento} tipo={mov['tipo_movimiento']} producto={mov['producto']} cantidad={mov['cantidad']}")
@@ -146,10 +154,18 @@ def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
                     """, (cantidad_devolver, mov["id_producto_ref"], user.id_tienda))
                 else:
                     cursor.execute("""
-                        UPDATE productos
-                        SET stock_actual = stock_actual + %s
+                        SELECT id_producto FROM productos
                         WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                    """, (cantidad_devolver, mov["producto"], user.id_tienda))
+                        ORDER BY id_producto
+                        LIMIT 1
+                    """, (mov["producto"], user.id_tienda))
+                    prod_nombre = cursor.fetchone()
+                    if prod_nombre:
+                        cursor.execute("""
+                            UPDATE productos
+                            SET stock_actual = stock_actual + %s
+                            WHERE id_producto = %s AND id_tienda = %s
+                        """, (cantidad_devolver, prod_nombre["id_producto"], user.id_tienda))
 
         _log(cursor, user.id_tienda, user.id_usuario, "BORRAR_LOTE",
              f"id_lote={id_lote} productos={len(filas)}")
@@ -243,14 +259,17 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                 cursor.execute("""
                     SELECT id_producto FROM productos
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
+                    ORDER BY id_producto
+                    LIMIT 1
                     FOR UPDATE
                 """, (nombre_limpio, user.id_tienda))
-                if cursor.fetchone():
+                prod_nombre = cursor.fetchone()
+                if prod_nombre:
                     cursor.execute("""
                         UPDATE productos
                         SET stock_actual = stock_actual - %s
-                        WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
-                    """, (float(i.cantidad_real if i.cantidad_real is not None else i.cantidad), nombre_limpio, user.id_tienda))
+                        WHERE id_producto = %s AND id_tienda = %s
+                    """, (float(i.cantidad_real if i.cantidad_real is not None else i.cantidad), prod_nombre[0], user.id_tienda))
 
             # Solo crear producto nuevo si NO viene id_producto (producto sin código escrito a mano)
             if not i.id_producto:
