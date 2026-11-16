@@ -123,6 +123,7 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
         """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido, p.precio_costo,
               p.stock_actual, p.stock_minimo, p.proveedor or None,
               p.fecha_caducidad or None, user.id_tienda, p.unidad_medida))
+        id_producto_nuevo = cursor.lastrowid  # guardarlo ANTES del INSERT a productos_globales, que lo pisa
 
         # ─── CATÁLOGO GLOBAL: registrar si tiene código de barras (Prioridad 3) ──
         if p.codigo_barras:
@@ -132,7 +133,7 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
             """, (p.codigo_barras, p.nombre_producto, p.unidad_medida))
 
         conexion.commit()
-        return {"mensaje": "Producto registrado", "id_producto": cursor.lastrowid}
+        return {"mensaje": "Producto registrado", "id_producto": id_producto_nuevo}
     finally:
         if cursor:
             cursor.close()
