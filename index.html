@@ -41,11 +41,24 @@
         <button class="menu-item" id="menu-historial" onclick="irA('historial')">📅 Historial</button>
         <button class="menu-item" id="menu-reportes" onclick="irA('reportes')">📊 Reportes</button>
         <button class="menu-item" id="menu-config" onclick="irA('config')">⚙️ Configuración</button>
+        <button class="menu-item" onclick="abrirCambiarPassword()">🔑 Cambiar contraseña</button>
         <button class="menu-item text-danger mt-auto" onclick="logoutSaaS()">🚪 Cerrar Sesión</button>
     </div>
 </div>
 
 <div id="aviso-error">⚠️ Sin conexión — reintentando...</div>
+
+<div id="modal-cambiar-pwd" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.45); z-index:9700; overflow-y:auto; padding:1rem;">
+    <div class="card shadow-lg" style="width:100%; max-width:380px; padding:1.5rem; border-radius:12px; margin:auto;">
+        <h5 class="fw-bold mb-3">🔑 Cambiar contraseña</h5>
+        <input type="password" id="pwd-actual" class="form-control mb-2" placeholder="Contraseña actual" autocomplete="current-password">
+        <input type="password" id="pwd-nueva" class="form-control mb-2" placeholder="Contraseña nueva (mínimo 6 caracteres)" autocomplete="new-password">
+        <input type="password" id="pwd-repetir" class="form-control mb-2" placeholder="Repite la contraseña nueva" autocomplete="new-password" onkeydown="if(event.key==='Enter') guardarCambiarPassword()">
+        <div id="pwd-msg" class="small mb-2"></div>
+        <button id="btn-guardar-pwd" class="btn btn-success w-100 mb-2" onclick="guardarCambiarPassword()">Guardar</button>
+        <button class="btn btn-outline-secondary w-100" onclick="cerrarCambiarPassword()">Cancelar</button>
+    </div>
+</div>
 <button id="btn-flotante" onclick="abrirFlujoResurtido()" title="Agregar mercancía">➕</button>
 
 <div id="pantalla-caja" class="pantalla activa">
