@@ -193,7 +193,11 @@ async function registrar() {
                         }))
                     })
                 });
-                if (!res.ok) { mostrarError("Error al guardar la venta."); return; }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    mostrarError(typeof err.detail === "string" ? err.detail : `Error al guardar la venta (${res.status}).`);
+                    return;
+                }
                 const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
                 imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
             } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }

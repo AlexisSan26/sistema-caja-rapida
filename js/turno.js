@@ -4,6 +4,12 @@ let grupoMenuActual = null;
 async function verificarEstadoInicial() {
     try {
         const res = await fetch(`${API_URL}/turno_actual`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            mostrarError(typeof err.detail === "string" ? err.detail : `⚠️ Error del servidor (${res.status}).`);
+            document.getElementById("texto-turno").innerText = "No se pudo verificar el turno";
+            return;
+        }
         const datos = await res.json();
         if (datos.estado === "ABIERTO") {
             idTurnoActual = datos.id_turno;
@@ -110,6 +116,11 @@ async function sincronizarTodo() {
     if (!idTurnoActual) return;
     try {
         const res = await fetch(`${API_URL}/turno_actual`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            mostrarError(typeof err.detail === "string" ? err.detail : `⚠️ Error del servidor (${res.status}).`);
+            return;  // no es "turno cerrado": no tocar la interfaz ni el carrito
+        }
         const datos = await res.json();
         if (datos.estado !== "ABIERTO") {
             try {
