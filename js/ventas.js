@@ -395,6 +395,14 @@ function enfocarProducto(permitirTeclado) {
     el.focus({ preventScroll: true });
 }
 
+function clicEnBlancoCarrito(e) {
+    // Clic en un espacio en blanco del carrito (no en botón, campo o enlace): regresar al producto
+    if (e.target.closest("input, button, select, textarea, a, label")) return;
+    // No quitar el foco si el cajero está seleccionando texto
+    if (window.getSelection && window.getSelection().toString()) return;
+    enfocarProducto();
+}
+
 function restaurarTecladoProducto(el) {
     if (el.getAttribute("inputmode") !== "none") return;
     el.removeAttribute("inputmode");
