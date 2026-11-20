@@ -94,7 +94,7 @@
             </div>
             <div class="mb-3" id="div-cliente" style="display:none;">
                 <label class="fw-bold">Cliente:</label>
-                <select id="select-cliente" class="form-select form-select-lg">
+                <select id="select-cliente" class="form-select form-select-lg" onchange="enfocarProducto()">
                     <option value="">— Selecciona cliente —</option>
                 </select>
             </div>
@@ -131,9 +131,9 @@
             </div>
             <div id="div-pago" class="mb-3" style="display:none;">
                 <div class="d-flex gap-2 mb-2">
-                    <button id="btn-efectivo" class="btn btn-success flex-fill fw-bold" onclick="seleccionarMetodo('efectivo')">Efectivo</button>
-                    <button id="btn-tarjeta" class="btn btn-outline-success flex-fill fw-bold" onclick="seleccionarMetodo('tarjeta')">Tarjeta</button>
-                    <button id="btn-transferencia" class="btn btn-outline-success flex-fill fw-bold" onclick="seleccionarMetodo('transferencia')">Transfer</button>
+                    <button id="btn-efectivo" class="btn btn-success flex-fill fw-bold" onclick="seleccionarMetodo('efectivo', true)">Efectivo</button>
+                    <button id="btn-tarjeta" class="btn btn-outline-success flex-fill fw-bold" onclick="seleccionarMetodo('tarjeta', true)">Tarjeta</button>
+                    <button id="btn-transferencia" class="btn btn-outline-success flex-fill fw-bold" onclick="seleccionarMetodo('transferencia', true)">Transfer</button>
                 </div>
                 <div id="div-billetes" class="mb-2">
                     <div class="d-flex gap-2 flex-wrap mb-2">
@@ -154,7 +154,7 @@
             <div class="mb-3" id="div-producto">
                 <label id="label-producto" class="fw-bold">Producto:</label>
                 <div class="input-group">
-                    <input type="text" id="producto" class="form-control form-control-lg" list="lista-productos" oninput="manejarInputProducto()" onkeydown="manejarEnterProducto(event)" autocomplete="off" placeholder="Ej. Sabritas, Coca-Cola...">
+                    <input type="text" id="producto" class="form-control form-control-lg" list="lista-productos" oninput="manejarInputProducto()" onkeydown="manejarEnterProducto(event)" onclick="restaurarTecladoProducto(this)" autocomplete="off" placeholder="Ej. Sabritas, Coca-Cola...">
                     <button class="btn btn-outline-secondary" type="button" onclick="abrirEscanerCaja()" title="Escanear">📷</button>
                 </div>
                 <datalist id="lista-productos"></datalist>
@@ -618,7 +618,7 @@
             <div id="corte-diferencia-label" class="text-muted" style="font-size:.8rem;"></div>
         </div>
         <button class="btn btn-danger w-100 btn-lg mb-2 fw-bold" onclick="confirmarCorte()">✅ Confirmar y Cerrar Caja</button>
-        <button class="btn btn-outline-secondary w-100" onclick="document.getElementById('modal-corte').style.display='none'">Cancelar</button>
+        <button class="btn btn-outline-secondary w-100" onclick="document.getElementById('modal-corte').style.display='none'; enfocarProducto()">Cancelar</button>
     </div>
 </div>
 

@@ -52,7 +52,7 @@ function configurarInterfazAbierta() {
     cargarProductosEnMemoria();
     if (intervaloActualizacion) clearInterval(intervaloActualizacion);
     intervaloActualizacion = setInterval(sincronizarTodo, 8000);
-    setTimeout(() => document.getElementById("producto").focus(), 200);
+    setTimeout(enfocarProducto, 200);
 }
 
 function abrirMenuMovimiento(clave) {
@@ -70,6 +70,7 @@ function cerrarMenuMovimiento() {
     document.getElementById("bs-mov").style.transform = "translateY(100%)";
     setTimeout(() => { document.getElementById("bs-mov-overlay").style.display = "none"; }, 300);
     grupoMenuActual = null;
+    enfocarProducto();
 }
 
 function reimprimirDesdeMenu() {

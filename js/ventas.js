@@ -56,6 +56,7 @@ function ajustarCampos() {
         labelMonto.innerText = "Monto ($):";
         btnActualizarPrecio.style.display = "none";
         divBtnAgregar.style.display = "none";
+        setTimeout(() => enfocarProducto(true), 100);
     } else if (tipo === "FONDO_CAJA") {
         divProducto.style.display = "none";
         divCantidad.style.visibility = "hidden";
@@ -381,9 +382,30 @@ function agregarALista() {
     document.getElementById("producto").focus();
 }
 
+function enfocarProducto(permitirTeclado) {
+    const el = document.getElementById("producto");
+    if (!el) return;
+    // Pantalla táctil + pistola Bluetooth: enfocar SIN abrir el teclado en pantalla (inputmode="none").
+    // La pistola escribe igual; al tocar el input, restaurarTecladoProducto() devuelve el teclado.
+    // Con permitirTeclado=true sí se permite (cuando el cajero va a escribir a mano).
+    if (window.matchMedia("(pointer: coarse)").matches) {
+        if (permitirTeclado) el.removeAttribute("inputmode");
+        else el.setAttribute("inputmode", "none");
+    }
+    el.focus({ preventScroll: true });
+}
+
+function restaurarTecladoProducto(el) {
+    if (el.getAttribute("inputmode") !== "none") return;
+    el.removeAttribute("inputmode");
+    el.blur();
+    el.focus();  // dentro del toque del usuario: ahora sí abre el teclado
+}
+
 function quitarDelCarrito(idx) {
     carritoItems.splice(idx, 1);
     renderCarrito();
+    enfocarProducto();
 }
 
 function renderCarrito() {
@@ -418,7 +440,9 @@ function renderCarrito() {
                 ${esPeso ? '1' : `<input type="number" class="form-control form-control-sm text-center p-1"
                     style="width:56px;display:inline-block;"
                     value="${item.cantidad}" min="0.01" step="any"
-                    onchange="actualizarCantidadCarrito(${idx}, this.value)">`}
+                    onchange="actualizarCantidadCarrito(${idx}, this.value)"
+                    enterkeyhint="done"
+                    onkeydown="if(event.key==='Enter'||event.keyCode===13){this.blur();enfocarProducto(true);}">`}
             </td>
             <td class="text-center" style="vertical-align:middle;font-size:.9rem;">$${esPeso ? item.monto_cliente.toFixed(2) : item.precio.toFixed(2)}</td>
             <td class="text-center" style="vertical-align:middle;">
@@ -742,7 +766,7 @@ function manejarEnterCampo(event) {
     }
 }
 
-function seleccionarMetodo(metodo) {
+function seleccionarMetodo(metodo, enfocar) {
     ["efectivo","tarjeta","transferencia"].forEach(m => {
         const btn = document.getElementById("btn-" + m);
         btn.className = m === metodo
@@ -752,6 +776,7 @@ function seleccionarMetodo(metodo) {
     document.getElementById("div-billetes").style.display = metodo === "efectivo" ? "block" : "none";
     document.getElementById("div-cambio").style.display = "none";
     document.getElementById("monto-recibido").value = "";
+    if (enfocar) enfocarProducto();
 }
 
 function agregarBillete(valor) {
@@ -759,11 +784,13 @@ function agregarBillete(valor) {
     const actual = parseFloat(input.value) || 0;
     input.value = (actual + valor).toFixed(2);
     actualizarCambio();
+    enfocarProducto();
 }
 
 function limpiarRecibido() {
     document.getElementById("monto-recibido").value = "";
     actualizarCambio();
+    enfocarProducto();
 }
 
 function actualizarCambio() {
