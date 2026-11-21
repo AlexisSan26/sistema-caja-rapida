@@ -431,7 +431,10 @@ function clicEnBlancoMovimiento(e) {
     // No quitar el foco si el cajero está seleccionando texto
     if (window.getSelection && window.getSelection().toString()) return;
     const tipo = document.getElementById("tipo").value;
-    if (tipo === "RETIRO") enfocarProducto(true);   // el concepto se escribe a mano: con teclado
+    if (tipo === "RETIRO") {   // el concepto se escribe a mano: con teclado
+        if (document.activeElement) document.activeElement.blur();  // fuerza reabrir el teclado en móvil
+        enfocarProducto(true);
+    }
     else if (tipo === "VENTA" || tipo === "FIADO") enfocarProducto();
 }
 
