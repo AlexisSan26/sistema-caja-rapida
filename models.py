@@ -58,6 +58,7 @@ class ActualizacionProducto(BaseModel):
     codigo_barras: str | None = None
     fecha_caducidad: str | None = None
     unidad_medida: str = "pieza"
+    controla_stock: bool | None = None
 
 
 class EntradaMercancia(BaseModel):

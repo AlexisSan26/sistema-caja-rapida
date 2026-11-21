@@ -177,7 +177,6 @@ def test_desactivar_tienda_bloquea_y_cierra_turno_activar_la_reabre(client, supe
     assert client.get("/yo", headers=a["headers"]).status_code == 200
 
 
-@pytest.mark.xfail(strict=False, reason="#71: desactivar no pone turno_activo = NULL y al reactivar no se puede abrir turno")
 def test_despues_de_reactivar_la_tienda_se_puede_abrir_turno(client, superadmin, dos_tiendas):
     a = dos_tiendas["a"]
     h = superadmin["headers"]

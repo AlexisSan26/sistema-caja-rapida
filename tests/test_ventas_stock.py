@@ -150,7 +150,6 @@ def test_venta_con_id_baja_el_producto_correcto_aunque_haya_homonimos(client, do
 
 
 # ─── Bugs conocidos (xfail) ───────────────────────────────────────────────────
-@pytest.mark.xfail(strict=False, reason="#64: se puede borrar un movimiento de un turno ya cerrado")
 def test_no_se_puede_borrar_movimiento_de_turno_cerrado(client, dos_tiendas):
     a = dos_tiendas["a"]
     _vender(client, a, [_item("Venta antes del corte", 10)])

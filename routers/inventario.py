@@ -172,13 +172,14 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
                 proveedor       = %s,
                 codigo_barras   = %s,
                 fecha_caducidad = %s,
-                unidad_medida   = %s
+                unidad_medida   = %s,
+                controla_stock  = COALESCE(%s, controla_stock)
             WHERE id_producto = %s AND activo = 1 AND id_tienda = %s
         """, (
             datos.nombre_producto, datos.precio_sugerido, datos.precio_costo,
             datos.stock_actual, datos.stock_minimo,
             datos.proveedor or None, datos.codigo_barras or None,
-            datos.fecha_caducidad or None, datos.unidad_medida, id_producto, user.id_tienda
+            datos.fecha_caducidad or None, datos.unidad_medida, datos.controla_stock, id_producto, user.id_tienda
         ))
         conexion.commit()
         if cursor.rowcount > 0:
@@ -218,7 +219,7 @@ def listar_inventario(q: str = "", proveedor: str = "", user: TokenData = Depend
         cursor = conexion.cursor(dictionary=True)
         sql = """SELECT id_producto, codigo_barras, nombre_producto,
                         precio_sugerido, precio_costo, stock_actual, stock_minimo,
-                        proveedor, fecha_caducidad, unidad_medida
+                        proveedor, fecha_caducidad, unidad_medida, controla_stock
                  FROM productos WHERE activo = 1 AND id_tienda = %s"""
         params = [user.id_tienda]
         if q:
@@ -245,13 +246,13 @@ def obtener_alertas(user: TokenData = Depends(get_current_user)):
         cursor.execute("""
             SELECT id_producto, codigo_barras, nombre_producto, stock_actual, stock_minimo, proveedor, fecha_caducidad,
                 CASE 
-                    WHEN stock_actual <= stock_minimo THEN 'STOCK_BAJO' 
+                    WHEN controla_stock = 1 AND stock_actual <= stock_minimo THEN 'STOCK_BAJO' 
                     WHEN fecha_caducidad IS NOT NULL AND fecha_caducidad <= DATE_ADD(NOW(), INTERVAL 7 DAY) THEN 'POR_CADUCAR' 
                     ELSE 'OK' 
                 END as alerta 
             FROM productos 
             WHERE activo = 1 AND id_tienda = %s AND (
-                stock_actual <= stock_minimo OR (fecha_caducidad IS NOT NULL AND fecha_caducidad <= DATE_ADD(NOW(), INTERVAL 7 DAY))
+                (controla_stock = 1 AND stock_actual <= stock_minimo) OR (fecha_caducidad IS NOT NULL AND fecha_caducidad <= DATE_ADD(NOW(), INTERVAL 7 DAY))
             )
             ORDER BY alerta DESC, fecha_caducidad
         """, (user.id_tienda,))

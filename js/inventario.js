@@ -53,7 +53,8 @@ function renderInventario(productos) {
     const cont = document.getElementById("lista-inventario");
     if (productos.length === 0) { cont.innerHTML = "<p class='text-center text-muted mt-4'>No se encontraron productos.</p>"; return; }
     cont.innerHTML = productos.map(p => {
-        const stockColor = p.stock_actual <= p.stock_minimo ? 'text-danger fw-bold' : 'text-success fw-bold';
+        const sinStock = p.controla_stock == 0;
+        const stockColor = sinStock ? 'text-muted' : (p.stock_actual <= p.stock_minimo ? 'text-danger fw-bold' : 'text-success fw-bold');
         const hoy = new Date();
         const cad = p.fecha_caducidad ? new Date(p.fecha_caducidad) : null;
         const diasCad = cad ? Math.ceil((cad - hoy) / (1000*60*60*24)) : null;
@@ -62,7 +63,7 @@ function renderInventario(productos) {
             <div class="card-body py-2 px-3">
                 <div class="d-flex justify-content-between align-items-start">
                     <div><div class="fw-bold">${esc(p.nombre_producto)} ${alertaCad}</div><small class="text-muted">${esc(p.proveedor)}</small></div>
-                    <div class="text-end"><div class="${stockColor}">Stock: ${p.stock_actual} ${p.unidad_medida || 'pza'}</div><small class="text-muted">$${parseFloat(p.precio_sugerido).toFixed(2)}</small></div>
+                    <div class="text-end"><div class="${stockColor}">${sinStock ? 'Sin control de stock' : `Stock: ${p.stock_actual} ${p.unidad_medida || 'pza'}`}</div><small class="text-muted">$${parseFloat(p.precio_sugerido).toFixed(2)}</small></div>
                 </div>
             </div>
         </div>`;
@@ -76,7 +77,7 @@ function abrirDetalleProducto(idProducto) {
     document.getElementById("sheet-nombre").textContent = p.nombre_producto;
     document.getElementById("sheet-precio").textContent = `$${parseFloat(p.precio_sugerido).toFixed(2)}`;
     document.getElementById("sheet-costo").textContent = p.precio_costo ? `$${parseFloat(p.precio_costo).toFixed(2)}` : "—";
-    document.getElementById("sheet-stock").textContent = p.stock_actual;
+    document.getElementById("sheet-stock").textContent = p.controla_stock == 0 ? "Sin control" : p.stock_actual;
     document.getElementById("sheet-unidad").textContent = p.unidad_medida || "pieza";
     document.getElementById("sheet-minimo").textContent = p.stock_minimo;
     document.getElementById("sheet-proveedor").textContent = p.proveedor || "—";
@@ -102,6 +103,10 @@ function activarModoEdicion() {
     document.getElementById("edit-costo").value = p.precio_costo || "";
     document.getElementById("edit-stock").value = p.stock_actual;
     document.getElementById("edit-minimo").value = p.stock_minimo;
+    const sinStockEdit = p.controla_stock == 0;
+    document.getElementById("edit-sin-stock").checked = sinStockEdit;
+    document.getElementById("edit-stock").disabled = sinStockEdit;
+    document.getElementById("edit-minimo").disabled = sinStockEdit;
     document.getElementById("edit-proveedor").value = p.proveedor || "";
     document.getElementById("edit-codigo").value = p.codigo_barras || "";
     document.getElementById("edit-unidad").value = p.unidad_medida || "pieza";
@@ -122,8 +127,9 @@ async function guardarEdicion() {
     if (!productoEnEdicion) return;
     const nombre = document.getElementById("edit-nombre").value.trim();
     const precio = parseFloat(document.getElementById("edit-precio").value);
-    const stock = parseFloat(document.getElementById("edit-stock").value);
-    const minimo = parseFloat(document.getElementById("edit-minimo").value);
+    const sinStock = document.getElementById("edit-sin-stock").checked;
+    const stock = sinStock ? 0 : parseFloat(document.getElementById("edit-stock").value);
+    const minimo = sinStock ? 0 : parseFloat(document.getElementById("edit-minimo").value);
     if (!nombre) { alert("El nombre no puede estar vacío."); return; }
     if (isNaN(precio) || precio < 0) { alert("Escribe un precio válido."); return; }
     if (isNaN(stock) || stock < 0) { alert("El stock no puede ser negativo."); return; }
@@ -135,7 +141,7 @@ async function guardarEdicion() {
             body: JSON.stringify({
                 nombre_producto: nombre, precio_sugerido: precio,
                 precio_costo: parseFloat(document.getElementById("edit-costo").value) || null,
-                stock_actual: stock, stock_minimo: minimo,
+                stock_actual: stock, stock_minimo: minimo, controla_stock: !sinStock,
                 proveedor: document.getElementById("edit-proveedor").value.trim() || null,
                 codigo_barras: document.getElementById("edit-codigo").value.trim() || null,
                 fecha_caducidad: document.getElementById("edit-caducidad").value || null,
