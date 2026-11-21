@@ -163,7 +163,7 @@ async function registrar() {
     const tipo = document.getElementById("tipo").value;
 
     if (["VENTA","FIADO"].includes(tipo)) {
-        if (carritoItems.length === 0) { alert("Agrega al menos un producto a la lista antes de guardar."); return; }
+        if (carritoItems.length === 0) { alert("Agrega al menos un producto a la lista antes de guardar."); enfocarProducto(); return; }
 
         if (tipo === "FIADO") {
             const idCliente = document.getElementById("select-cliente").value;
