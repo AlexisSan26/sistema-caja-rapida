@@ -439,6 +439,10 @@
                     <input type="number" id="nuevo-stock" class="form-control" value="0" step="any">
                 </div>
             </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="nuevo-sin-stock" onchange="document.getElementById('nuevo-stock').disabled=this.checked;document.getElementById('nuevo-minimo').disabled=this.checked">
+                <label class="form-check-label" for="nuevo-sin-stock">No llevar control de existencias <span class="text-muted">(recargas, servicios, lo que no cuentas)</span></label>
+            </div>
             <div class="row mb-2">
                 <div class="col-6">
                     <label class="fw-bold">Stock mínimo</label>

@@ -46,6 +46,7 @@ class ProductoNuevo(BaseModel):
     proveedor: str | None = None
     fecha_caducidad: str | None = None
     unidad_medida: str = "pieza"
+    controla_stock: bool = True
 
 
 class ActualizacionProducto(BaseModel):

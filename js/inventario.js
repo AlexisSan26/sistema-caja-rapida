@@ -260,6 +260,9 @@ function irAltaNueva() {
     document.getElementById("nuevo-precio").value = "";
     document.getElementById("nuevo-stock").value = "0";
     document.getElementById("nuevo-minimo").value = "5";
+    document.getElementById("nuevo-sin-stock").checked = false;
+    document.getElementById("nuevo-stock").disabled = false;
+    document.getElementById("nuevo-minimo").disabled = false;
     document.getElementById("nuevo-proveedor").value = "";
     document.getElementById("nuevo-caducidad").value = "";
     document.getElementById("nuevo-unidad").value = "pieza";
@@ -284,8 +287,9 @@ async function guardarProductoNuevo() {
                 codigo_barras: document.getElementById("nuevo-codigo").value.trim() || null,
                 nombre_producto: nombre, precio_sugerido: precio,
                 precio_costo: parseFloat(document.getElementById("nuevo-costo").value) || null,
-                stock_actual: parseFloat(document.getElementById("nuevo-stock").value) || 0,
-                stock_minimo: parseFloat(document.getElementById("nuevo-minimo").value) || 5,
+                stock_actual: document.getElementById("nuevo-sin-stock").checked ? 0 : (parseFloat(document.getElementById("nuevo-stock").value) || 0),
+                stock_minimo: document.getElementById("nuevo-sin-stock").checked ? 0 : (parseFloat(document.getElementById("nuevo-minimo").value) || 5),
+                controla_stock: !document.getElementById("nuevo-sin-stock").checked,
                 proveedor: document.getElementById("nuevo-proveedor").value.trim() || null,
                 fecha_caducidad: document.getElementById("nuevo-caducidad").value || null,
                 unidad_medida: document.getElementById("nuevo-unidad").value || "pieza"

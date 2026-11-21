@@ -118,11 +118,11 @@ def registrar_producto(p: ProductoNuevo, user: TokenData = Depends(get_current_u
         cursor.execute("""
             INSERT INTO productos
             (codigo_barras, nombre_producto, precio_sugerido, precio_costo,
-             stock_actual, stock_minimo, proveedor, fecha_caducidad, activo, id_tienda, unidad_medida)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s)
+             stock_actual, stock_minimo, proveedor, fecha_caducidad, activo, id_tienda, unidad_medida, controla_stock)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s)
         """, (p.codigo_barras or None, p.nombre_producto, p.precio_sugerido, p.precio_costo,
               p.stock_actual, p.stock_minimo, p.proveedor or None,
-              p.fecha_caducidad or None, user.id_tienda, p.unidad_medida))
+              p.fecha_caducidad or None, user.id_tienda, p.unidad_medida, p.controla_stock))
         id_producto_nuevo = cursor.lastrowid  # guardarlo ANTES del INSERT a productos_globales, que lo pisa
 
         # ─── CATÁLOGO GLOBAL: registrar si tiene código de barras (Prioridad 3) ──
