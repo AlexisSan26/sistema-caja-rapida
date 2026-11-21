@@ -43,6 +43,7 @@ function irA(pantalla) {
     if (pantalla === 'entradas') cargarEntradas();
     if (pantalla === 'reportes') { cargarReporteProductos(); cargarResumenDashboardTurno(); }
     if (pantalla === 'config') cargarConfiguracionTicket();
+    if (pantalla === 'caja') setTimeout(() => enfocarProducto(document.getElementById("tipo").value === "RETIRO"), 100);
 }
 
 function toggleMenu() {
