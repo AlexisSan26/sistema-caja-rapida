@@ -35,9 +35,13 @@ app.add_middleware(SlowAPIMiddleware)
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "https://alexissan26.github.io/sistema-caja-rapida/").split(",")
 ALLOWED_ORIGINS += ["http://localhost:63342", "http://127.0.0.1:63342", "http://localhost:5500", "http://127.0.0.1:5500"]
 
+# Solo en desarrollo: permite abrir el frontend desde el teléfono por la IP de la red local
+LAN_ORIGIN_REGEX = r"http://(192\.168|10|172\.(1[6-9]|2\d|3[01]))(\.\d{1,3}){2,3}:\d+" if ENV == "development" else None
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=LAN_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
