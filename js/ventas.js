@@ -378,14 +378,15 @@ function agregarProductoAlCarrito(nombre, precio, cantidad = 1, id_producto = nu
 function agregarALista() {
     const tipo = document.getElementById("tipo").value;
     if (!["VENTA","FIADO"].includes(tipo)) return;
-    const nombre = document.getElementById("producto").value.trim();
+    let nombre = document.getElementById("producto").value.trim();
     const precio = parseFloat(document.getElementById("precio").value);
     const cantidadRaw = parseFloat(document.getElementById("cantidad").value) || 1;
     if (!nombre) { mostrarError("Escribe el nombre del producto."); return; }
     if (isNaN(precio) || precio < 0) { mostrarError("Escribe un precio válido."); return; }
 
     // Detectar si es producto por peso en memoria o viene del fetch
-    const prod = todosLosProductos.find(p => p.nombre_producto === nombre);
+    const prod = productoPorTexto(nombre);
+    if (prod) nombre = prod.nombre_producto;  // sin la etiqueta de código y precio
     const tipoUnidad = prod ? clasificarUnidad(prod.unidad_medida) : (precioPorKgActual != null ? 'peso' : 'pieza');
 
     let cantidadFinal, precioFinal;
@@ -515,6 +516,26 @@ function actualizarCantidadCarrito(idx, val) {
     if (isNaN(n) || n <= 0) { quitarDelCarrito(idx); return; }
     carritoItems[idx].cantidad = n;
     renderCarrito();
+}
+
+// #89: si dos productos se llaman igual, el datalist los muestra con código y precio para poder elegir
+let _repetidosCache = { ref: null, nombres: new Set() };
+function nombresRepetidos() {
+    if (_repetidosCache.ref !== todosLosProductos) {
+        const vistos = new Set(), repetidos = new Set();
+        todosLosProductos.forEach(p => (vistos.has(p.nombre_producto) ? repetidos : vistos).add(p.nombre_producto));
+        _repetidosCache = { ref: todosLosProductos, nombres: repetidos };
+    }
+    return _repetidosCache.nombres;
+}
+function etiquetaProducto(p) {
+    if (!nombresRepetidos().has(p.nombre_producto)) return p.nombre_producto;
+    const cod = p.codigo_barras ? String(p.codigo_barras).slice(-4) : "s/código";
+    return `${p.nombre_producto} · ${cod} · $${parseFloat(p.precio_sugerido).toFixed(2)}`;
+}
+function productoPorTexto(texto) {
+    return todosLosProductos.find(p => etiquetaProducto(p) === texto)
+        || todosLosProductos.find(p => p.nombre_producto === texto);
 }
 
 let debounceTimer = null;
@@ -661,9 +682,9 @@ async function manejarInputProducto() {
         ).slice(0, 20);
 
         const datalist = document.getElementById("lista-productos");
-        datalist.innerHTML = resultados.map(p => `<option value="${esc(p.nombre_producto)}">`).join("");
+        datalist.innerHTML = resultados.map(p => `<option value="${esc(etiquetaProducto(p))}">`).join("");
 
-        const coincidencia = resultados.find(p => p.nombre_producto === textoActual.trim());
+        const coincidencia = productoPorTexto(textoActual.trim());
         if (coincidencia) {
             const tipoUnidad = clasificarUnidad(coincidencia.unidad_medida);
             if (tipoUnidad === 'peso') {
