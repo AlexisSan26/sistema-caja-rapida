@@ -100,7 +100,11 @@ async function borrarDesdeMenu() {
             ? `${API_URL}/borrar_lote/${grupo.id_lote}`
             : `${API_URL}/borrar_movimiento/${grupo.items[0].id_movimiento}`;
         const res = await fetch(url, { method: "DELETE" });
-        if (!res.ok) { mostrarError("Error al cancelar."); actualizarLista(); }
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            mostrarError(typeof err.detail === "string" ? err.detail : "Error al cancelar.");
+            actualizarLista();
+        }
     } catch (e) {
         mostrarError("Error de conexión al cancelar.");
         actualizarLista();

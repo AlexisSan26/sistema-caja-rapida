@@ -76,12 +76,20 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
         cursor = conexion.cursor(dictionary=True)
         conexion.start_transaction()
         cursor.execute(
-            "SELECT tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
+            "SELECT id_turno, tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
             (id_movimiento, user.id_tienda)
         )
         mov = cursor.fetchone()
         if not mov:
             return {"mensaje": "Movimiento no encontrado"}
+
+        # #64: un turno ya cerrado no se modifica (el corte quedaría distinto al que se entregó)
+        cursor.execute(
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            (mov["id_turno"], user.id_tienda)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=409, detail="No se puede cancelar: el turno ya está cerrado")
 
         cursor.execute("DELETE FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
                        (id_movimiento, user.id_tienda))
@@ -114,6 +122,9 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
 
         conexion.commit()
         return {"mensaje": "Movimiento cancelado"}
+    except HTTPException:
+        conexion.rollback()
+        raise
     except Exception as e:
         if conexion:
             conexion.rollback()
@@ -133,12 +144,20 @@ def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
         cursor = conexion.cursor(dictionary=True)
         conexion.start_transaction()
         cursor.execute(
-            "SELECT tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_lote = %s AND id_tienda = %s FOR UPDATE",
+            "SELECT id_turno, tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_lote = %s AND id_tienda = %s FOR UPDATE",
             (id_lote, user.id_tienda)
         )
         filas = cursor.fetchall()
         if not filas:
             return {"mensaje": "Ticket no encontrado"}
+
+        # #64: un turno ya cerrado no se modifica
+        cursor.execute(
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            (filas[0]["id_turno"], user.id_tienda)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=409, detail="No se puede cancelar: el turno ya está cerrado")
 
         cursor.execute("DELETE FROM movimientos WHERE id_lote = %s AND id_tienda = %s",
                        (id_lote, user.id_tienda))
@@ -172,6 +191,9 @@ def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
 
         conexion.commit()
         return {"mensaje": "Ticket cancelado", "productos_afectados": len(filas)}
+    except HTTPException:
+        conexion.rollback()
+        raise
     except Exception as e:
         if conexion:
             conexion.rollback()
