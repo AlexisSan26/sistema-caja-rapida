@@ -424,12 +424,15 @@ function enfocarProducto(permitirTeclado) {
     el.focus({ preventScroll: true });
 }
 
-function clicEnBlancoCarrito(e) {
-    // Clic en un espacio en blanco del carrito (no en botón, campo o enlace): regresar al producto
-    if (e.target.closest("input, button, select, textarea, a, label")) return;
+function clicEnBlancoMovimiento(e) {
+    // Clic en un espacio en blanco de "Registrar Movimiento" (no en botón, campo, enlace ni cámara):
+    // regresa el foco al input principal según el tipo (Venta/Fiado → producto, Retiro → concepto).
+    if (e.target.closest("input, button, select, textarea, a, label, option, #escaner-caja-container")) return;
     // No quitar el foco si el cajero está seleccionando texto
     if (window.getSelection && window.getSelection().toString()) return;
-    enfocarProducto();
+    const tipo = document.getElementById("tipo").value;
+    if (tipo === "RETIRO") enfocarProducto(true);   // el concepto se escribe a mano: con teclado
+    else if (tipo === "VENTA" || tipo === "FIADO") enfocarProducto();
 }
 
 function restaurarTecladoProducto(el) {
