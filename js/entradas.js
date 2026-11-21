@@ -98,7 +98,7 @@ function renderLoteResurtido() {
                 <div class="border rounded p-2 mb-2" style="background:#fff;">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span style="font-size:.9rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;" title="${esc(item.nombre)}">${esc(item.nombre)}</span>
-                        <span class="text-muted" style="font-size:.8rem;">${item.controla_stock == 0 ? 'Sin control de stock' : `${item.controla_stock == 0 ? 'Sin control de stock' : `Stock: <b>${item.stock_actual}</b>`}`}</span>
+                        <span class="text-muted" style="font-size:.8rem;">${item.controla_stock == 0 ? 'Sin control de stock' : `Stock: <b>${item.stock_actual}</b>`}</span>
                         <button class="btn btn-sm btn-outline-danger py-0 px-2 lh-1" onclick="quitarDelLoteResurtido(${idx})">✕</button>
                     </div>
                     <div class="d-flex gap-2">
