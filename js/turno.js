@@ -119,7 +119,7 @@ async function cargarProductosEnMemoria() {
 }
 
 async function sincronizarTodo() {
-    if (!idTurnoActual) return;
+    if (!idTurnoActual || document.hidden) return;  // #83: con la pantalla apagada o la pestaña oculta no se consulta
     try {
         const res = await fetch(`${API_URL}/turno_actual`);
         if (!res.ok) {

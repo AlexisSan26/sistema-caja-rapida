@@ -15,7 +15,6 @@ def reporte_productos(dias: int = 7, user: TokenData = Depends(get_current_user)
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
-        fecha_inicio = datetime.now() - timedelta(days=dias)
         cursor.execute("""
             SELECT producto,
                    SUM(unidades) AS unidades_vendidas,
@@ -24,17 +23,17 @@ def reporte_productos(dias: int = 7, user: TokenData = Depends(get_current_user)
                 SELECT producto, COALESCE(cantidad_real, cantidad) AS unidades,
                        COALESCE(cantidad_real, cantidad) * precio_unitario AS total
                 FROM movimientos
-                WHERE tipo_movimiento = 'VENTA' AND id_tienda = %s AND fecha_hora >= %s
+                WHERE tipo_movimiento = 'VENTA' AND id_tienda = %s AND fecha_hora >= DATE_SUB(NOW(), INTERVAL %s DAY)
                 UNION ALL
                 SELECT producto, cantidad AS unidades,
                        COALESCE(monto_real, cantidad * precio) AS total
                 FROM detalle_fiado
-                WHERE id_tienda = %s AND fecha_hora >= %s
+                WHERE id_tienda = %s AND fecha_hora >= DATE_SUB(NOW(), INTERVAL %s DAY)
             ) t
             GROUP BY producto
             ORDER BY unidades_vendidas DESC
             LIMIT 10
-        """, (user.id_tienda, fecha_inicio, user.id_tienda, fecha_inicio))
+        """, (user.id_tienda, dias, user.id_tienda, dias))
         return cursor.fetchall()
     finally:
         if cursor:

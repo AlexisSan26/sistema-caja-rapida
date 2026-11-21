@@ -34,6 +34,9 @@ window.onload = function () {
     }
 };
 
+// #83: al volver a la app se sincroniza de inmediato (mientras estuvo oculta no se consultó)
+document.addEventListener("visibilitychange", () => { if (!document.hidden) sincronizarTodo(); });
+
 async function cargarDatosUsuario() {
     try {
         const res = await fetch(`${API_URL}/yo`);

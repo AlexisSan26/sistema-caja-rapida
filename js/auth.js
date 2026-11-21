@@ -14,6 +14,8 @@ async function loginSaaS() {
             localStorage.setItem('saas_token', data.access_token);
             document.getElementById('modal-login-saas').style.display = 'none';
             window.location.reload();
+        } else if (res.status === 429) {
+            alert('⏳ Demasiados intentos. Espera un minuto e inténtalo de nuevo.');
         } else {
             alert('❌ Usuario o contraseña incorrectos.');
         }

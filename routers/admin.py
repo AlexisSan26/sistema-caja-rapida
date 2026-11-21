@@ -84,6 +84,7 @@ def admin_desactivar_tienda(id_tienda: int, user: TokenData = Depends(get_curren
         cursor.execute("""
             UPDATE turnos 
             SET estado = 'CERRADO', 
+                turno_activo = NULL,
                 fecha_cierre = CURRENT_TIMESTAMP 
             WHERE id_tienda = %s AND estado = 'ABIERTO'
         """, (id_tienda,))
@@ -277,7 +278,7 @@ def admin_ventas_hoy(user: TokenData = Depends(get_current_user)):
                 t.id_tienda, 
                 t.nombre_comercial, 
                 t.activa,
-                COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','FONDO_CAJA','COBRO_FIADO') 
+                COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','COBRO_FIADO') 
                                   THEN m.total_movimiento ELSE 0 END), 0) AS ventas_hoy,
                 COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'RETIRO' 
                                   THEN m.total_movimiento ELSE 0 END), 0) AS retiros_hoy,
@@ -332,7 +333,7 @@ def admin_ventas_reporte(
                 t.id_tienda,
                 t.nombre_comercial,
                 t.activa,
-                COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','FONDO_CAJA','COBRO_FIADO')
+                COALESCE(SUM(CASE WHEN m.tipo_movimiento IN ('VENTA','COBRO_FIADO')
                                   THEN m.total_movimiento ELSE 0 END), 0) AS total_ventas,
                 COALESCE(SUM(CASE WHEN m.tipo_movimiento = 'RETIRO'
                                   THEN m.total_movimiento ELSE 0 END), 0) AS total_retiros,
