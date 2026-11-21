@@ -50,6 +50,7 @@ function configurarInterfazAbierta() {
     renderCarrito();
     actualizarLista();
     cargarProductosEnMemoria();
+    cargarClientesSelect();  // precarga la lista para que Fiado abra al instante
     if (intervaloActualizacion) clearInterval(intervaloActualizacion);
     intervaloActualizacion = setInterval(sincronizarTodo, 8000);
     setTimeout(enfocarProducto, 200);

@@ -21,6 +21,7 @@ function ajustarCampos() {
     const divBtnAgregar = document.getElementById("div-btn-agregar");
     document.getElementById("producto").value = "";
     document.getElementById("precio").value = "";
+    document.getElementById("select-cliente").value = "";
     divCliente.style.display = "none";
 
     if (!["VENTA", "FIADO"].includes(tipo)) {
@@ -46,8 +47,14 @@ function ajustarCampos() {
         inputProducto.placeholder = "Ej. Sabritas, Coca-Cola...";
         btnActualizarPrecio.style.display = "none";
         divBtnAgregar.style.display = "block";
-        cargarClientesSelect();
-        setTimeout(() => inputProducto.focus(), 100);
+        if (clientesCache) {
+            // Lista guardada: se abre al instante y se actualiza en segundo plano
+            pintarClientesSelect();
+            abrirListaClientes();
+            cargarClientesSelect();
+        } else {
+            cargarClientesSelect().then(abrirListaClientes);
+        }
     } else if (tipo === "RETIRO") {
         divProducto.style.display = "block";
         divCantidad.style.visibility = "hidden";
@@ -67,15 +74,36 @@ function ajustarCampos() {
     }
 }
 
+function abrirListaClientes() {
+    const sel = document.getElementById("select-cliente");
+    // Sin clientes (o falló la carga): seguir directo al producto
+    if (!sel || sel.options.length <= 1) { enfocarProducto(); return; }
+    sel.focus();
+    // Abre la lista de clientes; si el navegador no lo permite, queda enfocado para tocarlo
+    try { sel.showPicker(); } catch (_) {}
+}
+
+let clientesCache = null;
+
+function pintarClientesSelect() {
+    const sel = document.getElementById("select-cliente");
+    if (!sel || !clientesCache) return;
+    const actual = sel.value;
+    sel.innerHTML = '<option value="">— Selecciona cliente —</option>' + clientesCache.map(c =>
+        `<option value="${c.id_cliente}">${esc(c.nombre)} (debe $${parseFloat(c.saldo_actual).toFixed(2)})</option>`
+    ).join("");
+    sel.value = actual;  // conserva el cliente ya elegido
+    if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+}
+
 async function cargarClientesSelect() {
     try {
         const res = await fetch(`${API_URL}/clientes`);
         const clientes = await res.json();
-        const sel = document.getElementById("select-cliente");
-        sel.innerHTML = '<option value="">— Selecciona cliente —</option>';
-        clientes.forEach(c => {
-            sel.innerHTML += `<option value="${c.id_cliente}">${esc(c.nombre)} (debe $${parseFloat(c.saldo_actual).toFixed(2)})</option>`;
-        });
+        if (!Array.isArray(clientes)) return;
+        clientesCache = clientes;
+        // Si la lista está abierta (select enfocado) no se redibuja: se cerraría sola
+        if (document.activeElement !== document.getElementById("select-cliente")) pintarClientesSelect();
     } catch (_) {}
 }
 
@@ -167,6 +195,7 @@ async function registrar() {
                     return;
                 }
                 alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
+                cargarClientesSelect();  // refresca el "debe $" de la lista de clientes
             } catch (e) { mostrarError("Error al registrar el fiado."); return; }
             finally { enviandoVenta = false; toggleBotones('button[onclick="registrar()"]', false); }
         } else {
