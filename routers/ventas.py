@@ -1,10 +1,10 @@
 import uuid
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, Movimiento, ActualizacionPrecio, VentaLote
-from helpers import _log
+from helpers import _log, _idem_reservar, _idem_guardar
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -226,7 +226,8 @@ def actualizar_precio(datos: ActualizacionPrecio, user: TokenData = Depends(get_
 
 
 @router.post("/registrar_venta_lote")
-def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current_user)):
+def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current_user),
+                         idempotency_key: str | None = Header(default=None, max_length=64)):
     if not venta.items:
         return {"error": "Sin items"}
     conexion = conectar_bd()
@@ -235,6 +236,12 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
         cursor = conexion.cursor()
 
         conexion.start_transaction()
+
+        # #66: si este mismo envío ya se procesó (reintento), devolver la respuesta original
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "venta_lote")
+        if previa is not None:
+            conexion.rollback()
+            return previa
 
         # Validación del turno (ya la tienes ✅)
         cursor.execute(
@@ -305,8 +312,10 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                 """, (nombre_limpio, i.precio_unitario, user.id_tienda,
                       nombre_limpio, user.id_tienda))
 
+        respuesta = {"ok": True, "registrados": len(venta.items), "id_lote": id_lote}
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta)
         conexion.commit()
-        return {"ok": True, "registrados": len(venta.items), "id_lote": id_lote}
+        return respuesta
     except HTTPException:
         raise
     except Exception as e:

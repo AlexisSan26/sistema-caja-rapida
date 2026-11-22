@@ -1,6 +1,7 @@
 import json
 import threading
 from cachetools import TTLCache
+from mysql.connector import IntegrityError
 from database import db_pool, conectar_bd
 
 
@@ -15,6 +16,50 @@ def _log(cursor, id_tienda: int, id_usuario: int, accion: str, detalle: str):
         "INSERT INTO log_auditoria (id_tienda, id_usuario, accion, detalle) VALUES (%s, %s, %s, %s)",
         (id_tienda, id_usuario, accion, detalle)
     )
+
+
+
+
+# ─── #66: Idempotencia (un reintento no duplica ventas, abonos, fiados ni entradas) ──
+def _idem_reservar(cursor, id_tienda: int, clave: str | None, endpoint: str):
+    """Llamar justo después de start_transaction() y ANTES de cualquier otro SELECT.
+    - Sin clave (frontend viejo en caché): no hace nada y devuelve None.
+    - Clave nueva: la reserva dentro de la misma transacción y devuelve None.
+    - Clave ya procesada: devuelve la respuesta original guardada (marcada con repetido=True).
+    Si la operación falla y se hace rollback, la clave también se libera."""
+    if not clave:
+        return None
+    try:
+        cursor.execute(
+            "INSERT INTO operaciones_idempotentes (id_tienda, clave, endpoint) VALUES (%s, %s, %s)",
+            (id_tienda, clave, endpoint)
+        )
+        return None
+    except IntegrityError as e:
+        if e.errno != 1062:
+            raise
+    # Ya existía: lectura con lock para ver lo último confirmado (aunque dos peticiones
+    # lleguen a la vez, la segunda espera a que la primera haga commit).
+    cursor.execute(
+        "SELECT respuesta FROM operaciones_idempotentes WHERE id_tienda = %s AND clave = %s FOR UPDATE",
+        (id_tienda, clave)
+    )
+    fila = cursor.fetchone()
+    texto = (fila["respuesta"] if isinstance(fila, dict) else fila[0]) if fila else None
+    previa = json.loads(texto) if texto else {"ok": True}
+    previa["repetido"] = True
+    return previa
+
+
+def _idem_guardar(cursor, id_tienda: int, clave: str | None, respuesta: dict):
+    """Guardar la respuesta de la operación, justo antes del commit."""
+    if not clave:
+        return
+    cursor.execute(
+        "UPDATE operaciones_idempotentes SET respuesta = %s WHERE id_tienda = %s AND clave = %s",
+        (json.dumps(respuesta), id_tienda, clave)
+    )
+
 
 
 def _calcular_resumen(

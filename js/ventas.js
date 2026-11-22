@@ -208,26 +208,28 @@ async function registrar() {
                 if (document.getElementById("btn-transferencia").classList.contains("btn-success")) metodoPago = "transferencia";
                 const montoRecibido = parseFloat(document.getElementById("monto-recibido").value) || null;
                 const totalVenta = carritoItems.reduce((acc, i) => acc + (i.monto_cliente != null ? i.monto_cliente : i.cantidad * i.precio), 0);
+                const payloadVenta = {
+                    id_turno: idTurnoActual,
+                    metodo_pago: metodoPago,
+                    items: carritoItems.map(i => ({
+                        producto: i.nombre,
+                        cantidad: i.monto_cliente != null ? 1 : i.cantidad,
+                        precio_unitario: i.monto_cliente != null ? i.monto_cliente : i.precio,
+                        id_producto: i.id_producto || null,
+                        cantidad_real: i.monto_cliente != null ? i.cantidad : null
+                    }))
+                };
                 const res = await fetch(`${API_URL}/registrar_venta_lote`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        id_turno: idTurnoActual,
-                        metodo_pago: metodoPago,
-                        items: carritoItems.map(i => ({
-                            producto: i.nombre,
-                            cantidad: i.monto_cliente != null ? 1 : i.cantidad,
-                            precio_unitario: i.monto_cliente != null ? i.monto_cliente : i.precio,
-                            id_producto: i.id_producto || null,
-                            cantidad_real: i.monto_cliente != null ? i.cantidad : null
-                        }))
-                    })
+                    headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("venta", payloadVenta) },
+                    body: JSON.stringify(payloadVenta)
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     mostrarError(typeof err.detail === "string" ? err.detail : `Error al guardar la venta (${res.status}).`);
                     return;
                 }
+                liberarClaveIdempotente("venta");
                 const cambio = (montoRecibido && metodoPago === "efectivo") ? montoRecibido - totalVenta : null;
                 imprimirTicketVenta(carritoItems, totalVenta, metodoPago, montoRecibido, cambio);
             } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); return; }
