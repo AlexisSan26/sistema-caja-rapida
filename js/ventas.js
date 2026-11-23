@@ -144,17 +144,22 @@ async function confirmarFondoInicial() {
         try {
             const res = await fetch(`${API_URL}/registrar_movimiento`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("fondo_" + idTurnoActual) },
                 body: JSON.stringify({ id_turno: idTurnoActual, tipo_movimiento: "FONDO_CAJA", producto: "Fondo inicial", cantidad: 1, precio_unitario: monto })
             });
-            if (!res.ok) { mostrarError("No se pudo guardar el fondo inicial, puedes agregarlo luego como retiro/ajuste."); }
-        } catch (e) { mostrarError("No se pudo guardar el fondo inicial, puedes agregarlo luego como retiro/ajuste."); }
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                mostrarError(typeof err.detail === "string" ? err.detail : "No se pudo guardar el fondo inicial. Intenta de nuevo u omítelo.");
+                return;
+            }
+            liberarClaveIdempotente("fondo_" + idTurnoActual);
+        } catch (e) { mostrarError("No se pudo guardar el fondo inicial. Intenta de nuevo u omítelo."); return; }
     }
     document.getElementById("modal-fondo").style.display = "none";
     configurarInterfazAbierta();
 }
 
-function omitirFondoInicial() {
+    liberarClaveIdempotente("fondo_" + idTurnoActual);
     document.getElementById("modal-fondo").style.display = "none";
     configurarInterfazAbierta();
 }
@@ -259,16 +264,20 @@ async function registrar() {
     try {
         const res = await fetch(`${API_URL}/registrar_movimiento`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("mov_" + tipo) },
             body: JSON.stringify({ id_turno: idTurnoActual, tipo_movimiento: tipo, producto: nombreProducto, cantidad: cantidadVal, precio_unitario: montoVal })
         });
         if (res.ok) {
+            liberarClaveIdempotente("mov_" + tipo);
             document.getElementById("producto").value = "";
             document.getElementById("precio").value = "";
             document.getElementById("cantidad").value = "1";
             ajustarCampos();
             actualizarLista();
-        } else { mostrarError("El servidor rechazó el registro."); }
+        } else {
+            const err = await res.json().catch(() => ({}));
+            mostrarError(typeof err.detail === "string" ? err.detail : "El servidor rechazó el registro.");
+        }
     } catch (e) { mostrarError("Error al guardar. Verifica tu conexión."); }
     finally { enviandoVenta = false; toggleBotones('button[onclick="registrar()"]', false); }
 }
@@ -974,3 +983,13 @@ function imprimirTicketVenta(items, total, metodo, recibido, cambio) {
 */
     seleccionarMetodo("efectivo");
 }
+
+
+// #66: si el cajero edita el formulario de retiro/fondo, es otra operación → clave nueva
+["producto", "precio"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", () => {
+        const t = document.getElementById("tipo");
+        if (t) liberarClaveIdempotente("mov_" + t.value);
+    });
+});

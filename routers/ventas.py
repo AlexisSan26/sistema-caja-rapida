@@ -11,7 +11,8 @@ router = APIRouter()
 
 
 @router.post("/registrar_movimiento")
-def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
+def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user),
+              idempotency_key: str | None = Header(default=None, max_length=64)):
     conexion = conectar_bd()
     cursor = None
     try:
@@ -21,6 +22,14 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
             mov.cantidad = 1.0
 
         conexion.start_transaction()
+
+        # #66: si este mismo envío ya se procesó (reintento), devolver la respuesta original
+        huella = _idem_huella(mov.model_dump(mode="json"))
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "movimiento", huella)
+        if previa is not None:
+            conexion.rollback()
+            return previa
+
         # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
         cursor.execute(
             "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
@@ -53,9 +62,12 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user)):
                     WHERE nombre_producto = %s AND activo = 1 AND id_tienda = %s
                 """, (float(mov.cantidad), nombre_limpio, user.id_tienda))
 
+        respuesta = {"mensaje": "Registro guardado correctamente"}
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta, huella)
         conexion.commit()
-        return {"mensaje": "Registro guardado correctamente"}
+        return respuesta
     except HTTPException:
+        conexion.rollback()
         raise
     except Exception as e:
         if conexion:

@@ -132,3 +132,82 @@ def test_misma_clave_con_contenido_distinto_es_409(client, dos_tiendas):
     assert r.status_code == 409
     assert _ingresos(client, a) == pytest.approx(10)
     assert _stock(client, a, pid) == pytest.approx(9)
+
+
+
+# ─── /registrar_movimiento: retiros y fondo de caja ───────────────────────────
+def _movimiento(client, caja, tipo, monto, concepto, clave=None):
+    headers = dict(caja["headers"])
+    if clave:
+        headers["Idempotency-Key"] = clave
+    return client.post("/registrar_movimiento", headers=headers, json={
+        "id_turno": caja["id_turno"], "tipo_movimiento": tipo,
+        "producto": concepto, "cantidad": 1, "precio_unitario": monto,
+    })
+
+
+def _campo_resumen(client, caja, campo):
+    r = client.get(f"/resumen_turno/{caja['id_turno']}", headers=caja["headers"])
+    assert r.status_code == 200, r.text
+    return r.json()[campo]
+
+
+def test_reintento_de_retiro_con_misma_clave_no_duplica(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    antes = _campo_resumen(client, a, "total_retiros")
+
+    r1 = _movimiento(client, a, "RETIRO", 50, "Gasolina", clave="clave-ret-0001")
+    r2 = _movimiento(client, a, "RETIRO", 50, "Gasolina", clave="clave-ret-0001")
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r2.json().get("repetido") is True
+    assert r1.json().get("repetido") is None
+    assert _campo_resumen(client, a, "total_retiros") == pytest.approx(antes + 50)
+
+
+def test_reintento_de_fondo_con_misma_clave_no_duplica(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    antes = _campo_resumen(client, a, "total_fondo")
+
+    assert _movimiento(client, a, "FONDO_CAJA", 200, "Fondo inicial", clave="clave-fondo-0001").status_code == 200
+    assert _movimiento(client, a, "FONDO_CAJA", 200, "Fondo inicial", clave="clave-fondo-0001").status_code == 200
+
+    assert _campo_resumen(client, a, "total_fondo") == pytest.approx(antes + 200)
+
+
+def test_retiro_misma_clave_con_otro_monto_es_409(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    antes = _campo_resumen(client, a, "total_retiros")
+
+    assert _movimiento(client, a, "RETIRO", 50, "Gasolina", clave="clave-ret-0002").status_code == 200
+    r = _movimiento(client, a, "RETIRO", 80, "Gasolina", clave="clave-ret-0002")
+
+    assert r.status_code == 409
+    assert _campo_resumen(client, a, "total_retiros") == pytest.approx(antes + 50)
+
+
+def test_clave_de_venta_no_se_puede_reusar_en_un_retiro(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066009", stock=10)
+    antes = _campo_resumen(client, a, "total_retiros")
+
+    assert _vender(client, a, pid, clave="clave-cruzada-01").status_code == 200
+    r = _movimiento(client, a, "RETIRO", 10, "Gasolina", clave="clave-cruzada-01")
+
+    assert r.status_code == 409
+    assert _campo_resumen(client, a, "total_retiros") == pytest.approx(antes)
+
+
+def test_retiro_rechazado_no_consume_la_clave(client, dos_tiendas):
+    a, b = dos_tiendas["a"], dos_tiendas["b"]
+    antes = _campo_resumen(client, a, "total_retiros")
+    headers = dict(a["headers"]); headers["Idempotency-Key"] = "clave-ret-0003"
+
+    r1 = client.post("/registrar_movimiento", headers=headers, json={
+        "id_turno": b["id_turno"], "tipo_movimiento": "RETIRO",
+        "producto": "Gasolina", "cantidad": 1, "precio_unitario": 50})
+    assert r1.status_code == 403
+
+    r2 = _movimiento(client, a, "RETIRO", 50, "Gasolina", clave="clave-ret-0003")
+    assert r2.status_code == 200 and r2.json().get("repetido") is None
+    assert _campo_resumen(client, a, "total_retiros") == pytest.approx(antes + 50)
