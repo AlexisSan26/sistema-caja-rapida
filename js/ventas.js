@@ -159,6 +159,7 @@ async function confirmarFondoInicial() {
     configurarInterfazAbierta();
 }
 
+function omitirFondoInicial() {
     liberarClaveIdempotente("fondo_" + idTurnoActual);
     document.getElementById("modal-fondo").style.display = "none";
     configurarInterfazAbierta();
