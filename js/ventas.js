@@ -182,7 +182,7 @@ async function registrar() {
                 const dataCuenta = await resCuenta.json();
                 const resFiado = await fetch(`${API_URL}/agregar_fiado_lote`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("venta") },
                     body: JSON.stringify({
                         id_cuenta: dataCuenta.id_cuenta,
                         id_turno: idTurnoActual,
@@ -197,9 +197,10 @@ async function registrar() {
                 });
                 if (!resFiado.ok) {
                     const errData = await resFiado.json().catch(() => ({}));
-                    mostrarError(errData.detail || "Error al registrar el fiado.");
+                    mostrarError(typeof errData.detail === "string" ? errData.detail : "Error al registrar el fiado.");
                     return;
                 }
+                liberarClaveIdempotente("venta");
                 alert(`✅ Fiado registrado para ${dataCuenta.cliente.nombre} (${carritoItems.length} producto${carritoItems.length > 1 ? 's' : ''})`);
                 cargarClientesSelect();  // refresca el "debe $" de la lista de clientes
             } catch (e) { mostrarError("Error al registrar el fiado."); return; }

@@ -1,9 +1,10 @@
 import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, ClienteNuevo, ItemFiado, AbonoFiado, FiadoLote, LimiteCredito, NombreCliente
+from helpers import _idem_reservar, _idem_guardar, _idem_huella
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -292,7 +293,8 @@ def agregar_fiado(item: ItemFiado, user: TokenData = Depends(get_current_user)):
 
 
 @router.post("/agregar_fiado_lote")
-def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_user)):
+def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_user),
+                       idempotency_key: str | None = Header(default=None, max_length=64)):
     if not fiado.items:
         return {"error": "Sin items"}
     conexion = conectar_bd()
@@ -303,6 +305,13 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
         # ── Misma protección que agregar_fiado: FOR UPDATE + transacción única ──
         # Ahora cubre TODOS los productos del carrito, no solo uno.
         conexion.start_transaction()
+
+        # #66: si este mismo envío ya se procesó (reintento), devolver la respuesta original
+        huella = _idem_huella(fiado.model_dump())
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "fiado_lote", huella)
+        if previa is not None:
+            conexion.rollback()
+            return previa
 
         cursor.execute("""
             SELECT cf.id_cuenta, c.limite_credito FROM cuentas_fiado cf
@@ -360,8 +369,10 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
                     WHERE id_producto = %s AND id_tienda = %s
                 """, (float(item.cantidad), prod[0], user.id_tienda))
 
+        respuesta = {"mensaje": "Fiado registrado correctamente", "registrados": len(fiado.items)}
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta, huella)
         conexion.commit()  # ← si algo falló arriba, nunca se llega aquí y todo se revierte
-        return {"mensaje": "Fiado registrado correctamente", "registrados": len(fiado.items)}
+        return respuesta
     except HTTPException:
         if conexion:
             conexion.rollback()

@@ -211,3 +211,115 @@ def test_retiro_rechazado_no_consume_la_clave(client, dos_tiendas):
     r2 = _movimiento(client, a, "RETIRO", 50, "Gasolina", clave="clave-ret-0003")
     assert r2.status_code == 200 and r2.json().get("repetido") is None
     assert _campo_resumen(client, a, "total_retiros") == pytest.approx(antes + 50)
+
+
+
+# ─── /agregar_fiado_lote ──────────────────────────────────────────────────────
+def _cuenta_fiado(client, caja, nombre="Cliente idem", limite=None):
+    r = client.post("/clientes", headers=caja["headers"], json={"nombre": nombre, "limite_credito": limite})
+    assert r.status_code == 200, r.text
+    id_cliente = r.json()["id_cliente"]
+    cuenta = client.get(f"/cuenta_fiado/{id_cliente}", headers=caja["headers"]).json()
+    return id_cliente, cuenta["id_cuenta"]
+
+
+def _saldo_fiado(client, caja, id_cliente):
+    return client.get(f"/cuenta_fiado/{id_cliente}", headers=caja["headers"]).json()["saldo"]
+
+
+def _fiar(client, caja, id_cuenta, items, clave=None):
+    headers = dict(caja["headers"])
+    if clave:
+        headers["Idempotency-Key"] = clave
+    return client.post("/agregar_fiado_lote", headers=headers, json={
+        "id_cuenta": id_cuenta, "id_turno": caja["id_turno"], "items": items})
+
+
+def _item_fiado(pid, precio=10, cantidad=1):
+    return {"producto": "Prod idem", "cantidad": cantidad, "precio": precio, "id_producto": pid}
+
+
+def test_reintento_de_fiado_con_misma_clave_no_duplica_deuda_ni_stock(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066010", stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, a)
+
+    r1 = _fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-fiado-0001")
+    r2 = _fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-fiado-0001")
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r2.json().get("repetido") is True
+    assert r1.json().get("repetido") is None
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(10)
+    assert _stock(client, a, pid) == pytest.approx(9)
+
+
+def test_fiado_misma_clave_con_otro_contenido_es_409(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066011", stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, a)
+
+    assert _fiar(client, a, id_cuenta, [_item_fiado(pid, precio=10)], clave="clave-fiado-0002").status_code == 200
+    r = _fiar(client, a, id_cuenta, [_item_fiado(pid, precio=99)], clave="clave-fiado-0002")
+
+    assert r.status_code == 409
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(10)
+
+
+def test_reintento_de_fiado_ya_registrado_no_se_rechaza_por_limite_de_credito(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066012", stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, a, limite=15)
+
+    assert _fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-fiado-0003").status_code == 200
+    # Un fiado NUEVO de $10 ya no cabe (10 + 10 > 15), pero el REINTENTO del primero debe responder igual
+    r = _fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-fiado-0003")
+
+    assert r.status_code == 200 and r.json().get("repetido") is True
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(10)
+
+
+def test_fiado_rechazado_no_consume_la_clave(client, dos_tiendas):
+    a, b = dos_tiendas["a"], dos_tiendas["b"]
+    pid = _producto(client, a, "Prod idem", "7500000066013", stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, a)
+    _, id_cuenta_b = _cuenta_fiado(client, b, nombre="Cliente de B")
+
+    assert _fiar(client, a, id_cuenta_b, [_item_fiado(pid)], clave="clave-fiado-0004").status_code == 403
+    r = _fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-fiado-0004")
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(10)
+
+
+def test_clave_de_venta_no_se_puede_reusar_en_un_fiado(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066014", stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, a)
+
+    assert _vender(client, a, pid, clave="clave-cruzada-02").status_code == 200
+    r = _fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-cruzada-02")
+
+    assert r.status_code == 409
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(0)
+    assert _stock(client, a, pid) == pytest.approx(9)
+
+
+def test_dos_fiados_simultaneos_con_la_misma_clave_registran_uno_solo(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066015", stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, a)
+    resultados = []
+
+    def _enviar():
+        resultados.append(_fiar(client, a, id_cuenta, [_item_fiado(pid)], clave="clave-fiado-simultanea"))
+
+    hilos = [threading.Thread(target=_enviar) for _ in range(2)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    assert [r.status_code for r in resultados] == [200, 200]
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(10)
+    assert _stock(client, a, pid) == pytest.approx(9)
