@@ -323,3 +323,88 @@ def test_dos_fiados_simultaneos_con_la_misma_clave_registran_uno_solo(client, do
     assert [r.status_code for r in resultados] == [200, 200]
     assert _saldo_fiado(client, a, id_cliente) == pytest.approx(10)
     assert _stock(client, a, pid) == pytest.approx(9)
+
+
+
+# ─── /registrar_abono ─────────────────────────────────────────────────────────
+def _abonar(client, caja, id_cuenta, monto, clave=None, metodo="efectivo"):
+    headers = dict(caja["headers"])
+    if clave:
+        headers["Idempotency-Key"] = clave
+    return client.post("/registrar_abono", headers=headers, json={
+        "id_cuenta": id_cuenta, "id_turno": caja["id_turno"], "monto": monto, "metodo_pago": metodo})
+
+
+def _cliente_con_deuda(client, caja, codigo, deuda=100):
+    pid = _producto(client, caja, "Prod idem", codigo, stock=10)
+    id_cliente, id_cuenta = _cuenta_fiado(client, caja)
+    assert _fiar(client, caja, id_cuenta, [_item_fiado(pid, precio=deuda)]).status_code == 200
+    return id_cliente, id_cuenta
+
+
+def test_reintento_de_abono_con_misma_clave_no_duplica_abono_ni_ingreso(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente_con_deuda(client, a, "7500000066020")
+    ingresos_antes = _ingresos(client, a)
+
+    r1 = _abonar(client, a, id_cuenta, 30, clave="clave-abono-0001")
+    r2 = _abonar(client, a, id_cuenta, 30, clave="clave-abono-0001")
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json().get("repetido") is None
+    assert r2.json().get("repetido") is True
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(70)
+    assert _ingresos(client, a) == pytest.approx(ingresos_antes + 30)
+
+
+def test_abono_misma_clave_con_otro_monto_es_409(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente_con_deuda(client, a, "7500000066021")
+
+    assert _abonar(client, a, id_cuenta, 30, clave="clave-abono-0002").status_code == 200
+    r = _abonar(client, a, id_cuenta, 50, clave="clave-abono-0002")
+
+    assert r.status_code == 409
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(70)
+
+
+def test_abono_rechazado_no_consume_la_clave(client, dos_tiendas):
+    a, b = dos_tiendas["a"], dos_tiendas["b"]
+    id_cliente, id_cuenta = _cliente_con_deuda(client, a, "7500000066022")
+    _, id_cuenta_b = _cuenta_fiado(client, b, nombre="Cliente de B")
+
+    assert _abonar(client, a, id_cuenta_b, 30, clave="clave-abono-0003").status_code == 403
+    r = _abonar(client, a, id_cuenta, 30, clave="clave-abono-0003")
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(70)
+
+
+def test_clave_de_venta_no_se_puede_reusar_en_un_abono(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente_con_deuda(client, a, "7500000066023")
+    pid = _producto(client, a, "Prod idem 2", "7500000066024", stock=10)
+
+    assert _vender(client, a, pid, clave="clave-cruzada-03").status_code == 200
+    r = _abonar(client, a, id_cuenta, 30, clave="clave-cruzada-03")
+
+    assert r.status_code == 409
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(100)
+
+
+def test_dos_abonos_simultaneos_con_la_misma_clave_registran_uno_solo(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente_con_deuda(client, a, "7500000066025")
+    resultados = []
+
+    def _enviar():
+        resultados.append(_abonar(client, a, id_cuenta, 30, clave="clave-abono-simultanea"))
+
+    hilos = [threading.Thread(target=_enviar) for _ in range(2)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    assert [r.status_code for r in resultados] == [200, 200]
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(70)

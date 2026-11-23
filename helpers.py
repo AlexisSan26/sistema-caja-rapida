@@ -51,6 +51,8 @@ def _idem_reservar(cursor, id_tienda: int, clave: str | None, endpoint: str, hue
         (id_tienda, clave)
     )
     fila = cursor.fetchone()
+    if isinstance(fila, dict):  # cursor(dictionary=True), como en registrar_abono
+        fila = (fila["endpoint"], fila["respuesta"])
     if not fila or fila[0] != endpoint:
         raise HTTPException(status_code=409, detail="Clave de operación inválida. Revisa el historial antes de reintentar.")
     previa = json.loads(fila[1]) if fila[1] else {"ok": True}

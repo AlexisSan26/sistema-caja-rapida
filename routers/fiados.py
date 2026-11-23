@@ -389,7 +389,8 @@ def agregar_fiado_lote(fiado: FiadoLote, user: TokenData = Depends(get_current_u
 
 
 @router.post("/registrar_abono")
-def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_user)):
+def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_user),
+                    idempotency_key: str | None = Header(default=None, max_length=64)):
     conexion = conectar_bd()
     cursor = None
     try:
@@ -400,6 +401,13 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         # Si dos cajeros intentan abonar a la misma cuenta al mismo tiempo,
         # el segundo esperará en esta línea hasta que el primero haga commit.
         conexion.start_transaction()
+
+        # #66: si este mismo abono ya se procesó (reintento), devolver la respuesta original
+        huella = _idem_huella(abono.model_dump())
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "abono", huella)
+        if previa is not None:
+            conexion.rollback()
+            return previa
 
         cursor.execute("""
             SELECT cf.id_cuenta, c.nombre FROM cuentas_fiado cf
@@ -450,13 +458,15 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
                 "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s AND id_tienda = %s",
                 (abono.id_cuenta, user.id_tienda)
             )
-        conexion.commit()  # ← libera el FOR UPDATE lock
-        return {
+        respuesta = {
             "mensaje": "Abono registrado",
             "saldo_restante": max(0.0, saldo_nuevo),
             "saldo_favor": abs(min(0.0, saldo_nuevo)),
             "id_lote": id_lote
         }
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta, huella)
+        conexion.commit()  # ← libera el FOR UPDATE lock
+        return respuesta
     except HTTPException:
         if conexion:
             conexion.rollback()

@@ -34,6 +34,7 @@ async function abrirCuentaCliente(idCliente) {
         const res = await fetch(`${API_URL}/cuenta_fiado/${idCliente}`);
         const datos = await res.json();
         clienteFiadoActual = { id_cliente: idCliente, id_cuenta: datos.id_cuenta };
+        liberarClaveIdempotente("abono_" + datos.id_cuenta);  // #66: abrir el modal = abono nuevo
 
         document.getElementById("bs-fiado-nombre").textContent = datos.cliente.nombre;
         document.getElementById("bs-fiado-tel").textContent = datos.cliente.telefono || "";
@@ -82,6 +83,7 @@ function cerrarBsFiado() {
 }
 
 function seleccionarMetodoAbono(metodo) {
+    if (clienteFiadoActual) liberarClaveIdempotente("abono_" + clienteFiadoActual.id_cuenta);  // #66: cambió el método
     metodoAbonoActual = metodo;
     ["efectivo","tarjeta","transferencia"].forEach(m => {
         const btn = document.getElementById("btn-abono-" + m);
@@ -95,6 +97,7 @@ function seleccionarMetodoAbono(metodo) {
 }
 
 function actualizarCambioAbono() {
+    if (clienteFiadoActual && document.activeElement && document.activeElement.id === "monto-abono") liberarClaveIdempotente("abono_" + clienteFiadoActual.id_cuenta);  // #66: cambió el monto
     const monto = parseFloat(document.getElementById("monto-abono").value) || 0;
     const recibido = parseFloat(document.getElementById("monto-abono-recibido").value) || 0;
     const divCambio = document.getElementById("div-abono-cambio");
@@ -116,11 +119,13 @@ async function confirmarAbono() {
     if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
     const idCuenta = clienteFiadoActual.id_cuenta;
     const metodoPago = metodoAbonoActual;
-    cerrarBsFiado();
+    // #66: la clave va atada a turno + cuenta + monto + metodo un reintento igual reusa la clave
+       const metodoPago = metodoAbonoActual;
+    const opAbono = "abono_" + idCuenta;  // #66: clave atada al abono en curso (modal abierto)
     try {
         const res = await fetch(`${API_URL}/registrar_abono`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente(opAbono) },
             body: JSON.stringify({ id_cuenta: idCuenta, id_turno: idTurnoActual, monto: monto, metodo_pago: metodoPago })
         });
         if (!res.ok) {
@@ -132,14 +137,17 @@ async function confirmarAbono() {
                 errorMsg = "Error interno (Posible falla en MySQL). Revisa los logs de Render.";
             }
             alert("❌ " + errorMsg);
-            cargarClientes();
             return;
         }
         const data = await res.json();
+        liberarClaveIdempotente(opAbono);
+        cerrarBsFiado();
         cargarClientes();
         actualizarLista();
-        mostrarError(`✅ Abono de $${monto.toFixed(2)} registrado`);
-    } catch (e) { mostrarError("Error al registrar el abono."); cargarClientes(); }
+        mostrarError(data.repetido
+            ? `✅ Ese abono de $${monto.toFixed(2)} ya estaba registrado (no se duplicó)`
+            : `✅ Abono de $${monto.toFixed(2)} registrado`);
+    } catch (e) { mostrarError("No se pudo confirmar el abono. Toca Confirmar otra vez: no se duplicará."); }
 }
 
 async function eliminarCliente(idCliente, nombre) {
