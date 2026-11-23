@@ -48,4 +48,4 @@ function claveIdempotente(operacion) {
 function liberarClaveIdempotente(operacion) {
     delete _clavesIdem[operacion];
     try { localStorage.removeItem('idem_' + operacion); } catch (e) {}
-}unction liberarClaveIdempotente(operacion) { delete _clavesIdem[operacion]; }
+}
