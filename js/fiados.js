@@ -119,8 +119,6 @@ async function confirmarAbono() {
     if (isNaN(monto) || monto <= 0) { alert("Ingresa un monto válido."); return; }
     const idCuenta = clienteFiadoActual.id_cuenta;
     const metodoPago = metodoAbonoActual;
-    // #66: la clave va atada a turno + cuenta + monto + metodo un reintento igual reusa la clave
-       const metodoPago = metodoAbonoActual;
     const opAbono = "abono_" + idCuenta;  // #66: clave atada al abono en curso (modal abierto)
     try {
         const res = await fetch(`${API_URL}/registrar_abono`, {
