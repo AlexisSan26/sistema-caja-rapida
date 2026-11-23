@@ -2,6 +2,8 @@ import json
 import threading
 from cachetools import TTLCache
 from mysql.connector import IntegrityError
+import hashlib
+from fastapi import HTTPException
 from database import db_pool, conectar_bd
 
 
@@ -21,11 +23,17 @@ def _log(cursor, id_tienda: int, id_usuario: int, accion: str, detalle: str):
 
 
 # ─── #66: Idempotencia (un reintento no duplica ventas, abonos, fiados ni entradas) ──
-def _idem_reservar(cursor, id_tienda: int, clave: str | None, endpoint: str):
+def _idem_huella(datos: dict) -> str:
+    """Huella del contenido: la misma clave con datos distintos NO es un reintento."""
+    return hashlib.sha256(json.dumps(datos, sort_keys=True, default=str).encode()).hexdigest()[:32]
+
+
+def _idem_reservar(cursor, id_tienda: int, clave: str | None, endpoint: str, huella: str | None = None):
     """Llamar justo después de start_transaction() y ANTES de cualquier otro SELECT.
     - Sin clave (frontend viejo en caché): no hace nada y devuelve None.
     - Clave nueva: la reserva dentro de la misma transacción y devuelve None.
-    - Clave ya procesada: devuelve la respuesta original guardada (marcada con repetido=True).
+    - Clave ya procesada con el mismo contenido: devuelve la respuesta original (repetido=True).
+    - Clave ya usada con otro endpoint o contenido distinto: 409.
     Si la operación falla y se hace rollback, la clave también se libera."""
     if not clave:
         return None
@@ -38,28 +46,29 @@ def _idem_reservar(cursor, id_tienda: int, clave: str | None, endpoint: str):
     except IntegrityError as e:
         if e.errno != 1062:
             raise
-    # Ya existía: lectura con lock para ver lo último confirmado (aunque dos peticiones
-    # lleguen a la vez, la segunda espera a que la primera haga commit).
     cursor.execute(
-        "SELECT respuesta FROM operaciones_idempotentes WHERE id_tienda = %s AND clave = %s FOR UPDATE",
+        "SELECT endpoint, respuesta FROM operaciones_idempotentes WHERE id_tienda = %s AND clave = %s FOR UPDATE",
         (id_tienda, clave)
     )
     fila = cursor.fetchone()
-    texto = (fila["respuesta"] if isinstance(fila, dict) else fila[0]) if fila else None
-    previa = json.loads(texto) if texto else {"ok": True}
+    if not fila or fila[0] != endpoint:
+        raise HTTPException(status_code=409, detail="Clave de operación inválida. Revisa el historial antes de reintentar.")
+    previa = json.loads(fila[1]) if fila[1] else {"ok": True}
+    huella_previa = previa.pop("_huella", None)
+    if huella and huella_previa and huella != huella_previa:
+        raise HTTPException(status_code=409, detail="Esta operación ya se había enviado con otros datos. Revisa el historial antes de volver a cobrar.")
     previa["repetido"] = True
     return previa
 
 
-def _idem_guardar(cursor, id_tienda: int, clave: str | None, respuesta: dict):
+def _idem_guardar(cursor, id_tienda: int, clave: str | None, respuesta: dict, huella: str | None = None):
     """Guardar la respuesta de la operación, justo antes del commit."""
     if not clave:
         return
     cursor.execute(
         "UPDATE operaciones_idempotentes SET respuesta = %s WHERE id_tienda = %s AND clave = %s",
-        (json.dumps(respuesta), id_tienda, clave)
+        (json.dumps({**respuesta, "_huella": huella}), id_tienda, clave)
     )
-
 
 
 def _calcular_resumen(

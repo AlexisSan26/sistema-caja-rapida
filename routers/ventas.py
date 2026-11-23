@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, Movimiento, ActualizacionPrecio, VentaLote
-from helpers import _log, _idem_reservar, _idem_guardar
+from helpers import _log, _idem_reservar, _idem_guardar, _idem_huella
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -238,7 +238,8 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
         conexion.start_transaction()
 
         # #66: si este mismo envío ya se procesó (reintento), devolver la respuesta original
-        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "venta_lote")
+        huella = _idem_huella(venta.model_dump())
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "venta_lote", huella)
         if previa is not None:
             conexion.rollback()
             return previa
@@ -313,10 +314,11 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
                       nombre_limpio, user.id_tienda))
 
         respuesta = {"ok": True, "registrados": len(venta.items), "id_lote": id_lote}
-        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta)
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta, huella)
         conexion.commit()
         return respuesta
     except HTTPException:
+        conexion.rollback()
         raise
     except Exception as e:
         if conexion:

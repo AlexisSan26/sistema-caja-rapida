@@ -221,7 +221,7 @@ async function registrar() {
                 };
                 const res = await fetch(`${API_URL}/registrar_venta_lote`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("venta", payloadVenta) },
+                    headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("venta") },
                     body: JSON.stringify(payloadVenta)
                 });
                 if (!res.ok) {
@@ -365,6 +365,7 @@ function enfocarSegunUnidad(tipo_unidad, precio_sugerido) {
 }
 
 function agregarProductoAlCarrito(nombre, precio, cantidad = 1, id_producto = null, monto_cliente = null) {
+    liberarClaveIdempotente("venta");
     const existente = carritoItems.find(i => id_producto != null
         ? i.id_producto === id_producto
         : (i.id_producto == null && i.nombre === nombre));
@@ -450,6 +451,7 @@ function restaurarTecladoProducto(el) {
 
 function quitarDelCarrito(idx) {
     carritoItems.splice(idx, 1);
+    liberarClaveIdempotente("venta");
     renderCarrito();
     enfocarProducto();
 }
@@ -468,6 +470,7 @@ function renderCarrito() {
         const barraSticky = document.getElementById("barra-total-sticky");
         if (barraSticky) barraSticky.style.display = "none";
         localStorage.removeItem('carrito_borrador');
+        liberarClaveIdempotente("venta");
         return;
     }
     divCarrito.style.display = "block";
@@ -517,6 +520,7 @@ function actualizarCantidadCarrito(idx, val) {
     const n = parseFloat(val);
     if (isNaN(n) || n <= 0) { quitarDelCarrito(idx); return; }
     carritoItems[idx].cantidad = n;
+    liberarClaveIdempotente("venta");
     renderCarrito();
 }
 

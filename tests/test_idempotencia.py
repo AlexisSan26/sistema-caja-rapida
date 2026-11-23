@@ -118,3 +118,17 @@ def test_dos_peticiones_simultaneas_con_la_misma_clave_registran_una_sola_venta(
     assert len({r.json()["id_lote"] for r in resultados}) == 1
     assert _ingresos(client, a) == pytest.approx(10)
     assert _stock(client, a, pid) == pytest.approx(9)
+
+def test_misma_clave_con_contenido_distinto_es_409(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod idem", "7500000066008", stock=10)
+
+    assert _vender(client, a, pid, clave="clave-venta-0009").status_code == 200
+    headers = dict(a["headers"]); headers["Idempotency-Key"] = "clave-venta-0009"
+    r = client.post("/registrar_venta_lote", headers=headers, json={
+        "id_turno": a["id_turno"], "metodo_pago": "tarjeta",
+        "items": [{"producto": "Prod idem", "cantidad": 1, "precio_unitario": 10, "id_producto": pid}],
+    })
+    assert r.status_code == 409
+    assert _ingresos(client, a) == pytest.approx(10)
+    assert _stock(client, a, pid) == pytest.approx(9)
