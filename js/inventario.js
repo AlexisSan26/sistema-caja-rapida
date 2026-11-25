@@ -182,11 +182,20 @@ function abrirMerma() {
     document.getElementById("merma-motivo").value = "merma";
     document.getElementById("merma-nota").value = "";
     document.getElementById("modal-merma").style.display = "block";
+    liberarClaveIdempotente("merma_" + productoEnEdicion.id_producto);  // #66: abrir el formulario = merma nueva
 }
 
 function cerrarMerma() {
     document.getElementById("modal-merma").style.display = "none";
 }
+
+// #66: si el cajero edita el formulario de merma, es otra operación → clave nueva
+["merma-cantidad", "merma-motivo", "merma-nota"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", () => {
+        if (productoEnEdicion) liberarClaveIdempotente("merma_" + productoEnEdicion.id_producto);
+    });
+});
 
 async function confirmarMerma() {
     if (!productoEnEdicion) return;
@@ -197,13 +206,14 @@ async function confirmarMerma() {
     if (cantidad > productoEnEdicion.stock_actual) {
         if (!confirm(`⚠️ La cantidad (${cantidad}) supera el stock actual (${productoEnEdicion.stock_actual}). ¿Continuar de todas formas?`)) return;
     }
+    const opMerma = "merma_" + productoEnEdicion.id_producto;  // #66: clave atada a la merma en curso
     if (enviandoMerma) return;
     enviandoMerma = true;
     toggleBotones('button[onclick="confirmarMerma()"]', true);
     try {
         const res = await fetch(`${API_URL}/registrar_merma`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente(opMerma) },
             body: JSON.stringify({
                 id_producto: productoEnEdicion.id_producto,
                 cantidad: cantidad,
@@ -213,11 +223,12 @@ async function confirmarMerma() {
         });
         const data = await res.json();
         if (!res.ok) { alert("❌ " + (data.detail || data.mensaje || "Error al registrar merma.")); return; }
-        alert("✅ " + (data.mensaje || "Merma registrada correctamente."));
+        liberarClaveIdempotente(opMerma);
+        alert("✅ " + (data.mensaje || "Merma registrada correctamente.") + (data.repetido ? " (ya estaba registrada, no se duplicó)" : ""));
         cerrarMerma();
         cerrarBottomSheet();
         cargarInventario();
-    } catch (e) { mostrarError("Error al registrar la merma."); }
+    } catch (e) { mostrarError("No se pudo confirmar la merma. Toca Confirmar otra vez: no se duplicará."); }
     finally { enviandoMerma = false; toggleBotones('button[onclick="confirmarMerma()"]', false); }
 }
 

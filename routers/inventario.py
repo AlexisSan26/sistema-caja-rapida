@@ -1,9 +1,9 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, ProductoNuevo, ActualizacionProducto, MermaProducto
-from helpers import _log
+from helpers import _log, _idem_reservar, _idem_guardar, _idem_huella
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -303,12 +303,21 @@ def descontar_stock(id_producto: int, cantidad: float = 1, user: TokenData = Dep
 
 
 @router.post("/registrar_merma")
-def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user)):
+def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user),
+                    idempotency_key: str | None = Header(default=None, max_length=64)):
     conexion = conectar_bd()
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
         conexion.start_transaction()
+
+        # #66: si esta misma merma ya se procesó (reintento), devolver la respuesta original
+        huella = _idem_huella(m.model_dump())
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "merma", huella)
+        if previa is not None:
+            conexion.rollback()
+            return previa
+
         # Verificar que el producto existe y pertenece a esta tienda
         cursor.execute(
             "SELECT nombre_producto FROM productos WHERE id_producto = %s AND activo = 1 AND id_tienda = %s FOR UPDATE",
@@ -338,12 +347,16 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
         _log(cursor, user.id_tienda, user.id_usuario, "MERMA",
              f"producto_id={m.id_producto} cantidad={-m.cantidad} motivo={m.motivo}")
 
-        conexion.commit()
-        return {
+        respuesta = {
             "mensaje": f"Merma de {m.cantidad} unidades registrada para {producto['nombre_producto']}",
             "advertencia": "Stock quedó en negativo, recuerda registrar la entrada pendiente" if stock_resultante < 0 else None
         }
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta, huella)
+        conexion.commit()
+        return respuesta
     except HTTPException:
+        if conexion:
+            conexion.rollback()  # #66: también libera la clave si la merma se rechaza
         raise
     except Exception as e:
         if conexion:

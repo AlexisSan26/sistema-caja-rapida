@@ -506,3 +506,92 @@ def test_entrada_sin_clave_sigue_funcionando_como_antes(client, dos_tiendas):
 
     assert r.status_code == 200 and r.json().get("repetido") is None
     assert _stock(client, a, pid) == pytest.approx(15)
+
+
+
+# ─── /registrar_merma ─────────────────────────────────────────────────────────
+def _mermar(client, caja, pid, cantidad=2, clave=None, motivo="merma"):
+    headers = dict(caja["headers"])
+    if clave:
+        headers["Idempotency-Key"] = clave
+    return client.post("/registrar_merma", headers=headers, json={
+        "id_producto": pid, "cantidad": cantidad, "motivo": motivo})
+
+
+def test_reintento_de_merma_con_misma_clave_no_descuenta_dos_veces(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod merma idem", "7500000066040", stock=10)
+
+    r1 = _mermar(client, a, pid, 2, clave="clave-merma-0001")
+    r2 = _mermar(client, a, pid, 2, clave="clave-merma-0001")
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json().get("repetido") is None
+    assert r2.json().get("repetido") is True
+    assert _stock(client, a, pid) == pytest.approx(8)
+    assert len(_filas_historial(client, a, "Prod merma idem")) == 1
+
+
+def test_merma_misma_clave_con_otra_cantidad_es_409(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod merma idem", "7500000066041", stock=10)
+
+    assert _mermar(client, a, pid, 2, clave="clave-merma-0002").status_code == 200
+    r = _mermar(client, a, pid, 5, clave="clave-merma-0002")
+
+    assert r.status_code == 409
+    assert _stock(client, a, pid) == pytest.approx(8)
+
+
+def test_merma_rechazada_no_consume_la_clave(client, dos_tiendas):
+    a, b = dos_tiendas["a"], dos_tiendas["b"]
+    pid = _producto(client, a, "Prod merma idem", "7500000066042", stock=10)
+    pid_b = _producto(client, b, "Prod de B", "7500000066043", stock=10)
+
+    # Producto de otra tienda -> 404, y la clave debe quedar libre
+    assert _mermar(client, a, pid_b, 2, clave="clave-merma-0003").status_code == 404
+    r = _mermar(client, a, pid, 2, clave="clave-merma-0003")
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _stock(client, a, pid) == pytest.approx(8)
+    assert _stock(client, b, pid_b) == pytest.approx(10)
+
+
+def test_clave_de_venta_no_se_puede_reusar_en_una_merma(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod merma idem", "7500000066044", stock=10)
+
+    assert _vender(client, a, pid, clave="clave-cruzada-05").status_code == 200
+    r = _mermar(client, a, pid, 2, clave="clave-cruzada-05")
+
+    assert r.status_code == 409
+    assert _stock(client, a, pid) == pytest.approx(9)
+
+
+def test_dos_mermas_simultaneas_con_la_misma_clave_registran_una_sola(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod merma idem", "7500000066045", stock=10)
+    resultados = []
+
+    def _enviar():
+        resultados.append(_mermar(client, a, pid, 2, clave="clave-merma-simultanea"))
+
+    hilos = [threading.Thread(target=_enviar) for _ in range(2)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    assert [r.status_code for r in resultados] == [200, 200]
+    assert _stock(client, a, pid) == pytest.approx(8)
+    assert len(_filas_historial(client, a, "Prod merma idem")) == 1
+
+
+def test_merma_sin_clave_sigue_funcionando_como_antes(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod merma idem", "7500000066046", stock=10)
+
+    r = _mermar(client, a, pid, 2)
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _stock(client, a, pid) == pytest.approx(8)
