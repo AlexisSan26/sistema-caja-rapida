@@ -160,3 +160,69 @@ def test_no_se_puede_borrar_movimiento_de_turno_cerrado(client, dos_tiendas):
 
     r = client.delete(f"/borrar_movimiento/{id_mov}", headers=a["headers"])
     assert r.status_code >= 400, "Se permitió borrar un movimiento de un turno CERRADO"
+
+
+
+# ─── #75: editar un producto no pisa las ventas ocurridas con el formulario abierto ──
+def _editar_producto(client, caja, pid, nombre, codigo, stock, precio=10, stock_anterior=None):
+    datos = {
+        "nombre_producto": nombre, "precio_sugerido": precio, "precio_costo": None,
+        "stock_actual": stock, "stock_minimo": 0, "proveedor": None,
+        "codigo_barras": codigo, "fecha_caducidad": None, "unidad_medida": "pieza",
+    }
+    if stock_anterior is not None:
+        datos["stock_anterior"] = stock_anterior
+    return client.put(f"/actualizar_producto/{pid}", headers=caja["headers"], json=datos)
+
+
+def _precio(client, caja, id_producto):
+    r = client.get("/inventario", headers=caja["headers"])
+    return next(float(p["precio_sugerido"]) for p in r.json() if p["id_producto"] == id_producto)
+
+
+def test_editar_solo_el_precio_no_pisa_las_ventas_del_formulario_abierto(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod edit 75", "7500000075001", stock=10)
+    # El formulario se abrió con stock 10; mientras tanto se venden 3
+    assert _vender(client, a, [_item("Prod edit 75", id_producto=pid, cantidad=3)]).status_code == 200
+    assert _stock(client, a, pid) == pytest.approx(7)
+
+    # El cajero solo cambia el precio: el stock del formulario (10) no se tocó
+    r = _editar_producto(client, a, pid, "Prod edit 75", "7500000075001", stock=10, precio=25, stock_anterior=10)
+
+    assert r.status_code == 200, r.text
+    assert _stock(client, a, pid) == pytest.approx(7)
+    assert _precio(client, a, pid) == pytest.approx(25)
+
+
+def test_ajuste_de_stock_se_aplica_como_diferencia_sobre_el_stock_real(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod edit 75", "7500000075002", stock=10)
+    assert _vender(client, a, [_item("Prod edit 75", id_producto=pid, cantidad=3)]).status_code == 200  # real: 7
+
+    # El formulario mostraba 10 y el cajero lo corrige a 12 (+2)
+    r = _editar_producto(client, a, pid, "Prod edit 75", "7500000075002", stock=12, stock_anterior=10)
+
+    assert r.status_code == 200, r.text
+    assert _stock(client, a, pid) == pytest.approx(9)
+
+
+def test_sin_stock_anterior_el_stock_se_guarda_como_valor_absoluto(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod edit 75", "7500000075003", stock=10)
+    assert _vender(client, a, [_item("Prod edit 75", id_producto=pid, cantidad=3)]).status_code == 200
+
+    # Frontend viejo en caché: no manda stock_anterior -> comportamiento de siempre
+    r = _editar_producto(client, a, pid, "Prod edit 75", "7500000075003", stock=12)
+
+    assert r.status_code == 200, r.text
+    assert _stock(client, a, pid) == pytest.approx(12)
+
+
+def test_editar_no_toca_el_stock_de_un_producto_de_otra_tienda(client, dos_tiendas):
+    a, b = dos_tiendas["a"], dos_tiendas["b"]
+    pid_b = _producto(client, b, "Prod de B 75", "7500000075004", stock=10)
+
+    _editar_producto(client, a, pid_b, "Prod de B 75", "7500000075004", stock=99, stock_anterior=10)
+
+    assert _stock(client, b, pid_b) == pytest.approx(10)

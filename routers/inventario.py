@@ -167,7 +167,7 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
                 nombre_producto = %s,
                 precio_sugerido = %s,
                 precio_costo    = %s,
-                stock_actual    = %s,
+                stock_actual    = IF(%s IS NULL, %s, stock_actual + (%s - %s)),
                 stock_minimo    = %s,
                 proveedor       = %s,
                 codigo_barras   = %s,
@@ -177,7 +177,10 @@ def actualizar_producto(id_producto: int, datos: ActualizacionProducto, user: To
             WHERE id_producto = %s AND activo = 1 AND id_tienda = %s
         """, (
             datos.nombre_producto, datos.precio_sugerido, datos.precio_costo,
-            datos.stock_actual, datos.stock_minimo,
+            # #75: con stock_anterior se suma la diferencia al stock REAL de ahora, así no se pierden
+            # las ventas ocurridas mientras el formulario estaba abierto. Sin él (frontend viejo): valor absoluto.
+            datos.stock_anterior, datos.stock_actual, datos.stock_actual, datos.stock_anterior,
+            datos.stock_minimo,
             datos.proveedor or None, datos.codigo_barras or None,
             datos.fecha_caducidad or None, datos.unidad_medida, datos.controla_stock, id_producto, user.id_tienda
         ))

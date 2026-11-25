@@ -134,6 +134,8 @@ async function guardarEdicion() {
     if (isNaN(precio) || precio < 0) { alert("Escribe un precio válido."); return; }
     if (isNaN(stock) || stock < 0) { alert("El stock no puede ser negativo."); return; }
     if (isNaN(minimo) || minimo < 0) { alert("El stock mínimo no puede ser negativo."); return; }
+    // #75: el stock que mostraba el formulario; el servidor aplica solo la diferencia (con "sin control" se manda el valor absoluto)
+    const stockAnterior = sinStock ? null : parseFloat(productoEnEdicion.stock_actual);
     try {
         const res = await fetch(`${API_URL}/actualizar_producto/${productoEnEdicion.id_producto}`, {
             method: "PUT",
@@ -141,7 +143,8 @@ async function guardarEdicion() {
             body: JSON.stringify({
                 nombre_producto: nombre, precio_sugerido: precio,
                 precio_costo: parseFloat(document.getElementById("edit-costo").value) || null,
-                stock_actual: stock, stock_minimo: minimo, controla_stock: !sinStock,
+                stock_actual: stock, stock_anterior: isNaN(stockAnterior) ? null : stockAnterior,
+                stock_minimo: minimo, controla_stock: !sinStock,
                 proveedor: document.getElementById("edit-proveedor").value.trim() || null,
                 codigo_barras: document.getElementById("edit-codigo").value.trim() || null,
                 fecha_caducidad: document.getElementById("edit-caducidad").value || null,

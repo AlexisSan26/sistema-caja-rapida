@@ -60,6 +60,7 @@ class ActualizacionProducto(BaseModel):
     fecha_caducidad: str | None = None
     unidad_medida: str = "pieza"
     controla_stock: bool | None = None
+    stock_anterior: float | None = None  # #75: stock que mostraba el formulario; si viene, se aplica la diferencia
 
 
 class EntradaMercancia(BaseModel):
