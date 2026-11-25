@@ -595,3 +595,16 @@ def test_merma_sin_clave_sigue_funcionando_como_antes(client, dos_tiendas):
 
     assert r.status_code == 200 and r.json().get("repetido") is None
     assert _stock(client, a, pid) == pytest.approx(8)
+
+
+
+def test_abono_que_excede_el_saldo_no_consume_la_clave(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente_con_deuda(client, a, "7500000066026")
+
+    # #91: $500 > saldo de $100 -> 400, y la clave debe quedar libre para el abono correcto
+    assert _abonar(client, a, id_cuenta, 500, clave="clave-abono-0004").status_code == 400
+    r = _abonar(client, a, id_cuenta, 30, clave="clave-abono-0004")
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _saldo_fiado(client, a, id_cliente) == pytest.approx(70)

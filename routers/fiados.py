@@ -77,13 +77,19 @@ def eliminar_cliente(id_cliente: int, user: TokenData = Depends(get_current_user
     cursor = None
     try:
         cursor = conexion.cursor(dictionary=True)
+        # #90: dos subconsultas (como listar_clientes); el LEFT JOIN doble multiplicaba las sumas
         cursor.execute("""
-            SELECT COALESCE(SUM(COALESCE(df.monto_real, df.cantidad * df.precio)), 0) - COALESCE(SUM(a.monto), 0) AS saldo
-            FROM cuentas_fiado cf
-            LEFT JOIN detalle_fiado df ON df.id_cuenta = cf.id_cuenta
-            LEFT JOIN abonos a ON a.id_cuenta = cf.id_cuenta
-            WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA' AND cf.id_tienda = %s
-        """, (id_cliente, user.id_tienda))
+            SELECT
+              COALESCE((SELECT SUM(COALESCE(df.monto_real, df.cantidad * df.precio))
+                        FROM detalle_fiado df
+                        JOIN cuentas_fiado cf ON cf.id_cuenta = df.id_cuenta
+                        WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA' AND cf.id_tienda = %s AND df.id_tienda = %s), 0)
+              -
+              COALESCE((SELECT SUM(a.monto)
+                        FROM abonos a
+                        JOIN cuentas_fiado cf ON cf.id_cuenta = a.id_cuenta
+                        WHERE cf.id_cliente = %s AND cf.estado = 'ABIERTA' AND cf.id_tienda = %s AND a.id_tienda = %s), 0) AS saldo
+        """, (id_cliente, user.id_tienda, user.id_tienda, id_cliente, user.id_tienda, user.id_tienda))
         row = cursor.fetchone()
         if row and float(row["saldo"]) != 0:
             return {"error": f"El cliente tiene saldo pendiente de ${float(row['saldo']):.2f}. Salda la cuenta antes."}

@@ -87,6 +87,12 @@ def test_abono_de_fiado_en_efectivo_suma_y_en_tarjeta_no(client, dos_tiendas):
     id_cliente = client.post("/clientes", headers=a["headers"],
                              json={"nombre": "Cliente prueba"}).json()["id_cliente"]
     id_cuenta = client.get(f"/cuenta_fiado/{id_cliente}", headers=a["headers"]).json()["id_cuenta"]
+    # #91: un abono no puede exceder el saldo, así que primero se fían $100
+    r = client.post("/agregar_fiado_lote", headers=a["headers"], json={
+        "id_cuenta": id_cuenta, "id_turno": a["id_turno"],
+        "items": [{"producto": "Fiado prueba", "cantidad": 1, "precio": 100}],
+    })
+    assert r.status_code == 200, r.text
 
     for monto, metodo in ((40, "efectivo"), (25, "tarjeta")):
         r = client.post("/registrar_abono", headers=a["headers"], json={

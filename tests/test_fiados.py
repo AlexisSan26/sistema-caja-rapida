@@ -187,7 +187,7 @@ def test_nombre_de_cliente_no_puede_quedar_vacio(client, dos_tiendas):
 
 
 # ─── Bugs conocidos (xfail) ───────────────────────────────────────────────────
-@pytest.mark.xfail(strict=False, reason="#91: un abono mayor al saldo se acepta y el excedente se pierde")
+
 def test_abono_mayor_al_saldo_se_rechaza(client, dos_tiendas):
     a = dos_tiendas["a"]
     _, id_cuenta = _cliente(client, a)
@@ -195,7 +195,7 @@ def test_abono_mayor_al_saldo_se_rechaza(client, dos_tiendas):
     assert _abonar(client, a, id_cuenta, 80).status_code >= 400
 
 
-@pytest.mark.xfail(strict=False, reason="#90: eliminar_cliente calcula mal el saldo con 2+ renglones y abonos")
+
 def test_cliente_con_saldo_parcial_y_varios_renglones_no_se_elimina(client, dos_tiendas):
     a = dos_tiendas["a"]
     id_cliente, id_cuenta = _cliente(client, a)
