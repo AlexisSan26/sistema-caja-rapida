@@ -57,7 +57,7 @@ def abrir_turno(user: TokenData = Depends(get_current_user)):
 @router.post("/corte_caja/{id_turno}")
 def hacer_corte(
     id_turno: int,
-    efectivo_declarado: float | None = Body(default=None, embed=True),
+    efectivo_declarado: float | None = Body(default=None, embed=True, ge=0),
     user: TokenData = Depends(get_current_user)
 ):
     conexion = conectar_bd()

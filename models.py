@@ -2,6 +2,8 @@ from typing import List, Literal
 from pydantic import BaseModel, Field
 from enum import Enum
 
+MetodoPago = Literal["efectivo", "tarjeta", "transferencia"]
+
 
 # ─── Modelos de Auth ──────────────────────────────────────────────────────────
 class TokenData(BaseModel):
@@ -113,9 +115,9 @@ class ItemFiado(BaseModel):
 
 class ItemFiadoLote(BaseModel):
     producto: str
-    cantidad: float = 1.0
-    precio: float
-    monto_real: float | None = None
+    cantidad: float = Field(default=1.0, ge=0)
+    precio: float = Field(ge=0)
+    monto_real: float | None = Field(default=None, ge=0)
     id_producto: int | None = None
 
 
@@ -130,21 +132,21 @@ class AbonoFiado(BaseModel):
     id_turno: int
     monto: float = Field(gt=0)
     nota: str | None = None
-    metodo_pago: str = "efectivo"
+    metodo_pago: MetodoPago = "efectivo"
 
 
 class ItemVenta(BaseModel):
     producto: str
-    cantidad: float = 1.0
-    precio_unitario: float
+    cantidad: float = Field(default=1.0, ge=0)
+    precio_unitario: float = Field(ge=0)
     id_producto: int | None = None
-    cantidad_real: float | None = None
+    cantidad_real: float | None = Field(default=None, ge=0)
 
 
 class VentaLote(BaseModel):
     id_turno: int
     items: list[ItemVenta]
-    metodo_pago: str = "efectivo"
+    metodo_pago: MetodoPago = "efectivo"
 
 
 # ─── NUEVO MODELO: Merma (Prioridad 2B) ───────────────────────────────────────
