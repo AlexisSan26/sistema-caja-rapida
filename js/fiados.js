@@ -3,6 +3,7 @@ async function cargarClientes() {
     try {
         const res = await fetch(`${API_URL}/clientes`);
         const clientes = await res.json();
+        if (Array.isArray(clientes)) clientesCache = clientes;  // mantiene fresca la lista del desplegable de Fiado en Caja
         if (clientes.length === 0) {
             document.getElementById("lista-clientes").innerHTML = "<p class='text-center text-muted mt-4'>No hay clientes registrados.</p>";
             return;

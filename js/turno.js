@@ -104,6 +104,8 @@ async function borrarDesdeMenu() {
             const err = await res.json().catch(() => ({}));
             mostrarError(typeof err.detail === "string" ? err.detail : "Error al cancelar.");
             actualizarLista();
+        } else if (grupo.tipo === "COBRO_FIADO") {
+            cargarClientesSelect();  // #64: el abono cancelado vuelve a la deuda; refresca el "debe $" del desplegable de Fiado
         }
     } catch (e) {
         mostrarError("Error de conexión al cancelar.");
