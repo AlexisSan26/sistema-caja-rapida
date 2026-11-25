@@ -120,6 +120,9 @@ async function confirmarAbono() {
     const idCuenta = clienteFiadoActual.id_cuenta;
     const metodoPago = metodoAbonoActual;
     const opAbono = "abono_" + idCuenta;  // #66: clave atada al abono en curso (modal abierto)
+    if (enviandoAbono) return;
+    enviandoAbono = true;
+    toggleBotones('button[onclick="confirmarAbono()"]', true);
     try {
         const res = await fetch(`${API_URL}/registrar_abono`, {
             method: "POST",
@@ -146,6 +149,7 @@ async function confirmarAbono() {
             ? `✅ Ese abono de $${monto.toFixed(2)} ya estaba registrado (no se duplicó)`
             : `✅ Abono de $${monto.toFixed(2)} registrado`);
     } catch (e) { mostrarError("No se pudo confirmar el abono. Toca Confirmar otra vez: no se duplicará."); }
+    finally { enviandoAbono = false; toggleBotones('button[onclick="confirmarAbono()"]', false); }
 }
 
 async function eliminarCliente(idCliente, nombre) {
@@ -173,6 +177,9 @@ function cerrarModalNuevoCliente() {
 async function guardarNuevoCliente() {
     const nombre = document.getElementById("nuevo-cliente-nombre").value.trim();
     if (!nombre) { alert("El nombre es obligatorio."); return; }
+    if (enviandoCliente) return;
+    enviandoCliente = true;
+    toggleBotones('button[onclick="guardarNuevoCliente()"]', true);
     try {
         const limiteStr = document.getElementById("nuevo-cliente-limite").value.trim();
         const res = await fetch(`${API_URL}/clientes`, {
@@ -190,6 +197,7 @@ async function guardarNuevoCliente() {
         cerrarModalNuevoCliente();
         cargarClientes();
     } catch (e) { mostrarError("Error al guardar el cliente."); }
+    finally { enviandoCliente = false; toggleBotones('button[onclick="guardarNuevoCliente()"]', false); }
 }
 
 async function editarLimiteCliente(idCliente, nombre, limiteActual) {
