@@ -1,20 +1,31 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from database import conectar_bd
 from auth import get_current_user
 from models import TokenData, EntradaLote
+from helpers import _idem_reservar, _idem_guardar, _idem_huella
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/entrada_mercancia_lote")
-def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_current_user)):
+def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_current_user),
+                           idempotency_key: str | None = Header(default=None, max_length=64)):
     if not lote.items:
         return {"error": "El lote está vacío"}
     conexion = conectar_bd()
     cursor = None
     try:
         cursor = conexion.cursor()
+        conexion.start_transaction()
+
+        # #66: si este mismo lote ya se procesó (reintento), devolver la respuesta original
+        huella = _idem_huella(lote.model_dump())
+        previa = _idem_reservar(cursor, user.id_tienda, idempotency_key, "entrada_lote", huella)
+        if previa is not None:
+            conexion.rollback()
+            return previa
+
         ids = list({item.id_producto for item in lote.items})
         cursor.execute(
             f"SELECT COUNT(*) FROM productos WHERE id_tienda = %s AND id_producto IN ({','.join(['%s'] * len(ids))})",
@@ -42,9 +53,13 @@ def entrada_mercancia_lote(lote: EntradaLote, user: TokenData = Depends(get_curr
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (
             item.id_producto, item.cantidad, item.fecha_caducidad or None, lote.nota_general or None, item.precio_costo, user.id_tienda))
+        respuesta = {"mensaje": f"Se registraron {len(lote.items)} productos correctamente"}
+        _idem_guardar(cursor, user.id_tienda, idempotency_key, respuesta, huella)
         conexion.commit()
-        return {"mensaje": f"Se registraron {len(lote.items)} productos correctamente"}
+        return respuesta
     except HTTPException:
+        if conexion:
+            conexion.rollback()  # #66: también libera la clave si el lote se rechaza
         raise
     except Exception as e:
         if conexion:

@@ -408,3 +408,101 @@ def test_dos_abonos_simultaneos_con_la_misma_clave_registran_uno_solo(client, do
 
     assert [r.status_code for r in resultados] == [200, 200]
     assert _saldo_fiado(client, a, id_cliente) == pytest.approx(70)
+
+
+
+# ─── /entrada_mercancia_lote ──────────────────────────────────────────────────
+def _entrar(client, caja, items, clave=None):
+    headers = dict(caja["headers"])
+    if clave:
+        headers["Idempotency-Key"] = clave
+    return client.post("/entrada_mercancia_lote", headers=headers, json={
+        "items": items, "nota_general": "Ticket de resurtido en lote"})
+
+
+def _item_entrada(pid, cantidad=5, costo=None):
+    return {"id_producto": pid, "cantidad": cantidad, "precio_costo": costo}
+
+
+def _filas_historial(client, caja, nombre):
+    r = client.get("/historial_entradas", headers=caja["headers"])
+    return [h for h in r.json() if h["nombre_producto"] == nombre]
+
+
+def test_reintento_de_entrada_con_misma_clave_no_duplica_stock_ni_historial(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod entrada idem", "7500000066030", stock=10)
+
+    r1 = _entrar(client, a, [_item_entrada(pid, 5)], clave="clave-entrada-0001")
+    r2 = _entrar(client, a, [_item_entrada(pid, 5)], clave="clave-entrada-0001")
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json().get("repetido") is None
+    assert r2.json().get("repetido") is True
+    assert _stock(client, a, pid) == pytest.approx(15)
+    assert len(_filas_historial(client, a, "Prod entrada idem")) == 1
+
+
+def test_entrada_misma_clave_con_otro_contenido_es_409(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod entrada idem", "7500000066031", stock=10)
+
+    assert _entrar(client, a, [_item_entrada(pid, 5)], clave="clave-entrada-0002").status_code == 200
+    r = _entrar(client, a, [_item_entrada(pid, 50)], clave="clave-entrada-0002")
+
+    assert r.status_code == 409
+    assert _stock(client, a, pid) == pytest.approx(15)
+
+
+def test_entrada_rechazada_no_consume_la_clave(client, dos_tiendas):
+    a, b = dos_tiendas["a"], dos_tiendas["b"]
+    pid = _producto(client, a, "Prod entrada idem", "7500000066032", stock=10)
+    pid_b = _producto(client, b, "Prod de B", "7500000066033", stock=10)
+
+    # Producto de otra tienda -> 400, y la clave debe quedar libre
+    assert _entrar(client, a, [_item_entrada(pid_b, 5)], clave="clave-entrada-0003").status_code == 400
+    r = _entrar(client, a, [_item_entrada(pid, 5)], clave="clave-entrada-0003")
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _stock(client, a, pid) == pytest.approx(15)
+    assert _stock(client, b, pid_b) == pytest.approx(10)
+
+
+def test_clave_de_venta_no_se_puede_reusar_en_una_entrada(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod entrada idem", "7500000066034", stock=10)
+
+    assert _vender(client, a, pid, clave="clave-cruzada-04").status_code == 200
+    r = _entrar(client, a, [_item_entrada(pid, 5)], clave="clave-cruzada-04")
+
+    assert r.status_code == 409
+    assert _stock(client, a, pid) == pytest.approx(9)
+
+
+def test_dos_entradas_simultaneas_con_la_misma_clave_registran_una_sola(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod entrada idem", "7500000066035", stock=10)
+    resultados = []
+
+    def _enviar():
+        resultados.append(_entrar(client, a, [_item_entrada(pid, 5)], clave="clave-entrada-simultanea"))
+
+    hilos = [threading.Thread(target=_enviar) for _ in range(2)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+
+    assert [r.status_code for r in resultados] == [200, 200]
+    assert _stock(client, a, pid) == pytest.approx(15)
+    assert len(_filas_historial(client, a, "Prod entrada idem")) == 1
+
+
+def test_entrada_sin_clave_sigue_funcionando_como_antes(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    pid = _producto(client, a, "Prod entrada idem", "7500000066036", stock=10)
+
+    r = _entrar(client, a, [_item_entrada(pid, 5)])
+
+    assert r.status_code == 200 and r.json().get("repetido") is None
+    assert _stock(client, a, pid) == pytest.approx(15)

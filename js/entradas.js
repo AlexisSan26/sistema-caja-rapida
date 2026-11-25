@@ -55,6 +55,7 @@ function abrirFlujoResurtido(codigoInicial = null) {
     document.getElementById("paso-3").style.display = "none";
 
     loteResurtido = [];
+    liberarClaveIdempotente("entrada");  // #66: lote nuevo = clave nueva
     renderLoteResurtido();
 
     document.getElementById("producto-resurtido").value = codigoInicial || "";
@@ -73,6 +74,7 @@ function cerrarModalResurtido() {
     document.getElementById("modal-resurtido").style.display = "none";
     cerrarEscanerResurtido();
     loteResurtido = [];
+    liberarClaveIdempotente("entrada");  // #66: lote descartado o terminado
     renderLoteResurtido();
 }
 
@@ -144,6 +146,7 @@ function agregarAlLoteResurtido() {
             stock_actual: productoLocal.stock_actual,
             controla_stock: productoLocal.controla_stock
         });
+        liberarClaveIdempotente("entrada");  // #66: el lote cambió
 
         renderLoteResurtido();
 
@@ -159,6 +162,7 @@ function agregarAlLoteResurtido() {
 
 function quitarDelLoteResurtido(index) {
     loteResurtido.splice(index, 1);
+    liberarClaveIdempotente("entrada");  // #66: el lote cambió
     renderLoteResurtido();
 }
 
@@ -169,12 +173,14 @@ function actualizarCantidadLote(idx, val) {
         return;
     }
     loteResurtido[idx].cantidad = n;
+    liberarClaveIdempotente("entrada");  // #66: el lote cambió
     renderLoteResurtido();
 }
 
 function actualizarCostoLote(idx, val) {
     const n = parseFloat(val);
     loteResurtido[idx].precio_costo = (val === "" || isNaN(n) || n < 0) ? null : n;
+    liberarClaveIdempotente("entrada");  // #66: el lote cambió
 }
 
 function precargarCostoResurtido(producto) {
@@ -256,20 +262,23 @@ async function enviarTicketProveedor() {
 
         const res = await fetch(`${API_URL}/entrada_mercancia_lote`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("entrada") },
             body: JSON.stringify({
                 items: itemsLote,
                 nota_general: "Ticket de resurtido en lote"
             })
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-            throw new Error(data.error || "Error al registrar el lote");
+            // #66: el lote y su clave se conservan para reintentar sin duplicar
+            mostrarError(typeof data.detail === "string" ? data.detail : (data.error || "Error al registrar el lote"));
+            return;
         }
 
-        alert("✅ " + data.mensaje);
+        liberarClaveIdempotente("entrada");
+        alert("✅ " + data.mensaje + (data.repetido ? " (ya estaba registrado, no se duplicó)" : ""));
 
         loteResurtido = [];
         renderLoteResurtido();
@@ -277,7 +286,7 @@ async function enviarTicketProveedor() {
         cargarInventario();
 
     } catch (e) {
-        mostrarError("Error al registrar el ticket completo.");
+        mostrarError("No se pudo confirmar el ticket. Toca Guardar otra vez: no se duplicará.");
     } finally {
         enviandoResurtido = false;
         toggleBotones('button[onclick="enviarTicketProveedor()"]', false);
