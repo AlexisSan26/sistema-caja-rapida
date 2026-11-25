@@ -428,7 +428,7 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
 
         # Validar que el turno pertenece a esta tienda
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR SHARE",
             (abono.id_turno, user.id_tienda)
         )
         if not cursor.fetchone():

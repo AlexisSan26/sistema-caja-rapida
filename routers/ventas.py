@@ -32,7 +32,7 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user),
 
         # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR SHARE",
             (mov.id_turno, user.id_tienda)
         )
         if not cursor.fetchone():
@@ -307,7 +307,7 @@ def registrar_venta_lote(venta: VentaLote, user: TokenData = Depends(get_current
 
         # Validación del turno (ya la tienes ✅)
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR SHARE",
             (venta.id_turno, user.id_tienda)
         )
         if not cursor.fetchone():
