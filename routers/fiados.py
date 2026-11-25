@@ -453,6 +453,15 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         ta = cursor.fetchone()
 
         saldo_nuevo = float(tf['total_fiado']) - float(ta['total_abonos'])
+
+        # #91: no se acepta un abono mayor al saldo (el excedente se perdería y la caja contaría de más).
+        # El HTTPException hace rollback: deshace el abono y el movimiento de arriba y libera la clave (#66).
+        if round(saldo_nuevo, 2) < 0:
+            saldo_previo = round(saldo_nuevo + float(abono.monto), 2)
+            if saldo_previo <= 0:
+                raise HTTPException(status_code=400, detail="Esta cuenta no tiene saldo pendiente.")
+            raise HTTPException(status_code=400, detail=f"El abono (${abono.monto:.2f}) es mayor al saldo pendiente (${saldo_previo:.2f}).")
+
         if saldo_nuevo <= 0:  # <= 0 cubre también el caso de pago con cambio
             cursor.execute(
                 "UPDATE cuentas_fiado SET estado = 'SALDADA' WHERE id_cuenta = %s AND id_tienda = %s",

@@ -204,3 +204,65 @@ def test_cliente_con_saldo_parcial_y_varios_renglones_no_se_elimina(client, dos_
 
     r = client.delete(f"/clientes/{id_cliente}", headers=a["headers"])
     assert "error" in r.json(), "Se eliminó un cliente que todavía debe $10"
+
+
+
+# ─── #91: abonos que exceden el saldo ─────────────────────────────────────────
+def test_abono_rechazado_por_exceso_no_deja_rastro_en_saldo_ni_en_caja(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 50)])
+
+    r = _abonar(client, a, id_cuenta, 80)
+
+    assert r.status_code == 400
+    assert "mayor al saldo" in r.json()["detail"]
+    assert _saldo(client, a, id_cliente) == pytest.approx(50)
+    resumen = client.get(f"/resumen_turno/{a['id_turno']}", headers=a["headers"]).json()
+    assert resumen["total_ingresos"] == pytest.approx(0)
+
+
+def test_abono_a_cuenta_sin_deuda_se_rechaza(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    _, id_cuenta = _cliente(client, a)
+
+    r = _abonar(client, a, id_cuenta, 10)
+
+    assert r.status_code == 400
+    assert "no tiene saldo" in r.json()["detail"]
+
+
+def test_abonos_parciales_que_suman_exacto_el_saldo_se_aceptan(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 100)])
+
+    assert _abonar(client, a, id_cuenta, 30).status_code == 200
+    r = _abonar(client, a, id_cuenta, 70)
+
+    assert r.status_code == 200, r.text
+    assert r.json()["saldo_restante"] == pytest.approx(0)
+
+
+# ─── #90: eliminar cliente con varios renglones y abonos ──────────────────────
+def test_cliente_con_deuda_y_varios_renglones_sin_abonos_no_se_elimina(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 10), _item("Leche", 10), _item("Huevo", 10)])
+
+    r = client.delete(f"/clientes/{id_cliente}", headers=a["headers"])
+
+    assert "error" in r.json()
+    assert "$30.00" in r.json()["error"]
+
+
+def test_cliente_saldado_con_varios_renglones_y_abonos_si_se_elimina(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 10), _item("Leche", 10)])
+    assert _abonar(client, a, id_cuenta, 5).status_code == 200
+    assert _abonar(client, a, id_cuenta, 15).status_code == 200
+
+    r = client.delete(f"/clientes/{id_cliente}", headers=a["headers"])
+
+    assert r.json().get("mensaje") == "Cliente eliminado"

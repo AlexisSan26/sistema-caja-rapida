@@ -133,7 +133,7 @@ async function confirmarAbono() {
             let errorMsg = "Error del servidor.";
             try {
                 const errorData = await res.json();
-                errorMsg = errorData.detail ? JSON.stringify(errorData.detail) : errorData.mensaje;
+                errorMsg = errorData.detail ? (typeof errorData.detail === "string" ? errorData.detail : JSON.stringify(errorData.detail)) : errorData.mensaje;
             } catch(e) {
                 errorMsg = "Error interno (Posible falla en MySQL). Revisa los logs de Render.";
             }
