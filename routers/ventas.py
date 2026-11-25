@@ -80,6 +80,47 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user),
         conexion.close()
 
 
+def _revertir_abono_de_lote(cursor, id_tienda: int, id_lote: str):
+    """#64: al cancelar un COBRO_FIADO, deshace el abono ligado (mismo id_lote).
+    - Cuenta aún ABIERTA: solo se borra el abono.
+    - Cuenta SALDADA y el cliente sin otra cuenta abierta: se borra el abono y se reabre la cuenta.
+    - Cuenta SALDADA y el cliente ya tiene otra abierta: se borra el abono y el monto se suma
+      a la deuda de la cuenta abierta como una línea «Abono cancelado dd/mm».
+    Los abonos anteriores a #64 no tienen id_lote: no se encuentran y todo queda como antes.
+    Llamar dentro de la transacción del borrado, con cursor(dictionary=True)."""
+    cursor.execute("""
+        SELECT a.id_abono, a.id_cuenta, a.monto, a.fecha_hora, cf.id_cliente, cf.estado
+        FROM abonos a
+        JOIN cuentas_fiado cf ON cf.id_cuenta = a.id_cuenta AND cf.id_tienda = a.id_tienda
+        WHERE a.id_lote = %s AND a.id_tienda = %s
+        LIMIT 1
+        FOR UPDATE
+    """, (id_lote, id_tienda))
+    abono = cursor.fetchone()
+    if not abono:
+        return
+    cursor.execute("DELETE FROM abonos WHERE id_abono = %s AND id_tienda = %s",
+                   (abono["id_abono"], id_tienda))
+    if abono["estado"] != "SALDADA":
+        return
+    cursor.execute("""
+        SELECT id_cuenta FROM cuentas_fiado
+        WHERE id_cliente = %s AND estado = 'ABIERTA' AND id_tienda = %s
+        LIMIT 1
+        FOR UPDATE
+    """, (abono["id_cliente"], id_tienda))
+    abierta = cursor.fetchone()
+    if not abierta:
+        cursor.execute("UPDATE cuentas_fiado SET estado = 'ABIERTA' WHERE id_cuenta = %s AND id_tienda = %s",
+                       (abono["id_cuenta"], id_tienda))
+        return
+    cursor.execute("""
+        INSERT INTO detalle_fiado (id_cuenta, producto, cantidad, precio, id_tienda)
+        VALUES (%s, %s, 1, %s, %s)
+    """, (abierta["id_cuenta"], f"Abono cancelado {abono['fecha_hora'].strftime('%d/%m')}",
+          abono["monto"], id_tienda))
+
+
 @router.delete("/borrar_movimiento/{id_movimiento}")
 def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_user)):
     conexion = conectar_bd()
@@ -88,7 +129,7 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
         cursor = conexion.cursor(dictionary=True)
         conexion.start_transaction()
         cursor.execute(
-            "SELECT id_turno, tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
+            "SELECT id_turno, tipo_movimiento, producto, cantidad, cantidad_real, id_producto_ref, id_lote FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s FOR UPDATE",
             (id_movimiento, user.id_tienda)
         )
         mov = cursor.fetchone()
@@ -105,6 +146,10 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
 
         cursor.execute("DELETE FROM movimientos WHERE id_movimiento = %s AND id_tienda = %s",
                        (id_movimiento, user.id_tienda))
+
+        # #64: cancelar un abono de fiado también deshace el abono (y reabre la cuenta si hace falta)
+        if mov["tipo_movimiento"] == "COBRO_FIADO" and mov["id_lote"]:
+            _revertir_abono_de_lote(cursor, user.id_tienda, mov["id_lote"])
 
         if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:
             cantidad_devolver = float(mov["cantidad_real"] if mov["cantidad_real"] is not None else mov["cantidad"])
@@ -173,6 +218,10 @@ def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
 
         cursor.execute("DELETE FROM movimientos WHERE id_lote = %s AND id_tienda = %s",
                        (id_lote, user.id_tienda))
+
+        # #64: cancelar un abono de fiado también deshace el abono (y reabre la cuenta si hace falta)
+        if any(f["tipo_movimiento"] == "COBRO_FIADO" for f in filas):
+            _revertir_abono_de_lote(cursor, user.id_tienda, id_lote)
 
         for mov in filas:
             if mov["tipo_movimiento"] == "VENTA" and mov["producto"]:

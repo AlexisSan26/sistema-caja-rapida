@@ -434,11 +434,12 @@ def registrar_abono(abono: AbonoFiado, user: TokenData = Depends(get_current_use
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
 
-        cursor.execute(
-            "INSERT INTO abonos (id_cuenta, monto, nota, metodo_pago, id_tienda) VALUES (%s, %s, %s, %s, %s)",
-            (abono.id_cuenta, abono.monto, abono.nota or None, abono.metodo_pago, user.id_tienda)
-        )
+        # #64: el abono y su movimiento comparten id_lote para poder cancelarlos juntos
         id_lote = uuid.uuid4().hex[:12]
+        cursor.execute(
+            "INSERT INTO abonos (id_cuenta, monto, nota, metodo_pago, id_tienda, id_lote) VALUES (%s, %s, %s, %s, %s, %s)",
+            (abono.id_cuenta, abono.monto, abono.nota or None, abono.metodo_pago, user.id_tienda, id_lote)
+        )
         cursor.execute("""
             INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, metodo_pago, id_tienda, id_lote)
             VALUES (%s, 'COBRO_FIADO', %s, 1, %s, %s, %s, %s)

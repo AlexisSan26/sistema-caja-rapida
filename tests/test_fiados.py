@@ -266,3 +266,74 @@ def test_cliente_saldado_con_varios_renglones_y_abonos_si_se_elimina(client, dos
     r = client.delete(f"/clientes/{id_cliente}", headers=a["headers"])
 
     assert r.json().get("mensaje") == "Cliente eliminado"
+
+# ─── #64: cancelar un abono lo deshace ────────────────────────────────────────
+def _ingresos_turno(client, caja):
+    r = client.get(f"/resumen_turno/{caja['id_turno']}", headers=caja["headers"])
+    assert r.status_code == 200, r.text
+    return float(r.json()["total_ingresos"])
+
+
+def _cuenta_abierta(client, caja, id_cliente):
+    return client.get(f"/cuenta_fiado/{id_cliente}", headers=caja["headers"]).json()
+
+
+def test_cancelar_abono_parcial_devuelve_la_deuda_y_baja_la_caja(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 100)])
+    antes = _ingresos_turno(client, a)
+
+    r = _abonar(client, a, id_cuenta, 40)
+    assert r.status_code == 200, r.text
+    assert _saldo(client, a, id_cliente) == pytest.approx(60)
+
+    d = client.delete(f"/borrar_lote/{r.json()['id_lote']}", headers=a["headers"])
+    assert d.status_code == 200, d.text
+    assert _saldo(client, a, id_cliente) == pytest.approx(100)
+    assert _ingresos_turno(client, a) == pytest.approx(antes)
+
+
+def test_cancelar_abono_que_salda_reabre_la_cuenta(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 100)])
+    antes = _ingresos_turno(client, a)
+
+    r = _abonar(client, a, id_cuenta, 100)
+    assert r.status_code == 200, r.text
+    assert r.json()["saldo_restante"] == pytest.approx(0)
+
+    # se cancela por movimiento (no por ticket), como desde el historial
+    movs = client.get(f"/movimientos_turno/{a['id_turno']}", headers=a["headers"]).json()
+    id_mov = next(m["id_movimiento"] for m in movs if m["id_lote"] == r.json()["id_lote"])
+    d = client.delete(f"/borrar_movimiento/{id_mov}", headers=a["headers"])
+    assert d.status_code == 200, d.text
+
+    cuenta = _cuenta_abierta(client, a, id_cliente)
+    assert cuenta["id_cuenta"] == id_cuenta  # se reabrió la misma cuenta, no se creó otra
+    assert cuenta["saldo"] == pytest.approx(100)
+    assert _ingresos_turno(client, a) == pytest.approx(antes)
+
+
+def test_cancelar_abono_con_otra_cuenta_abierta_suma_a_esa_deuda(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    id_cliente, id_cuenta = _cliente(client, a)
+    _fiar(client, a, id_cuenta, [_item("Pan", 100)])
+    antes = _ingresos_turno(client, a)
+
+    r = _abonar(client, a, id_cuenta, 100)  # salda la cuenta A
+    assert r.status_code == 200, r.text
+
+    # el cliente vuelve a fiar: como A está saldada, se abre la cuenta B
+    id_cuenta_b = _cuenta_abierta(client, a, id_cliente)["id_cuenta"]
+    assert id_cuenta_b != id_cuenta
+    assert _fiar(client, a, id_cuenta_b, [_item("Leche", 30)]).status_code == 200
+
+    d = client.delete(f"/borrar_lote/{r.json()['id_lote']}", headers=a["headers"])
+    assert d.status_code == 200, d.text
+
+    cuenta = _cuenta_abierta(client, a, id_cliente)
+    assert cuenta["id_cuenta"] == id_cuenta_b   # no hay dos cuentas abiertas
+    assert cuenta["saldo"] == pytest.approx(130)  # 30 de la leche + 100 del abono cancelado
+    assert _ingresos_turno(client, a) == pytest.approx(antes)
