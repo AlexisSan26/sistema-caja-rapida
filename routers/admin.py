@@ -158,14 +158,19 @@ def admin_crear_usuario(u: UsuarioNuevo, user: TokenData = Depends(get_current_u
     cursor = None
     try:
         cursor = conexion.cursor()
+        cursor.execute("SELECT id_tienda FROM tiendas WHERE id_tienda = %s", (u.id_tienda,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="La tienda no existe")
         cursor.execute(
             "INSERT INTO usuarios (id_tienda, username, password_hash, rol) VALUES (%s, %s, %s, %s)",
             (u.id_tienda, username, hashed, u.rol)
         )
         conexion.commit()
         return {"mensaje": "Usuario creado", "id_usuario": cursor.lastrowid}
-    except mysql.connector.IntegrityError:
-        raise HTTPException(status_code=409, detail="El username ya existe")
+    except mysql.connector.IntegrityError as e:
+        if e.errno == 1062:
+            raise HTTPException(status_code=409, detail="El username ya existe")
+        raise HTTPException(status_code=404, detail="La tienda no existe")
     finally:
         if cursor:
             cursor.close()
@@ -231,6 +236,8 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
 @router.put("/admin/usuarios/{id_usuario}/editar")
 def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
+    if id_usuario == user.id_usuario and datos.rol != "superadmin":
+        raise HTTPException(status_code=400, detail="No puedes quitarte tu propio rol de superadmin")
 
     conexion = conectar_bd()
     cursor = None

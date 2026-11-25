@@ -199,3 +199,17 @@ def test_password_corta_y_estado_pago_invalido_se_rechazan(client, superadmin):
     r = client.put(f"/admin/tiendas/{superadmin['id_tienda']}/suscripcion", headers=h,
                    json={"dia_corte": 5, "monto_mensual": 0, "estado_pago": "VENCIDO"})
     assert r.status_code == 422
+
+
+
+def test_superadmin_no_puede_degradarse_a_si_mismo(client, superadmin):
+    r = client.put(f"/admin/usuarios/{superadmin['id_usuario']}/editar", headers=superadmin["headers"],
+                   json={"id_tienda": superadmin["id_tienda"], "rol": "cajero"})
+    assert r.status_code == 400
+
+
+def test_crear_usuario_en_tienda_inexistente_da_404(client, superadmin):
+    r = client.post("/admin/usuarios", headers=superadmin["headers"],
+                    json={"username": "sin_tienda_96", "password": "123456",
+                          "id_tienda": 99999999, "rol": "cajero"})
+    assert r.status_code == 404
