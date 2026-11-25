@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 MetodoPago = Literal["efectivo", "tarjeta", "transferencia"]
+Rol = Literal["superadmin", "cajero"]
+EstadoPago = Literal["AL_DIA", "ATRASADO"]
 
 
 # ─── Modelos de Auth ──────────────────────────────────────────────────────────
@@ -35,16 +37,16 @@ class Movimiento(BaseModel):
 
 class ActualizacionPrecio(BaseModel):
     nombre_producto: str
-    nuevo_precio: float
+    nuevo_precio: float = Field(ge=0)
 
 
 class ProductoNuevo(BaseModel):
     codigo_barras: str | None = None
     nombre_producto: str
-    precio_sugerido: float
-    precio_costo: float | None = None
-    stock_actual: float = 0
-    stock_minimo: float = 0
+    precio_sugerido: float = Field(ge=0)
+    precio_costo: float | None = Field(default=None, ge=0)
+    stock_actual: float = Field(default=0, ge=0)
+    stock_minimo: float = Field(default=0, ge=0)
     proveedor: str | None = None
     fecha_caducidad: str | None = None
     unidad_medida: str = "pieza"
@@ -53,10 +55,10 @@ class ProductoNuevo(BaseModel):
 
 class ActualizacionProducto(BaseModel):
     nombre_producto: str
-    precio_sugerido: float
-    precio_costo: float | None = None
-    stock_actual: float
-    stock_minimo: float
+    precio_sugerido: float = Field(ge=0)
+    precio_costo: float | None = Field(default=None, ge=0)
+    stock_actual: float = Field(ge=0)
+    stock_minimo: float = Field(ge=0)
     proveedor: str | None = None
     codigo_barras: str | None = None
     fecha_caducidad: str | None = None
@@ -80,9 +82,9 @@ class ResurtidoPorCodigo(BaseModel):
 
 class ItemEntradaLote(BaseModel):
     id_producto: int
-    cantidad: float
+    cantidad: float = Field(gt=0)
     fecha_caducidad: str | None = None
-    precio_costo: float | None = None
+    precio_costo: float | None = Field(default=None, ge=0)
 
 
 class EntradaLote(BaseModel):
@@ -93,11 +95,11 @@ class EntradaLote(BaseModel):
 class ClienteNuevo(BaseModel):
     nombre: str
     telefono: str | None = None
-    limite_credito: float | None = None
+    limite_credito: float | None = Field(default=None, ge=0)
 
 
 class LimiteCredito(BaseModel):
-    limite_credito: float | None = None
+    limite_credito: float | None = Field(default=None, ge=0)
 
 
 class NombreCliente(BaseModel):
@@ -166,7 +168,7 @@ class ReglaResumen(BaseModel):
 
 class GastoFijo(BaseModel):
     nombre: str
-    monto: float
+    monto: float = Field(ge=0)
 
 
 class ConfiguracionTicket(BaseModel):
@@ -182,7 +184,7 @@ class UsuarioNuevo(BaseModel):
     username: str
     password: str
     id_tienda: int
-    rol: str = "cajero"
+    rol: Rol = "cajero"
 
 
 class ResetPassword(BaseModel):
@@ -200,10 +202,10 @@ class ActualizacionNombreTienda(BaseModel):
 
 class ActualizacionUsuario(BaseModel):
     id_tienda: int
-    rol: str
+    rol: Rol
 
 
 class SuscripcionTienda(BaseModel):
     dia_corte: int
     monto_mensual: float
-    estado_pago: str
+    estado_pago: EstadoPago

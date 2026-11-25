@@ -178,6 +178,8 @@ function cerrarModalNuevoCliente() {
 async function guardarNuevoCliente() {
     const nombre = document.getElementById("nuevo-cliente-nombre").value.trim();
     if (!nombre) { alert("El nombre es obligatorio."); return; }
+    const limiteVal = document.getElementById("nuevo-cliente-limite").value.trim();
+    if (limiteVal && (isNaN(parseFloat(limiteVal)) || parseFloat(limiteVal) < 0)) { alert("Ingresa un límite válido."); return; }
     if (enviandoCliente) return;
     enviandoCliente = true;
     toggleBotones('button[onclick="guardarNuevoCliente()"]', true);

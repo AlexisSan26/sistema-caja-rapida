@@ -79,7 +79,7 @@ def test_alta_con_datos_invalidos(client, superadmin):
     assert client.post("/admin/tiendas", headers=h, json={"nombre_comercial": "   "}).status_code == 400
     r = client.post("/admin/usuarios", headers=h, json={
         "username": "x_rol", "password": "123456", "id_tienda": superadmin["id_tienda"], "rol": "dueño"})
-    assert r.status_code == 400  # el rol «dueño» todavía no existe (#28)
+    assert r.status_code == 422  # el rol «dueño» todavía no existe (#28)
 
 
 def test_username_duplicado_da_409(client, superadmin):
@@ -156,7 +156,7 @@ def test_suscripcion_valida_los_datos(client, superadmin, tienda_nueva):
         return client.put(f"/admin/tiendas/{tienda_nueva}/suscripcion",
                           headers=superadmin["headers"], json=cuerpo)
 
-    assert suscripcion(estado_pago="PAGADO").status_code == 400
+    assert suscripcion(estado_pago="PAGADO").status_code == 422
     assert suscripcion(dia_corte=0).status_code == 400
     assert suscripcion(dia_corte=32).status_code == 400
     assert suscripcion(monto_mensual=-1).status_code == 400
@@ -187,3 +187,15 @@ def test_despues_de_reactivar_la_tienda_se_puede_abrir_turno(client, superadmin,
     assert r.status_code == 200, r.text
     nuevo = r.json()["id_turno"]
     assert nuevo is not None and nuevo != a["id_turno"]
+
+
+def test_password_corta_y_estado_pago_invalido_se_rechazan(client, superadmin):
+    h = superadmin["headers"]
+    r = client.post("/admin/usuarios", headers=h, json={
+        "username": "corta_68", "password": "12345", "id_tienda": superadmin["id_tienda"], "rol": "cajero"})
+    assert r.status_code == 400
+    r = client.put("/admin/usuarios/1/reset_password", headers=h, json={"nuevo_password": "12345"})
+    assert r.status_code == 400
+    r = client.put(f"/admin/tiendas/{superadmin['id_tienda']}/suscripcion", headers=h,
+                   json={"dia_corte": 5, "monto_mensual": 0, "estado_pago": "VENCIDO"})
+    assert r.status_code == 422

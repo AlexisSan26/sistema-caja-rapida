@@ -150,8 +150,9 @@ def admin_crear_usuario(u: UsuarioNuevo, user: TokenData = Depends(get_current_u
     username = u.username.strip()
     if not username or not u.password:
         raise HTTPException(status_code=400, detail="username y password son obligatorios")
-    if u.rol not in ("superadmin", "cajero"):
-        raise HTTPException(status_code=400, detail="rol inválido")
+    if len(u.password) < 6 or len(u.password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener entre 6 y 72 caracteres")
+
     hashed = pwd_context.hash(u.password)
     conexion = conectar_bd()
     cursor = None
@@ -174,8 +175,8 @@ def admin_crear_usuario(u: UsuarioNuevo, user: TokenData = Depends(get_current_u
 @router.put("/admin/usuarios/{id_usuario}/reset_password")
 def admin_reset_password(id_usuario: int, datos: ResetPassword, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
-    if not datos.nuevo_password:
-        raise HTTPException(status_code=400, detail="La contraseña no puede estar vacía")
+    if len(datos.nuevo_password) < 6 or len(datos.nuevo_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener entre 6 y 72 caracteres")
     hashed = pwd_context.hash(datos.nuevo_password)
     conexion = conectar_bd()
     cursor = None
@@ -230,8 +231,7 @@ def admin_eliminar_usuario(id_usuario: int, user: TokenData = Depends(get_curren
 @router.put("/admin/usuarios/{id_usuario}/editar")
 def admin_editar_usuario(id_usuario: int, datos: ActualizacionUsuario, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
-    if datos.rol not in ("superadmin", "cajero"):
-        raise HTTPException(status_code=400, detail="rol inválido")
+
     conexion = conectar_bd()
     cursor = None
     try:
@@ -390,8 +390,7 @@ def admin_obtener_suscripcion(id_tienda: int, user: TokenData = Depends(get_curr
 @router.put("/admin/tiendas/{id_tienda}/suscripcion")
 def admin_actualizar_suscripcion(id_tienda: int, datos: SuscripcionTienda, user: TokenData = Depends(get_current_user)):
     _require_superadmin(user)
-    if datos.estado_pago not in ("AL_DIA", "ATRASADO"):
-        raise HTTPException(status_code=400, detail="estado_pago inválido. Use AL_DIA o ATRASADO")
+
     if not (1 <= datos.dia_corte <= 31):
         raise HTTPException(status_code=400, detail="dia_corte debe ser un número entre 1 y 31")
     if datos.monto_mensual < 0:

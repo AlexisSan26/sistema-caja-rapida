@@ -43,6 +43,8 @@ def listar_clientes(user: TokenData = Depends(get_current_user)):
 
 @router.post("/clientes")
 def crear_cliente(c: ClienteNuevo, user: TokenData = Depends(get_current_user)):
+    if not c.nombre.strip():
+        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
     conexion = conectar_bd()
     cursor = None
     try:

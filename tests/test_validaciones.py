@@ -50,3 +50,28 @@ def test_corte_con_efectivo_declarado_negativo_no_cierra_el_turno(client, dos_ti
     r2 = client.post(f"/corte_caja/{a['id_turno']}", headers=a["headers"],
                      json={"efectivo_declarado": 0})
     assert r2.status_code == 200, r2.text
+
+
+
+def test_crear_cliente_nombre_vacio_y_limite_negativo(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    assert client.post("/clientes", headers=a["headers"], json={"nombre": "   "}).status_code == 400
+    assert client.post("/clientes", headers=a["headers"],
+                       json={"nombre": "Ana", "limite_credito": -1}).status_code == 422
+
+
+def test_entrada_con_cantidad_cero_o_negativa_se_rechaza(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    for cant in (0, -3):
+        r = client.post("/entrada_mercancia_lote", headers=a["headers"],
+                        json={"items": [{"id_producto": 1, "cantidad": cant}]})
+        assert r.status_code == 422
+
+
+def test_producto_con_precio_o_stock_negativo_se_rechaza(client, dos_tiendas):
+    a = dos_tiendas["a"]
+    base = {"nombre_producto": "Prueba 68", "precio_sugerido": 10}
+    assert client.post("/registrar_producto", headers=a["headers"],
+                       json={**base, "precio_sugerido": -1}).status_code == 422
+    assert client.post("/registrar_producto", headers=a["headers"],
+                       json={**base, "stock_actual": -1}).status_code == 422

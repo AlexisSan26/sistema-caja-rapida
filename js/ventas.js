@@ -256,7 +256,7 @@ async function registrar() {
     const montoVal = parseFloat(document.getElementById("precio").value);
     let cantidadVal = parseFloat(document.getElementById("cantidad").value);
     let nombreProducto = document.getElementById("producto").value.trim();
-    if (isNaN(montoVal) || montoVal < 0) { alert("Por favor ingresa un monto válido."); return; }
+    if (isNaN(montoVal) || montoVal <= 0) { alert("Por favor ingresa un monto válido."); return; }
     if (tipo === "RETIRO" && !nombreProducto) { alert("Favor de poner el concepto o motivo del retiro."); return; }
     if (tipo === "FONDO_CAJA") nombreProducto = "Fondo inicial";
     cantidadVal = 1;
