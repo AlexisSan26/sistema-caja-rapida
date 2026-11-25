@@ -138,7 +138,7 @@ def borrar_movimiento(id_movimiento: int, user: TokenData = Depends(get_current_
 
         # #64: un turno ya cerrado no se modifica (el corte quedaría distinto al que se entregó)
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR SHARE",
             (mov["id_turno"], user.id_tienda)
         )
         if not cursor.fetchone():
@@ -210,7 +210,7 @@ def borrar_lote(id_lote: str, user: TokenData = Depends(get_current_user)):
 
         # #64: un turno ya cerrado no se modifica
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO'",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR SHARE",
             (filas[0]["id_turno"], user.id_tienda)
         )
         if not cursor.fetchone():
