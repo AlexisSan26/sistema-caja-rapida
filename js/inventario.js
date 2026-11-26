@@ -46,6 +46,12 @@ function filtrarInventario() {
         filtrados = filtrados.filter(p => p.proveedor === proveedorFiltro);
     }
 
+    // #56: se ordena una COPIA (Caja usa el orden de todosLosProductos); "sin control de stock" va al final
+    if (document.getElementById("orden-stock").checked) {
+        const sinControl = p => p.controla_stock == 0 ? 1 : 0;
+        filtrados = [...filtrados].sort((x, y) => sinControl(x) - sinControl(y) || Number(x.stock_actual) - Number(y.stock_actual));
+    }
+
     renderInventario(filtrados);
 }
 
