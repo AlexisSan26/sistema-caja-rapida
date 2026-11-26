@@ -34,17 +34,19 @@ function configurarInterfazAbierta() {
     document.getElementById("btn-abrir").style.display = "none";
     document.getElementById("resultado-corte").innerHTML = "";
     carritoItems = [];
+    try { localStorage.removeItem('carrito_borrador'); } catch(e) {}  // #105: llave vieja, sin dueño; no se recupera para no mezclar tiendas
     try {
-        const borrador = localStorage.getItem('carrito_borrador');
+        const llave = llaveCarrito();
+        const borrador = llave ? localStorage.getItem(llave) : null;
         if (borrador) {
             const items = JSON.parse(borrador);
             if (Array.isArray(items) && items.length > 0) {
                 const recuperar = confirm(`📋 Hay un borrador con ${items.length} producto(s) sin guardar. ¿Deseas recuperarlo?`);
                 if (recuperar) carritoItems = items;
-                else localStorage.removeItem('carrito_borrador');
+                else borrarBorradorCarrito();
             }
         }
-    } catch(e) { localStorage.removeItem('carrito_borrador'); }
+    } catch(e) { borrarBorradorCarrito(); }
     seleccionarTipo("VENTA");
     document.getElementById("div-btn-agregar").style.display = "block";
     renderCarrito();
@@ -54,6 +56,17 @@ function configurarInterfazAbierta() {
     if (intervaloActualizacion) clearInterval(intervaloActualizacion);
     intervaloActualizacion = setInterval(sincronizarTodo, 8000);
     setTimeout(enfocarProducto, 200);
+}
+
+// #105: el borrador del carrito se guarda por tienda y usuario (misma identidad que el borrador de resurtido, #51)
+function llaveCarrito() {
+    const dueno = duenoResurtido();
+    return dueno ? 'carrito_borrador_' + dueno : null;
+}
+
+function borrarBorradorCarrito() {
+    const llave = llaveCarrito();
+    if (llave) { try { localStorage.removeItem(llave); } catch (e) {} }
 }
 
 function abrirMenuMovimiento(clave) {

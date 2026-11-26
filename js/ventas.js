@@ -261,7 +261,7 @@ async function registrar() {
         }
         carritoItems = [];
         renderCarrito();
-        localStorage.removeItem('carrito_borrador');
+        borrarBorradorCarrito();
         document.getElementById("producto").value = "";
         document.getElementById("precio").value = "";
         document.getElementById("cantidad").value = "1";
@@ -497,7 +497,7 @@ function renderCarrito() {
         if (bf) bf.style.display = "none";
         const barraSticky = document.getElementById("barra-total-sticky");
         if (barraSticky) barraSticky.style.display = "none";
-        localStorage.removeItem('carrito_borrador');
+        borrarBorradorCarrito();
         liberarClaveIdempotente("venta");
         return;
     }
@@ -541,7 +541,7 @@ function renderCarrito() {
     }
     const montoRecibido = parseFloat(document.getElementById("monto-recibido")?.value) || 0;
     if (montoRecibido > 0) actualizarCambio();
-    try { localStorage.setItem('carrito_borrador', JSON.stringify(carritoItems)); } catch(e) {}
+    try { const llave = llaveCarrito(); if (llave) localStorage.setItem(llave, JSON.stringify(carritoItems)); } catch(e) {}
 }
 
 function actualizarCantidadCarrito(idx, val) {
