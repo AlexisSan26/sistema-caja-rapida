@@ -62,7 +62,7 @@ function abrirMenuMovimiento(clave) {
     grupoMenuActual = grupo;
     document.getElementById("bs-mov-titulo").innerText =
         `${badgeTipo(grupo.tipo).replace(/<[^>]+>/g, '')} · ${grupo.hora || ''}`;
-    document.getElementById("bs-mov-btn-reimprimir").style.display = grupo.tipo === 'VENTA' ? 'block' : 'none';
+    document.getElementById("bs-mov-btn-reimprimir").style.display = (grupo.tipo === 'VENTA' || grupo.tipo === 'COBRO_FIADO') ? 'block' : 'none';
     document.getElementById("bs-mov-overlay").style.display = "block";
     setTimeout(() => document.getElementById("bs-mov").style.transform = "translateY(0)", 10);
 }
@@ -77,7 +77,7 @@ function cerrarMenuMovimiento() {
 function reimprimirDesdeMenu() {
     if (!grupoMenuActual) return;
     const total = grupoMenuActual.items.reduce((acc, m) => acc + m.total_movimiento, 0);
-    reimprimirTicket(grupoMenuActual.items, total, grupoMenuActual.metodo_pago || "efectivo");
+    reimprimirTicket(grupoMenuActual.items, total, grupoMenuActual.metodo_pago || "efectivo", grupoMenuActual.tipo === 'COBRO_FIADO');
     cerrarMenuMovimiento();
 }
 

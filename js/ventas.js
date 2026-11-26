@@ -907,13 +907,13 @@ function actualizarCambio() {
     }
 }
 
-function reimprimirTicket(items, total, metodo) {
+function reimprimirTicket(items, total, metodo, esAbono = false) {
     const iconos = { efectivo: "💵", tarjeta: "💳", transferencia: "📲" };
     const ahora = new Date().toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
     const renglones = items.map(i =>
         `<tr>
             <td style="padding:2px 4px;">${esc(i.producto)}</td>
-            <td style="text-align:center;padding:2px 4px;">${i.cantidad}</td>
+            <td style="text-align:center;padding:2px 4px;">${esAbono ? "" : i.cantidad}</td>
             <td style="text-align:right;padding:2px 4px;">$${i.total_movimiento.toFixed(2)}</td>
         </tr>`
     ).join("");
@@ -937,17 +937,17 @@ function reimprimirTicket(items, total, metodo) {
         <div class="sep"></div>
         <table>
             <thead><tr>
-                <th style="text-align:left;">Producto</th>
-                <th style="text-align:center;">Cant</th>
-                <th style="text-align:right;">Subtotal</th>
+                <th style="text-align:left;">${esAbono ? "Concepto" : "Producto"}</th>
+                <th style="text-align:center;">${esAbono ? "" : "Cant"}</th>
+                <th style="text-align:right;">${esAbono ? "Monto" : "Subtotal"}</th>
             </tr></thead>
             <tbody>${renglones}</tbody>
         </table>
         <div class="sep"></div>
-        <div class="total">Total: $${total.toFixed(2)}</div>
+        <div class="total">${esAbono ? "Abono" : "Total"}: $${total.toFixed(2)}</div>
         <div>${iconos[metodo] || ""} ${metodo.charAt(0).toUpperCase() + metodo.slice(1)}</div>
         <div class="sep"></div>
-        <div class="pie">¡Gracias por su compra!</div>
+        <div class="pie">${esAbono ? "¡Gracias por su pago!" : "¡Gracias por su compra!"}</div>
         <script>window.onload = () => { window.print(); }<\/script>
     </body></html>`);
     ventana.document.close();
