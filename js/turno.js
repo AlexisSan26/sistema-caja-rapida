@@ -200,6 +200,9 @@ async function actualizarLista() {
     try {
         const res = await fetch(`${API_URL}/movimientos_turno/${idTurnoActual}`);
         const movimientos = await res.json();
+        // #104: el botón solo aparece si el turno todavía no tiene fondo
+        document.getElementById("btn-registrar-fondo").style.display =
+            movimientos.some(m => m.tipo_movimiento === 'FONDO_CAJA') ? "none" : "block";
         const cuerpo = document.getElementById("tabla-cuerpo");
         const nuevosIds = new Set(movimientos.map(m => m.id_movimiento));
         const cambio = nuevosIds.size !== idsEnTabla.size || [...nuevosIds].some(id => !idsEnTabla.has(id));

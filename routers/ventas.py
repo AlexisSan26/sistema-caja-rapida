@@ -31,13 +31,24 @@ def registrar(mov: Movimiento, user: TokenData = Depends(get_current_user),
             return previa
 
         # ── VALIDACIÓN ANTI-FUGA MULTI-TENANT ─────────────────────
+        # #104: el fondo usa FOR UPDATE para que dos dispositivos no lo registren a la vez
+        candado = "FOR UPDATE" if mov.tipo_movimiento == 'FONDO_CAJA' else "FOR SHARE"
         cursor.execute(
-            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' FOR SHARE",
+            "SELECT id_turno FROM turnos WHERE id_turno = %s AND id_tienda = %s AND estado = 'ABIERTO' " + candado,
             (mov.id_turno, user.id_tienda)
         )
         if not cursor.fetchone():
             raise HTTPException(status_code=403, detail="Turno no válido para esta tienda")
         # ──────────────────────────────────────────────────────────
+
+        # #104: un solo fondo de caja por turno
+        if mov.tipo_movimiento == 'FONDO_CAJA':
+            cursor.execute(
+                "SELECT id_movimiento FROM movimientos WHERE id_turno = %s AND id_tienda = %s AND tipo_movimiento = 'FONDO_CAJA' LIMIT 1",
+                (mov.id_turno, user.id_tienda)
+            )
+            if cursor.fetchone():
+                raise HTTPException(status_code=409, detail="Este turno ya tiene fondo de caja. Para corregirlo, cancélalo en Movimientos y regístralo de nuevo.")
 
         cursor.execute("""
             INSERT INTO movimientos (id_turno, tipo_movimiento, producto, cantidad, precio_unitario, id_tienda)

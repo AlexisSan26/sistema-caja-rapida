@@ -186,3 +186,23 @@ def test_nombres_repetidos_no_duplican_la_deduccion(client, dos_tiendas):
     assert r["total_ingresos"] == pytest.approx(20)
     assert r["reglas_resumen"]["Cigarros"] == pytest.approx(20)   # antes del #88 salía triple
     assert r["total_neto"] == pytest.approx(0)                    # y no negativo
+
+
+def test_solo_un_fondo_de_caja_por_turno(client, dos_tiendas):
+    """#104: el segundo fondo se rechaza; si se cancela el primero, se puede volver a registrar."""
+    a = dos_tiendas["a"]
+    def fondo(monto):
+        return client.post("/registrar_movimiento", headers=a["headers"], json={
+            "id_turno": a["id_turno"], "tipo_movimiento": "FONDO_CAJA",
+            "producto": "Fondo inicial", "cantidad": 1, "precio_unitario": monto})
+    def resumen():
+        return client.get(f"/resumen_turno/{a['id_turno']}", headers=a["headers"]).json()
+
+    assert fondo(200).status_code == 200
+    assert fondo(300).status_code == 409
+    assert resumen()["total_fondo"] == 200
+
+    movs = client.get(f"/movimientos_turno/{a['id_turno']}", headers=a["headers"]).json()
+    assert client.delete(f"/borrar_movimiento/{movs[0]['id_movimiento']}", headers=a["headers"]).status_code == 200
+    assert fondo(300).status_code == 200
+    assert resumen()["total_fondo"] == 300

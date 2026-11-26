@@ -194,6 +194,7 @@
             <h6 class="mb-0 text-white">Movimientos del Turno</h6>
         </div>
         <div class="card-body p-2 tabla-scroll" style="max-height:340px;">
+            <button type="button" id="btn-registrar-fondo" class="btn btn-outline-primary w-100 mb-2 fw-bold" style="display:none;" onclick="abrirModalFondo()">💰 Registrar fondo de caja</button>
             <div id="tabla-cuerpo"></div>
         </div>
     </div>
@@ -639,7 +640,7 @@
             <input type="number" id="fondo-monto" class="form-control form-control-lg" placeholder="Ej. 500">
         </div>
         <button class="btn btn-success w-100 btn-lg mb-2 fw-bold" onclick="confirmarFondoInicial()">✅ Guardar y Abrir Caja</button>
-        <button class="btn btn-outline-secondary w-100" onclick="omitirFondoInicial()">Omitir, sin fondo inicial</button>
+        <button id="btn-omitir-fondo" class="btn btn-outline-secondary w-100" onclick="omitirFondoInicial()">Omitir, sin fondo inicial</button>
     </div>
 </div>
 

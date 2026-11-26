@@ -133,9 +133,28 @@ async function abrirTurno() {
         const datos = await res.json();
         if (!res.ok) { mostrarError(datos.detail || "Error al abrir turno."); return; }
         idTurnoActual = datos.id_turno;
-        document.getElementById("fondo-monto").value = "";
-        document.getElementById("modal-fondo").style.display = "block";
+        abrirModalFondo();
     } catch (e) { mostrarError("Error al conectar con el servidor."); }
+}
+
+function abrirModalFondo() {
+    // #104: se usa al abrir la caja y, si se omitió, desde Movimientos del Turno
+    const cajaAbierta = document.getElementById("panel-ventas").style.display === "block";
+    document.getElementById("btn-omitir-fondo").innerText = cajaAbierta ? "Cancelar" : "Omitir, sin fondo inicial";
+    document.getElementById("fondo-monto").value = "";
+    document.getElementById("modal-fondo").style.display = "block";
+}
+
+function cerrarModalFondo() {
+    document.getElementById("modal-fondo").style.display = "none";
+    if (!idTurnoActual) return;
+    if (document.getElementById("panel-ventas").style.display === "block") {
+        // La caja ya estaba abierta: NO reiniciar la interfaz (borraría el carrito)
+        actualizarLista();
+        enfocarProducto();
+    } else {
+        configurarInterfazAbierta();
+    }
 }
 
 async function confirmarFondoInicial() {
@@ -155,14 +174,12 @@ async function confirmarFondoInicial() {
             liberarClaveIdempotente("fondo_" + idTurnoActual);
         } catch (e) { mostrarError("No se pudo guardar el fondo inicial. Intenta de nuevo u omítelo."); return; }
     }
-    document.getElementById("modal-fondo").style.display = "none";
-    configurarInterfazAbierta();
+    cerrarModalFondo();
 }
 
 function omitirFondoInicial() {
     liberarClaveIdempotente("fondo_" + idTurnoActual);
-    document.getElementById("modal-fondo").style.display = "none";
-    configurarInterfazAbierta();
+    cerrarModalFondo();
 }
 
 async function registrar() {
