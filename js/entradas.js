@@ -52,14 +52,58 @@ async function cargarProveedoresDatalist() {
     } catch (_) {}
 }
 
+// #51: el lote de resurtido sobrevive a recargas; borrador y clave de #66 separados por tienda y usuario
+let resurtidoIntentado = false;  // se envió y no sabemos si el servidor lo guardó
+
+function duenoResurtido() {
+    try {
+        const parte = localStorage.getItem('saas_token').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const datos = JSON.parse(atob(parte));
+        return `${datos.id_tienda}_${datos.id_usuario}`;
+    } catch (e) { return null; }
+}
+
+function opEntrada() { return "entrada_" + duenoResurtido(); }
+
+function guardarBorradorResurtido() {
+    const dueno = duenoResurtido();
+    if (!dueno) return;
+    try {
+        if (loteResurtido.length === 0) localStorage.removeItem('resurtido_borrador_' + dueno);
+        else localStorage.setItem('resurtido_borrador_' + dueno, JSON.stringify({ items: loteResurtido, intentado: resurtidoIntentado }));
+    } catch (e) {}
+}
+
+function leerBorradorResurtido() {
+    const dueno = duenoResurtido();
+    if (!dueno) return null;
+    try {
+        const borrador = JSON.parse(localStorage.getItem('resurtido_borrador_' + dueno));
+        return borrador && Array.isArray(borrador.items) && borrador.items.length > 0 ? borrador : null;
+    } catch (e) { return null; }
+}
+
+function cancelarResurtido() {
+    if (loteResurtido.length > 0 && !confirm(`¿Descartar la lista con ${loteResurtido.length} producto(s)?`)) return;
+    loteResurtido = [];
+    cerrarModalResurtido();
+}
+
 function abrirFlujoResurtido(codigoInicial = null) {
     document.getElementById("modal-resurtido").style.display = "block";
     document.getElementById("paso-1").style.display = "block";
     document.getElementById("paso-3").style.display = "none";
 
-    loteResurtido = [];
-    liberarClaveIdempotente("entrada");  // #66: lote nuevo = clave nueva
+    const borrador = leerBorradorResurtido();
+    resurtidoIntentado = !!(borrador && borrador.intentado);
+    // #51: se recupera la lista guardada, mostrando el stock actual si ya está cargado
+    loteResurtido = (borrador ? borrador.items : []).map(item => {
+        const p = todosLosProductos.find(x => x.id_producto === item.id_producto);
+        return p ? { ...item, stock_actual: p.stock_actual, controla_stock: p.controla_stock } : item;
+    });
+    if (!borrador) liberarClaveIdempotente(opEntrada());  // #66: lote nuevo = clave nueva (el recuperado conserva la suya)
     renderLoteResurtido();
+    if (resurtidoIntentado) alert("⚠️ Esta lista ya se intentó guardar y no se confirmó. Antes de cambiarla, revisa el Historial de Entradas: si ya aparece, toca Cancelar para descartarla.");
 
     document.getElementById("producto-resurtido").value = codigoInicial || "";
     document.getElementById("cantidad-resurtido").value = "1";
@@ -77,7 +121,8 @@ function cerrarModalResurtido() {
     document.getElementById("modal-resurtido").style.display = "none";
     cerrarEscanerResurtido();
     loteResurtido = [];
-    liberarClaveIdempotente("entrada");  // #66: lote descartado o terminado
+    resurtidoIntentado = false;
+    liberarClaveIdempotente(opEntrada());  // #66: lote descartado o terminado
     renderLoteResurtido();
 }
 
@@ -87,6 +132,7 @@ function volverPaso1() {
 }
 
 function renderLoteResurtido() {
+    guardarBorradorResurtido();  // #51
     const contenedor = document.getElementById("div-carrito-resurtido");
 
     if (loteResurtido.length === 0) {
@@ -149,7 +195,7 @@ function agregarAlLoteResurtido() {
             stock_actual: productoLocal.stock_actual,
             controla_stock: productoLocal.controla_stock
         });
-        liberarClaveIdempotente("entrada");  // #66: el lote cambió
+        liberarClaveIdempotente(opEntrada());  // #66: el lote cambió
 
         renderLoteResurtido();
 
@@ -165,7 +211,7 @@ function agregarAlLoteResurtido() {
 
 function quitarDelLoteResurtido(index) {
     loteResurtido.splice(index, 1);
-    liberarClaveIdempotente("entrada");  // #66: el lote cambió
+    liberarClaveIdempotente(opEntrada());  // #66: el lote cambió
     renderLoteResurtido();
 }
 
@@ -176,14 +222,15 @@ function actualizarCantidadLote(idx, val) {
         return;
     }
     loteResurtido[idx].cantidad = n;
-    liberarClaveIdempotente("entrada");  // #66: el lote cambió
+    liberarClaveIdempotente(opEntrada());  // #66: el lote cambió
     renderLoteResurtido();
 }
 
 function actualizarCostoLote(idx, val) {
     const n = parseFloat(val);
     loteResurtido[idx].precio_costo = (val === "" || isNaN(n) || n < 0) ? null : n;
-    liberarClaveIdempotente("entrada");  // #66: el lote cambió
+    guardarBorradorResurtido();  // #51: este cambio no vuelve a pintar la lista
+    liberarClaveIdempotente(opEntrada());  // #66: el lote cambió
 }
 
 function precargarCostoResurtido(producto) {
@@ -263,9 +310,12 @@ async function enviarTicketProveedor() {
             precio_costo: item.precio_costo
         }));
 
+        resurtidoIntentado = true;
+        guardarBorradorResurtido();  // #51: si se recarga durante el envío, queda marcado
+
         const res = await fetch(`${API_URL}/entrada_mercancia_lote`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente("entrada") },
+            headers: { "Content-Type": "application/json", "Idempotency-Key": claveIdempotente(opEntrada()) },
             body: JSON.stringify({
                 items: itemsLote,
                 nota_general: "Ticket de resurtido en lote"
@@ -276,11 +326,18 @@ async function enviarTicketProveedor() {
 
         if (!res.ok) {
             // #66: el lote y su clave se conservan para reintentar sin duplicar
+            if (res.status >= 400 && res.status < 500 && res.status !== 409) {
+                resurtidoIntentado = false;  // el servidor lo rechazó: no se guardó nada
+                guardarBorradorResurtido();
+            }
             mostrarError(typeof data.detail === "string" ? data.detail : (data.error || "Error al registrar el lote"));
             return;
         }
 
-        liberarClaveIdempotente("entrada");
+        liberarClaveIdempotente(opEntrada());
+        loteResurtido = [];
+        resurtidoIntentado = false;
+        guardarBorradorResurtido();  // #51: borrar el borrador ANTES del aviso
         alert("✅ " + data.mensaje + (data.repetido ? " (ya estaba registrado, no se duplicó)" : ""));
 
         loteResurtido = [];
