@@ -166,3 +166,20 @@ def test_editar_precio_sin_cambiar_nombre_no_estorba(client, dos_tiendas):
     r = _editar(client, a, id_sin_codigo, "Heredado", precio=22)
     assert r.status_code == 200, r.text
     assert float(_fila(client, a, id_sin_codigo)["precio_sugerido"]) == pytest.approx(22)
+
+
+
+def test_historial_de_entradas_trae_la_unidad_y_la_merma_en_negativo(client, dos_tiendas):
+    """#102: la pantalla necesita la unidad real y el signo de la merma."""
+    a = dos_tiendas["a"]
+    r = client.post("/registrar_producto", headers=a["headers"], json={
+        "codigo_barras": "7500000000102", "nombre_producto": "Frijol a granel",
+        "precio_sugerido": 40, "stock_actual": 10, "unidad_medida": "kg"})
+    assert r.status_code == 200, r.text
+    pid = r.json()["id_producto"]
+    r = client.post("/registrar_merma", headers=a["headers"], json={"id_producto": pid, "cantidad": 2})
+    assert r.status_code == 200, r.text
+
+    fila = client.get("/historial_entradas", headers=a["headers"]).json()[0]
+    assert fila["unidad_medida"] == "kg"
+    assert float(fila["cantidad"]) == -2

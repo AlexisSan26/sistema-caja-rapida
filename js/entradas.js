@@ -14,6 +14,9 @@ async function cargarEntradas() {
         }
         document.getElementById("lista-entradas").innerHTML = entradas.map(e => {
             const fecha = (e.fecha && e.hora) ? `${e.fecha} ${e.hora}` : '—';
+            const cant = Number(e.cantidad);
+            const esSalida = cant < 0;  // #102: las mermas se guardan en negativo
+            const unidad = (!e.unidad_medida || e.unidad_medida === 'pieza') ? 'pza' : e.unidad_medida;
             return `<div class="card mb-2 shadow-sm">
                 <div class="card-body py-2 px-3">
                     <div class="d-flex justify-content-between align-items-start">
@@ -22,7 +25,7 @@ async function cargarEntradas() {
                             <small class="text-muted">${fecha}${e.notas ? ' · ' + esc(e.notas) : ''}</small>
                         </div>
                         <div class="text-end">
-                            <span class="badge bg-success">+${e.cantidad} ${e.unidad_medida || 'pza'}</span>
+                            <span class="badge ${esSalida ? 'bg-danger' : 'bg-success'}">${esSalida ? '' : '+'}${cant} ${esc(unidad)}</span>
                             ${e.precio_costo != null ? `<div class="text-muted" style="font-size:.75rem;">Costo: $${parseFloat(e.precio_costo).toFixed(2)}</div>` : ''}
                         </div>
                     </div>

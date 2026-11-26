@@ -78,7 +78,7 @@ def historial_entradas(fecha: str = "", user: TokenData = Depends(get_current_us
     try:
         cursor = conexion.cursor(dictionary=True)
         sql = """
-            SELECT e.id_entrada, p.nombre_producto, e.cantidad,
+            SELECT e.id_entrada, p.nombre_producto, p.unidad_medida, e.cantidad,
                    DATE_FORMAT(e.fecha_entrada, '%d/%m/%Y') AS fecha,
                    TIME_FORMAT(e.fecha_entrada, '%H:%i') AS hora,
                    e.notas, e.fecha_caducidad, e.precio_costo
