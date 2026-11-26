@@ -89,6 +89,12 @@ function cancelarResurtido() {
     cerrarModalResurtido();
 }
 
+// #51: cerrar sin descartar; no toca la lista, su borrador ni la clave de #66
+function salirResurtido() {
+    cerrarEscanerResurtido();
+    document.getElementById("modal-resurtido").style.display = "none";
+}
+
 function abrirFlujoResurtido(codigoInicial = null) {
     document.getElementById("modal-resurtido").style.display = "block";
     document.getElementById("paso-1").style.display = "block";
