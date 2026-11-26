@@ -64,8 +64,6 @@ function renderReglasConfig() {
                     value="${esc(r.nombre)}" placeholder="Nombre del grupo">
                 <button class="btn btn-sm btn-outline-danger" onclick="eliminarReglaConfig(${idx})">✕</button>
             </div>
-            <label class="fw-bold mb-1" style="font-size:.85rem;">Palabras clave <span class="text-muted fw-normal">(separadas por coma)</span></label>
-            <input type="text" class="form-control mb-2 reg-clav-cfg" placeholder="Ej: cigarro, time" value="${esc(r.claves || '')}">
             <button class="btn btn-sm btn-outline-secondary w-100" onclick="abrirSelectorProductos(${idx})">
                 📦 Productos seleccionados: <strong>${numProds}</strong>
             </button>

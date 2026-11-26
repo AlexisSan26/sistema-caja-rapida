@@ -177,7 +177,8 @@ def _calcular_resumen(
                 id_prod = v['id_producto']
                 for r in reglas:
                     # Coincide por clave O por id_producto seleccionado
-                    claves = [k.strip().lower() for k in r.get('claves', '').split(',') if k.strip()]
+                    # #54: las claves solo aplican a turnos antiguos cerrados sin desglose guardado
+                    claves = [k.strip().lower() for k in r.get('claves', '').split(',') if k.strip()] if fecha_cierre else []
                     ids_sel = r.get('ids_productos', [])
                     coincide_clave = any(clave in prod_lower for clave in claves)
                     coincide_id = id_prod is not None and id_prod in ids_sel

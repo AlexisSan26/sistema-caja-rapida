@@ -136,9 +136,10 @@ def test_corte_con_efectivo_declarado_calcula_diferencia(client, dos_tiendas):
 # ─── Reglas de deducción y gastos fijos ───────────────────────────────────────
 def test_regla_de_deduccion_solo_cuenta_ventas_en_efectivo(client, dos_tiendas):
     a = dos_tiendas["a"]
-    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "cigarro", "ids_productos": []}])
-    _venta(client, a, [_item("cigarros marlboro", 50)], "efectivo")
-    _venta(client, a, [_item("cigarros marlboro", 30)], "tarjeta")
+    pid = _producto_con_codigo(client, a, "cigarros marlboro", 50, "7500000000001")
+    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "", "ids_productos": [pid]}])
+    _venta(client, a, [_item("cigarros marlboro", 50, id_producto=pid)], "efectivo")
+    _venta(client, a, [_item("cigarros marlboro", 30, id_producto=pid)], "tarjeta")
 
     r = _resumen(client, a)
     assert r["reglas_resumen"]["Cigarros"] == pytest.approx(50)  # la tarjeta no se aparta
@@ -158,8 +159,9 @@ def test_gasto_fijo_se_descuenta_completo(client, dos_tiendas):
 # ─── Turno cerrado con snapshot ───────────────────────────────────────────────
 def test_turno_cerrado_no_cambia_si_cambia_la_configuracion(client, dos_tiendas):
     a = dos_tiendas["a"]
-    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "cigarro", "ids_productos": []}])
-    _venta(client, a, [_item("cigarros marlboro", 50)])
+    pid = _producto_con_codigo(client, a, "cigarros marlboro", 50, "7500000000002")
+    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "", "ids_productos": [pid]}])
+    _venta(client, a, [_item("cigarros marlboro", 50, id_producto=pid)])
     _cortar(client, a, efectivo_declarado=50)
 
     # Mañana cambian las reglas: el turno ya cerrado debe quedar igual
@@ -174,10 +176,11 @@ def test_turno_cerrado_no_cambia_si_cambia_la_configuracion(client, dos_tiendas)
 # ─── Caso real #88: tres productos «cigarros» ─────────────────────────────────
 def test_nombres_repetidos_no_duplican_la_deduccion(client, dos_tiendas):
     a = dos_tiendas["a"]
-    _producto_con_codigo(client, a, "cigarros", 15, "7500000000011")
+    id_primero = _producto_con_codigo(client, a, "cigarros", 15, "7500000000011")
     _producto_con_codigo(client, a, "cigarros", 15, "7500000000012")
     id_barato = _producto_con_codigo(client, a, "cigarros", 10, "7500000000013")
-    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "cigarros", "ids_productos": []}])
+    # La venta sin id se resuelve al de menor id: también debe estar seleccionado
+    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "", "ids_productos": [id_primero, id_barato]}])
 
     _venta(client, a, [_item("cigarros", 10, id_producto=id_barato)])  # con id
     _venta(client, a, [_item("cigarros", 10)])                         # solo por nombre
@@ -206,3 +209,23 @@ def test_solo_un_fondo_de_caja_por_turno(client, dos_tiendas):
     assert client.delete(f"/borrar_movimiento/{movs[0]['id_movimiento']}", headers=a["headers"]).status_code == 200
     assert fondo(300).status_code == 200
     assert resumen()["total_fondo"] == 300
+
+
+def test_la_palabra_clave_solo_aplica_a_turnos_antiguos_sin_desglose(client, dos_tiendas):
+    """#54: en turno abierto y al cortar solo cuentan los seleccionados."""
+    from database import conectar_bd
+    a = dos_tiendas["a"]
+    _config(client, a, reglas=[{"nombre": "Cigarros", "claves": "cigarro", "ids_productos": []}])
+    _venta(client, a, [_item("encendedor para cigarros", 20)])
+
+    assert _resumen(client, a)["reglas_resumen"]["Cigarros"] == pytest.approx(0)
+    assert _cortar(client, a)["reglas_resumen"]["Cigarros"] == pytest.approx(0)
+
+    # Simula un turno antiguo: cerrado y sin desglose guardado
+    conexion = conectar_bd()
+    cursor = conexion.cursor()
+    cursor.execute("UPDATE turnos SET reglas_resumen_cerrado = NULL WHERE id_turno = %s", (a["id_turno"],))
+    conexion.commit()
+    cursor.close()
+    conexion.close()
+    assert _resumen(client, a)["reglas_resumen"]["Cigarros"] == pytest.approx(0 + 20)
