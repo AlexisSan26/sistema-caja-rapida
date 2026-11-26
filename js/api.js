@@ -4,6 +4,9 @@ const API_URL = window.location.hostname === "127.0.0.1" || window.location.host
         ? `http://${window.location.hostname}:8000`
         : "https://sistema-caja-rapida.onrender.com";
 
+const VERSION_APP = "2026.11.26";  // #112: súbela al desplegar un cambio que importe; se ve en el menú ☰
+{ const el = document.getElementById("version-app"); if (el) el.textContent = "v" + VERSION_APP; }
+
 const originalFetch = window.fetch;
 window.fetch = async (url, options = {}) => {
     if (typeof url === 'string' && url.startsWith(API_URL) && !url.includes('/login')) {
