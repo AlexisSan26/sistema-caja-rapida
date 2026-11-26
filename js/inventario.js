@@ -29,6 +29,13 @@ function setProveedor(p) {
     filtrarInventario();
 }
 
+function limpiarBuscadorInventario() {
+    const el = document.getElementById("buscador-inventario");
+    el.value = "";
+    filtrarInventario();
+    el.focus();
+}
+
 function filtrarInventario() {
     const q = document.getElementById("buscador-inventario").value.toLowerCase();
     let filtrados = todosLosProductos;
