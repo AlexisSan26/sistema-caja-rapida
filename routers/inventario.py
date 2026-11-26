@@ -345,7 +345,9 @@ def registrar_merma(m: MermaProducto, user: TokenData = Depends(get_current_user
         cursor.execute("""
             INSERT INTO entradas_mercancia (id_producto, cantidad, notas, id_tienda)
             VALUES (%s, %s, %s, %s)
-        """, (m.id_producto, -m.cantidad, f"[MERMA — {m.motivo}]", user.id_tienda))
+        """, (m.id_producto, -m.cantidad,
+              (f"[MERMA — {m.motivo}]" + (f" {m.nota.strip()}" if m.nota and m.nota.strip() else ""))[:200],
+              user.id_tienda))
 
         _log(cursor, user.id_tienda, user.id_usuario, "MERMA",
              f"producto_id={m.id_producto} cantidad={-m.cantidad} motivo={m.motivo}")
