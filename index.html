@@ -619,8 +619,8 @@
         <h5 class="fw-bold mb-1">🧾 Confirmar Cierre de Turno</h5>
         <p class="text-muted mb-3" style="font-size:.9rem;">¿Estás seguro de que deseas cerrar la caja? Ya no podrás agregar más ventas a este turno.</p>
         <div class="mb-3">
-            <label class="fw-bold">Efectivo físico en caja <span class="text-muted fw-normal">(opcional)</span></label>
-            <input type="number" id="corte-efectivo-real" class="form-control form-control-lg" placeholder="¿Cuánto hay en caja?" oninput="actualizarDiferenciaCorte()">
+            <label class="fw-bold">Efectivo en caja, sin contar el fondo <span class="text-muted fw-normal">(opcional)</span></label>
+            <input type="number" id="corte-efectivo-real" class="form-control form-control-lg" placeholder="Sin el fondo de caja" oninput="actualizarDiferenciaCorte()">
         </div>
         <div id="corte-diferencia-bloque" class="mb-3 p-2 rounded text-center" style="display:none;">
             <div id="corte-diferencia" class="h5 fw-bold mb-0 text-success"></div>
